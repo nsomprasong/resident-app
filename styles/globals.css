@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: "RobotoCondensed";
+  src: url("../public/fonts/english/RobotoCondensed-Light.ttf") format("truetype");
+  font-weight: 100;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "RobotoCondensed";
+  src: url("../public/fonts/english/RobotoCondensed-Regular.ttf") format("truetype");
+  font-weight: 300;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "RobotoCondensed";
+  src: url("../public/fonts/english/RobotoCondensed-Medium.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "RobotoCondensed";
+  src: url("../public/fonts/english/RobotoCondensed-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "KanitCustom";
+  src: url("../public/fonts/thai/Kanit-Light.ttf") format("truetype");
+  font-weight: 100;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "KanitCustom";
+  src: url("../public/fonts/thai/Kanit-Regular.ttf") format("truetype");
+  font-weight: 300;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "KanitCustom";
+  src: url("../public/fonts/thai/Kanit-Medium.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "KanitCustom";
+  src: url("../public/fonts/thai/Kanit-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+}
