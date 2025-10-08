@@ -17,7 +17,7 @@ import Basket from '@/components/ui/Basket';
 
 const page = () => {
 
-    const params = useParams<{ orderId: string }>();
+    const params = useParams<{ bookingId: string }>();
 
     const [tab, setTab] = useState<number>(0);
 
@@ -107,10 +107,10 @@ const page = () => {
           </Box>
           <Box className="flex items-center gap-2 bg-white text-green-600 px-3 rounded-2xl">
             <Typography>ห้อง</Typography>
-            <Typography>{params.orderId}</Typography>
+            <Typography>{params.bookingId}</Typography>
           </Box>
         </Box>
-        <Basket />
+        <Basket id={params.bookingId} />
       </Box>
       <Box className="w-full mt-2">
           <Tabs

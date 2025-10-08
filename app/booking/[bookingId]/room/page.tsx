@@ -1,7 +1,6 @@
 'use client';
 
 import { Box, Button, Divider, IconButton, Tooltip, Typography } from '@mui/material';
-import { useBookingDetail } from '../../../hooks/useBookingDetail';
 import { useParams, useRouter } from "next/navigation";
 import React, { useState } from 'react'
 import { colorTheme } from '@/lib/constants/color';
@@ -17,6 +16,7 @@ import BillItem from '@/components/ui/BillItem';
 import PayButton from '@/components/ui/PayButton';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import BackButton from '@/components/ui/BackButton';
+import { useBookingDetail } from '@/hooks/useBookingDetail';
 
 interface BillDetail {
     title: string;
@@ -38,9 +38,9 @@ const otherList: BillDetail[] = [
     { title: "ทำความสะอาด x 1", price: 100 },
 ]
 
-const BookingDetail = () => {
+const page = () => {
 
-    const params = useParams<{ roomId: string }>();
+    const params = useParams<{ bookingId: string }>();
     const router = useRouter();
 
     const { bookingDetail } = useBookingDetail();
@@ -64,7 +64,7 @@ const BookingDetail = () => {
     const colorStatus = colorConvert();
 
     const goAddOrder = () => {
-        router.push(`/booking/${params.roomId}/${params.roomId}`);
+        router.push(`/booking/${params.bookingId}/food`);
     };
 
   return (
@@ -80,7 +80,7 @@ const BookingDetail = () => {
       <Box className="w-full flex justify-center">
         <Box className="w-full flex flex-col gap-2 px-4 md:w-3/5"> 
             <Box className="flex justify-between items-center">
-              <Typography sx={{ ...kanitMedium ,fontSize: 18}}>Room {params.roomId}</Typography>
+              <Typography sx={{ ...kanitMedium ,fontSize: 18}}>Room {params.bookingId}</Typography>
                 <Button 
                   variant='contained'
                   color='success'
@@ -146,4 +146,4 @@ const BookingDetail = () => {
   )
 }
 
-export default BookingDetail
+export default page

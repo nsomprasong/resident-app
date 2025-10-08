@@ -23,7 +23,7 @@ const RoomItem: React.FC<RoomItemProps> = ({ id, name, status, image }) => {
 
     const handleClick = () => {
         setBookingDetail({ id, name, status, image });
-        router.push(`/booking/${id}`);
+        router.push(`/booking/${id}/room`);
     };
 
     const colorStatus = () => {

@@ -14,5 +14,6 @@ export const colorTheme = {
         175: "#CCCCCC",
         200: "#6C6C6C",
         300: "#3A3A3A",
-    }
+    },
+    blue: "#155dfc"
 }

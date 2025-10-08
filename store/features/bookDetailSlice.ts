@@ -1,4 +1,3 @@
-// /store/features/roomSlice.ts
 import { BookingDetail } from '@/interface/BookingDetailModel';
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 

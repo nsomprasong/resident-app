@@ -1,27 +1,55 @@
-import { MenuModel } from '@/interface/MenuModel'
 import { Box, Button, Dialog, Divider, IconButton, TextField, Tooltip, Typography } from '@mui/material'
-import React, { useState } from 'react'
+import React, { ChangeEvent, useState } from 'react'
 import ClearRoundedIcon from '@mui/icons-material/ClearRounded';
 import { kanitMedium } from '@/lib/constants/font';
 import { colorTheme } from '@/lib/constants/color';
 import RemoveRoundedIcon from '@mui/icons-material/RemoveRounded';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import { buttonIconStyle } from '@/lib/constants/buttonIconStyle';
+import { useBasketList } from '@/hooks/useBasketList';
+
+interface MenuDetail {
+    image: string
+    alt: string
+    title: string
+    price: number
+}
 
 interface AddMenuProps {
     open: boolean
     setOpen: React.Dispatch<React.SetStateAction<boolean>>
-    menu: MenuModel
+    menu: MenuDetail
 }
 
 const AddMenuDialog: React.FC<AddMenuProps> = ({ open, setOpen, menu }) => {
 
-    const [amount, setAmount] = useState<number>(0);
+    const [amount, setAmount] = useState<number>(1);
+    const [reason, setReason] = useState<string>('');
+
+    const { basketList ,addToBasket } = useBasketList();
+
+    const handleAddBasket = () => {
+        for(let i=0; i < amount; i++) {
+            addToBasket({
+                id: basketList.length + 1,
+                image: menu.image,
+                alt: menu.alt,
+                title: menu.title,
+                price: menu.price,
+                reason: reason
+            })
+        }
+        setOpen(!open)
+    }
 
     const handleDecrease = () => {
         if(amount >= 0) {
             setAmount(amount - 1)
         }
+    }
+
+    const handleReason = (event: ChangeEvent<HTMLInputElement>) => {
+        setReason(event.target.value)
     }
 
   return (
@@ -49,7 +77,7 @@ const AddMenuDialog: React.FC<AddMenuProps> = ({ open, setOpen, menu }) => {
             <Divider sx={{borderColor: colorTheme.gray[100]}} />
             <Box className="w-full">
                 <Typography sx={{fontSize: 14}}>รายละเอียดเพิ่มเติม</Typography>
-                <TextField fullWidth placeholder='ระบุสิ่งที่ไม่ต้องการ หรือ สิ่งที่แพ้' />
+                <TextField fullWidth placeholder='ระบุสิ่งที่ไม่ต้องการ หรือ สิ่งที่แพ้' onChange={handleReason} />
             </Box>
             <Divider sx={{ borderColor: colorTheme.gray[100], mt:2 }} />
             <Box className="flex gap-4">
@@ -81,7 +109,8 @@ const AddMenuDialog: React.FC<AddMenuProps> = ({ open, setOpen, menu }) => {
                     variant='contained' 
                     color='success' 
                     fullWidth 
-                    onClick={() => setOpen(!open)}
+                    disabled={amount <= 0}
+                    onClick={handleAddBasket}
                 >
                     <Typography>ใส่ตระกร้า</Typography>
                 </Button>
