@@ -30,7 +30,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
         <Box>
           <Typography sx={{ ...robotoBold, fontSize:20}} className="p-4">Hotel Logo</Typography>
         </Box>
-        <ListMenu menuItems={menuItems} title="DAILY OPERATION" />
+        <ListMenu menuItems={menuItems} onClose={onClose} title="DAILY OPERATION" />
       </Drawer>
 
       {/* Desktop Drawer */}
@@ -46,7 +46,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
             <Typography sx={{ ...robotoBold, fontSize:20}} className="p-4">Hotel Logo</Typography>
           </Box>
           <Box className="flex flex-col justify-between h-[calc(100vh-64px)]">
-            <ListMenu menuItems={menuItems} title="DAILY OPERATION" />
+            <ListMenu menuItems={menuItems} onClose={onClose} title="DAILY OPERATION" />
             <UserNav image="/images/person.svg" name="John Doe" role="Admin" />
           </Box>
         </Box>

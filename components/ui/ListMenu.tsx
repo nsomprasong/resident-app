@@ -16,9 +16,10 @@ interface MenuItems {
 interface MenuItemsProps {
   menuItems: MenuItems[]
   title: string
+  onClose: () => void
 }
 
-const ListMenu: React.FC<MenuItemsProps> = ({ menuItems, title }) => {
+const ListMenu: React.FC<MenuItemsProps> = ({ menuItems, title, onClose }) => {
 
     const [open, setOpen] = useState(true);
 
@@ -40,7 +41,7 @@ const ListMenu: React.FC<MenuItemsProps> = ({ menuItems, title }) => {
           <Box>
             <List>
                 {menuItems.map((item) => (
-                <ListItem key={item.text} disablePadding>
+                <ListItem key={item.text} disablePadding onClick={onClose}>
                     <ListItemButton 
                       component={Link} 
                       href={item.path} 
