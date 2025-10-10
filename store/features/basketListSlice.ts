@@ -14,8 +14,8 @@ const BasketListSlice = createSlice({
     addToBasket: (state, action: PayloadAction<MenuModel>) => {
       state.push(action.payload);
     },
-    removeFromBasket: (state, action: PayloadAction<MenuModel>) => {
-      state.filter(item => item.id !== action.payload.id)
+    removeFromBasket: (state, action: PayloadAction<string>) => {
+      return state.filter(item => item.id !== action.payload)
     }
   },
 });

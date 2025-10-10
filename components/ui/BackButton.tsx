@@ -2,12 +2,17 @@ import { colorTheme } from '@/lib/constants/color'
 import { Tooltip, IconButton } from '@mui/material'
 import ArrowBackIosRoundedIcon from '@mui/icons-material/ArrowBackIosRounded';
 import React from 'react'
+import { useRouter } from 'next/navigation';
 
 interface ButtonProps {
   classProps: string
+  route: string
 }
 
-const BackButton: React.FC<ButtonProps> = ({ classProps }) => {
+const BackButton: React.FC<ButtonProps> = ({ classProps, route }) => {
+
+  const router = useRouter();
+
   return (
     <Tooltip title="ย้อนกลับ">
         <IconButton 
@@ -17,7 +22,7 @@ const BackButton: React.FC<ButtonProps> = ({ classProps }) => {
               backgroundColor: 'white',  
               '&:hover': { backgroundColor: colorTheme.gray[100] },       
           }} 
-          onClick={() => window.history.back()}
+          onClick={() => router.push(route)}
         >
           <ArrowBackIosRoundedIcon color='success' />
         </IconButton>

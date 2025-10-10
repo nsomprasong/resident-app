@@ -1,8 +1,6 @@
-export interface MenuModel {
-    id: string
+export interface MenuShowModel {
     image: string
     alt: string
     title: string
     price: number
-    reason?: string
 }

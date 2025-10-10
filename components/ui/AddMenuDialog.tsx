@@ -7,6 +7,7 @@ import RemoveRoundedIcon from '@mui/icons-material/RemoveRounded';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import { buttonIconStyle } from '@/lib/constants/buttonIconStyle';
 import { useBasketList } from '@/hooks/useBasketList';
+import { v4 as uuidv4 } from 'uuid';
 
 interface MenuDetail {
     image: string
@@ -31,7 +32,7 @@ const AddMenuDialog: React.FC<AddMenuProps> = ({ open, setOpen, menu }) => {
     const handleAddBasket = () => {
         for(let i=0; i < amount; i++) {
             addToBasket({
-                id: basketList.length + 1,
+                id: uuidv4(),
                 image: menu.image,
                 alt: menu.alt,
                 title: menu.title,

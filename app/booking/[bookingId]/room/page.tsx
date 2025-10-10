@@ -70,7 +70,7 @@ const page = () => {
   return (
     <Box className="relative w-full h-full pb-4 flex flex-col gap-4 rounded-xl bg-gray-100">
       <Box className="relative w-full h-56 aspect-[16/10] overflow-hidden rounded-t-xl">
-        <BackButton classProps="absolute top-4 left-4 z-20" />
+        <BackButton classProps="absolute top-4 left-4 z-20" route={`/booking`} />
         <img
           className="absolute top-0 z-10 w-full h-full object-cover"
           src={bookingDetail.image}

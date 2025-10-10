@@ -5,7 +5,7 @@ import { colorTheme } from '@/lib/constants/color';
 import { kanitMedium } from '@/lib/constants/font';
 import { Badge, Box, Tab, Tabs, Tooltip, Typography } from '@mui/material';
 import Grid from '@mui/material/Grid';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import React, { useState } from 'react'
 import FastfoodRoundedIcon from '@mui/icons-material/FastfoodRounded';
 import RestaurantRoundedIcon from '@mui/icons-material/RestaurantRounded';
@@ -13,15 +13,17 @@ import ReorderRoundedIcon from '@mui/icons-material/ReorderRounded';
 import { MenuModel } from '@/interface/MenuModel';
 import CardMenu from '@/components/ui/CardMenu';
 import Basket from '@/components/ui/Basket';
+import { MenuShowModel } from '@/interface/MenuShowModel';
 
 
 const page = () => {
 
+    const router = useRouter();
     const params = useParams<{ bookingId: string }>();
 
     const [tab, setTab] = useState<number>(0);
 
-    const [foodMenu, setFoodMenu] = useState<MenuModel[]>([
+    const [foodMenu, setFoodMenu] = useState<MenuShowModel[]>([
       {
         image: '/images/food/frychicken.jpg',
         alt: 'frychicken',
@@ -60,7 +62,7 @@ const page = () => {
       },
     ]);
 
-    const [minibarMenu, setMinibar] = useState<MenuModel[]>([
+    const [minibarMenu, setMinibar] = useState<MenuShowModel[]>([
       {
         image: '/images/minibar/beer.jpg',
         alt: 'beer',
@@ -102,7 +104,7 @@ const page = () => {
       <Box className="flex items-center justify-between p-4 rounded-t-2xl bg-green-600">
         <Box className="flex items-center gap-2">
           <Box className="flex items-center gap-4">
-            <BackButton classProps='' />
+            <BackButton classProps='' route={`/booking/${params.bookingId}/room`} />
             <Typography sx={{...kanitMedium, fontSize:18, color:'white'}}>สั่งอาหาร</Typography>
           </Box>
           <Box className="flex items-center gap-2 bg-white text-green-600 px-3 rounded-2xl">

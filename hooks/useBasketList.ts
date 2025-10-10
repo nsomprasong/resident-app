@@ -11,7 +11,7 @@ export const useBasketList = () => {
 
     const setBasketList = (data: MenuModel[]) => dispatch(setBasketListAction(data));
     const addToBasket = (item: MenuModel) => dispatch(addToBasketAction(item));
-    const removeFromBasket = (item: MenuModel) => dispatch(removeFromBasketAction(item));
+    const removeFromBasket = (uuid: string) => dispatch(removeFromBasketAction(uuid));
 
     return { basketList, setBasketList, addToBasket, removeFromBasket };
 } 
