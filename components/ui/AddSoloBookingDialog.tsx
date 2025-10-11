@@ -13,7 +13,7 @@ interface AddBookingProps {
     setOpen: React.Dispatch<React.SetStateAction<boolean>>
 }
 
-const AddBookingDialog: React.FC<AddBookingProps> = ({ open, setOpen }) => {
+const AddSoloBookingDialog: React.FC<AddBookingProps> = ({ open, setOpen }) => {
     
 
   return (
@@ -63,4 +63,4 @@ const AddBookingDialog: React.FC<AddBookingProps> = ({ open, setOpen }) => {
   )
 }
 
-export default AddBookingDialog
+export default AddSoloBookingDialog
