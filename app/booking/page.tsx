@@ -13,10 +13,33 @@ import GroupsIcon from '@mui/icons-material/Groups';
 import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
 import RoomGroupItem from '@/components/ui/RoomGroupItem';
 import AddGroupBookingDialog from '@/components/ui/AddGroupBookingDialog';
+import { BookingDetail } from '@/interface/BookingDetailModel';
 
-const roomList = [
+const roomSoloList = [
   { id: 1, name: "Room 1", status: "รอดำเนินการ", image: "/images/room/room1.jpg" },
   { id: 2, name: "Room 2", status: "ยืนยันแล้ว", image: "/images/room/room2.jpg" },
+  { id: 3, name: "Room 3", status: "เช็คอิน", image: "/images/room/room3.jpg" },
+  { id: 4, name: "Room 4", status: "เช็คเอาท์", image: "/images/room/room4.jpg" },
+];
+
+const groupList = [
+  { id: 1, customerName: "Jhon Group", status: "รอดำเนินการ" },
+  { id: 2, customerName: "Non Group", status: "ยืนยันแล้ว" },
+  { id: 3, customerName: "Eiei Group", status: "เช็คอิน" },
+  { id: 4, customerName: "Hello Group", status: "เช็คเอาท์" },
+];
+
+const roomInGroupList: BookingDetail[] = [
+  { id: 1, name: "Room 1", status: "รอดำเนินการ", image: "/images/room/room1.jpg" },
+  { id: 2, name: "Room 2", status: "ยืนยันแล้ว", image: "/images/room/room2.jpg" },
+  { id: 3, name: "Room 3", status: "เช็คอิน", image: "/images/room/room3.jpg" },
+  { id: 4, name: "Room 4", status: "เช็คเอาท์", image: "/images/room/room4.jpg" },
+  { id: 1, name: "Room 1", status: "รอดำเนินการ", image: "/images/room/room1.jpg" },
+  { id: 1, name: "Room 2", status: "ยืนยันแล้ว", image: "/images/room/room2.jpg" },
+  { id: 1, name: "Room 3", status: "เช็คอิน", image: "/images/room/room3.jpg" },
+  { id: 2, name: "Room 4", status: "เช็คเอาท์", image: "/images/room/room4.jpg" },
+  { id: 2, name: "Room 1", status: "รอดำเนินการ", image: "/images/room/room1.jpg" },
+  { id: 3, name: "Room 2", status: "ยืนยันแล้ว", image: "/images/room/room2.jpg" },
   { id: 3, name: "Room 3", status: "เช็คอิน", image: "/images/room/room3.jpg" },
   { id: 4, name: "Room 4", status: "เช็คเอาท์", image: "/images/room/room4.jpg" },
 ];
@@ -66,7 +89,9 @@ const page = () => {
           <Box className="mt-2">
             <Typography sx={{ ...kanitMedium, fontSize: 14, color: colorTheme.gray[300] }}>รายการจองห้องพักแบบกลุ่ม</Typography>
             <Box className="flex flex-col gap-2 mt-2">
-              <RoomGroupItem />
+              {groupList.map((cus, index) => 
+                <RoomGroupItem key={index} id={cus.id} customerName={cus.customerName} status={cus.status} roomInGroupList={roomInGroupList} />
+              )}
             </Box>
           </Box>
         }
@@ -74,7 +99,7 @@ const page = () => {
         <Box className="mt-2">
           <Typography sx={{ ...kanitMedium, fontSize: 14, color: colorTheme.gray[300] }}>รายการจองห้องพักแบบเดี่ยว</Typography>
            <Box className="flex flex-col gap-2 mt-2">
-            {roomList.map((room, index) => (
+            {roomSoloList.map((room, index) => (
               <RoomItem key={index} id={room.id} name={room.name} status={room.status} image={room.image} />
             ))}
           </Box>

@@ -28,7 +28,7 @@ const DateSelector: React.FC<DateSelectorProps> = ({ date, setDate }) => {
 
   return (
     <Box>
-        <Box className="flex items-center gap-1">
+      <Box className="flex items-center gap-1">
         <Tooltip title="แสดงวันที่">
           <IconButton color='success' size='large' onClick={handleOpen}>
             <EventNoteRoundedIcon sx={{ color:colorTheme.green[300] ,fontSize: 24 }} />
