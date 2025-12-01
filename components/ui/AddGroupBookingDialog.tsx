@@ -22,7 +22,7 @@ const AddGroupBookingDialog: React.FC<AddBookingProps> = ({ open, setOpen }) => 
         <Dialog open={open} fullWidth maxWidth="xs">
             <DialogTitle className='w-full flex justify-between'>
                 <Box className='flex items-center gap-2'>
-                    <Box className='text-green-700'>
+                    <Box className='text-primary'>
                         <AddHomeWorkRoundedIcon sx={{ fontSize:28 }} />
                     </Box>
                     <Typography sx={{ ...kanitMedium ,fontSize: 18}}>เพิ่มรายการจองห้องพัก</Typography>
@@ -58,7 +58,7 @@ const AddGroupBookingDialog: React.FC<AddBookingProps> = ({ open, setOpen }) => 
                     </Box>
                     <Box className="text-gray-500">
                         <Typography>ห้อง</Typography>
-                        <Button sx={{ borderRadius: 1 }} color='success' variant='contained' fullWidth onClick={() => setOpenZone(true)}>
+                        <Button sx={{ borderRadius: 1 }} color='primary' variant='outlined' fullWidth onClick={() => setOpenZone(true)}>
                             <Typography>123</Typography>
                         </Button>
                     </Box>

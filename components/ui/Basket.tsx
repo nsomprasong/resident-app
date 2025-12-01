@@ -15,7 +15,7 @@ const Basket: React.FC<BasketProps> = ({ id }) => {
   const router = useRouter();
 
   const goBasket = () => {
-      router.push(`/booking/${id}/basket`);
+      router.push(`/foodOrder/${id}/basket`);
   };
 
   const { basketList } = useBasketList();

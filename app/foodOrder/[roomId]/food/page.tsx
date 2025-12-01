@@ -19,7 +19,7 @@ import { MenuShowModel } from '@/interface/MenuShowModel';
 const page = () => {
 
     const router = useRouter();
-    const params = useParams<{ bookingId: string }>();
+    const params = useParams<{ roomId: string }>();
 
     const [tab, setTab] = useState<number>(0);
 
@@ -100,19 +100,19 @@ const page = () => {
     };
 
   return (
-    <Box className="h-full rounded-2xl bg-gray-50">
-      <Box className="flex items-center justify-between p-4 rounded-t-2xl bg-green-600">
+    <Box className="h-full bg-gray-50">
+      <Box className="flex items-center justify-between p-4 bg-primary">
         <Box className="flex items-center gap-2">
           <Box className="flex items-center gap-4">
-            <BackButton classProps='' route={`/booking/${params.bookingId}/room`} />
+            <BackButton classProps='' route={`/foodOrder`} />
             <Typography sx={{...kanitMedium, fontSize:18, color:'white'}}>สั่งอาหาร</Typography>
           </Box>
-          <Box className="flex items-center gap-2 bg-white text-green-600 px-3 rounded-2xl">
+          <Box className="flex items-center gap-2 bg-white text-primary px-3 rounded-2xl">
             <Typography>ห้อง</Typography>
-            <Typography>{params.bookingId}</Typography>
+            <Typography>{params.roomId}</Typography>
           </Box>
         </Box>
-        <Basket id={params.bookingId} />
+        <Basket id={params.roomId} />
       </Box>
       <Box className="w-full mt-2">
           <Tabs
@@ -128,7 +128,7 @@ const page = () => {
             <Tab icon={<ReorderRoundedIcon />} iconPosition="start" label="อื่นๆ" />
           </Tabs>
         </Box>
-        <Grid container spacing={2} className="mt-2 p-4">
+        <Grid container spacing={2} className="p-4">
           {tab === 0 &&
             <>
               {foodMenu.map((item, index) =>

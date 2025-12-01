@@ -13,8 +13,8 @@ const tabTheme: Components<Theme>['MuiTab'] = {
             marginRight: 8,
             borderRadius: 20,
             transition: 'background-color 0.3s',
-            backgroundColor: colorTheme.gray[150], 
-            color: colorTheme.gray[300],   
+            backgroundColor: colorTheme.surface, 
+            color: colorTheme.textSecondary,   
             '&:last-child': {
                 marginRight: 0,
             },
@@ -22,7 +22,7 @@ const tabTheme: Components<Theme>['MuiTab'] = {
                 backgroundColor: '#f5f5f5', 
             },
             '&.Mui-selected': {
-                backgroundColor: colorTheme.green[400], 
+                backgroundColor: colorTheme.primary, 
                 color: '#fff',
             },
         }

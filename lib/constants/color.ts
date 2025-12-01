@@ -1,19 +1,18 @@
 export const colorTheme = {
-    emerald: {
-        100: "#22c55e"
-    },
-    green: {
-        100: "#E6FFEE",
-        200: "#CEEDD7",
-        300: "#4E9B5B",
-        400: "#3A734B"
-    },
+    primary: "#6366F1",
+    secondary: "#A78BFA",
+    third: "#D8D9FF",
+    fourth: "#EEEEFE",
+    background: "#F3F4F6",
+    surface: "#FFFFFF",
+    textPrimary: "#1F2937",
+    textSecondary: "#9CA3AF",
+    success: "#1DC35A",
+    error: "#EF4444",
     gray: {
-        100: "#F7F7F7",
-        150: "#E5E5E5",
-        175: "#CCCCCC",
-        200: "#6C6C6C",
-        300: "#3A3A3A",
+        light: "#E5E5E5",
+        main: "#CCCCCC",
+        dark: "#595959"
     },
-    blue: "#155dfc"
+    blue: "#3B82F6"
 }

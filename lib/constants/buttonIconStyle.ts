@@ -1,9 +1,9 @@
 import { colorTheme } from "./color";
 
 export const buttonIconStyle = {
-    backgroundColor: colorTheme.gray[150],  
-    color: colorTheme.gray[300],                  
+    backgroundColor: colorTheme.fourth,  
+    color: colorTheme.primary,                  
     '&:hover': {
-        backgroundColor: colorTheme.gray[175]  
+        backgroundColor: colorTheme.third  
     },
 }

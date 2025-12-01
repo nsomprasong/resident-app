@@ -11,31 +11,27 @@ import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded';
 
 const Page = () => {
   const router = useRouter();
-  const params = useParams<{ bookingId: string }>();
+  const params = useParams<{ roomId: string }>();
   const { basketList, removeFromBasket } = useBasketList();
 
   const totalPrice = basketList.reduce((sum, item) => sum + item.price, 0);
 
   const goAddOrder = () => {
-    router.push(`/booking/${params.bookingId}/food`);
-  };
-
-  const goRoom = () => {
-    router.push(`/booking/${params.bookingId}/room`);
+    router.push(`/foodOrder/${params.roomId}/food`);
   };
 
   return (
-    <Box className="flex flex-col h-[calc(100vh-32px)] rounded-xl">
+    <Box className="flex flex-col h-[calc(100vh)]">
       {/* Header */}
-      <Box className="flex items-center justify-between p-4 rounded-t-2xl bg-green-600">
+      <Box className="flex items-center justify-between p-4 bg-primary">
         <Box className="flex items-center gap-2">
           <Box className="flex items-center gap-4">
-            <BackButton classProps='' route={`/booking/${params.bookingId}/food`} />
+            <BackButton classProps='' route={`/foodOrder/${params.roomId}/food`} />
             <Typography sx={{ ...kanitMedium, fontSize: 18, color: 'white' }}>ตะกร้า</Typography>
           </Box>
-          <Box className="flex items-center gap-2 bg-white text-green-600 px-3 rounded-2xl">
+          <Box className="flex items-center gap-2 bg-white text-primary px-3 rounded-2xl">
             <Typography>ห้อง</Typography>
-            <Typography>{params.bookingId}</Typography>
+            <Typography>{params.roomId}</Typography>
           </Box>
         </Box>
       </Box>
@@ -63,7 +59,7 @@ const Page = () => {
                     <Typography
                       sx={{
                         fontSize: 14,
-                        color: colorTheme.gray[300],
+                        color: colorTheme.textSecondary,
                         whiteSpace: 'normal',
                         wordBreak: 'break-word',
                       }}
@@ -98,16 +94,16 @@ const Page = () => {
 
       {/* Footer */}
       {basketList.length > 0 && 
-        <Box className="p-4 bg-white border-t border-gray-200 rounded-b-xl">
+        <Box className="p-4 bg-white">
             <Box className="flex justify-between mb-4">
                 <Typography sx={kanitMedium}>ราคารวม</Typography>
                 <Typography sx={kanitMedium}>{totalPrice} ฿</Typography>
             </Box>
             <Button
             variant="contained"
-            color="success"
+            color="primary"
             fullWidth
-            onClick={goRoom}
+            // onClick={goRoom}
             >
             <Typography>ยืนยันรายการอาหาร</Typography>
             </Button>

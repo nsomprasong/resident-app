@@ -42,13 +42,13 @@ const PaymentButtonWithQR: React.FC<PayButtonProps> = ({ amount }) => {
 
   return (
     <>
-      <Button variant="contained" color="success" sx={{ mt: 1 }} onClick={handleOpen}>
+      <Button variant="contained" color="primary" sx={{ mt: 1 }} onClick={handleOpen}>
         ชำระเงิน
       </Button>
 
       <Dialog open={open} onClose={handleClose} fullWidth maxWidth="xs">
         <DialogTitle className='w-full flex justify-center'>
-          <Typography sx={{ ...kanitMedium ,fontSize: 18, color:colorTheme.green[400]}}>แสกน QR Code เพื่อชำระเงิน</Typography>
+          <Typography sx={{ ...kanitMedium ,fontSize: 18, color:colorTheme.primary}}>แสกน QR Code เพื่อชำระเงิน</Typography>
         </DialogTitle>
         <DialogContent className="flex flex-col items-center gap-4">
           <Box className="w-48 h-48 border-[1px] border-gray-300 flex justify-center items-center rounded-2xl">
@@ -61,11 +61,11 @@ const PaymentButtonWithQR: React.FC<PayButtonProps> = ({ amount }) => {
               <Typography>{errorMessage}</Typography>
             }
           </Box>
-          <Box className="w-full flex justify-between p-4 bg-green-50 rounded-xl">
-            <Typography sx={{ ...kanitMedium ,fontSize: 16, color:colorTheme.gray[300]}}>จำนวนเงินที่ต้องชำระ</Typography>
-            <Typography sx={{ ...kanitMedium ,fontSize: 16, color:colorTheme.green[400]}}>{amount} ฿</Typography>
+          <Box className="w-full flex justify-between p-4 bg-violet-50 rounded-xl">
+            <Typography sx={{ ...kanitMedium ,fontSize: 16, color:colorTheme.textPrimary}}>จำนวนเงินที่ต้องชำระ</Typography>
+            <Typography sx={{ ...kanitMedium ,fontSize: 16, color:colorTheme.textPrimary}}>{amount} ฿</Typography>
           </Box>
-          <Button variant="contained" color="success" className='w-full flex gap-2' sx={{ py: 1.5 }}  onClick={handleClose}>
+          <Button variant="contained" color="primary" className='w-full flex gap-2' sx={{ py: 1.5 }}  onClick={handleClose}>
             <CheckCircleRoundedIcon sx={{ fontSize: 20 }} />
             <Typography sx={{ ...kanitMedium ,fontSize: 16}}>ยืนยันชำระเงิน</Typography>
           </Button>

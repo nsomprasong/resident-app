@@ -46,7 +46,7 @@ const ZoneRoomSelect: React.FC<ZoneRoomProps> = ({ open, setOpen }) => {
     <Dialog open={open} fullWidth maxWidth="xs">
         <DialogTitle className='w-full flex justify-between'>
             <Box className='flex items-center gap-2'>
-                <Box className='text-green-700'>
+                <Box className='text-primary'>
                     <AddHomeRoundedIcon sx={{ fontSize:28 }} />
                 </Box>
                 <Typography sx={{ ...kanitMedium ,fontSize: 18}}>เพิ่มรายการจองห้องพัก</Typography>
@@ -77,7 +77,7 @@ const ZoneRoomSelect: React.FC<ZoneRoomProps> = ({ open, setOpen }) => {
                 <Divider />
             </Box>
             <Box className="w-full flex flex-wrap">
-                <Typography sx={{ ...kanitMedium, color: colorTheme.gray[300] }}>ห้องที่เลือก 1, 2, 3, 4, 5, 6</Typography>
+                <Typography sx={{ ...kanitMedium, color: colorTheme.textPrimary }}>ห้องที่เลือก 1, 2, 3, 4, 5, 6</Typography>
             </Box>
             <Button fullWidth variant='contained' onClick={() => setOpen(false)}>ยืนยัน</Button>
         </DialogContent>

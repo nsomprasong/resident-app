@@ -63,13 +63,9 @@ const page = () => {
 
     const colorStatus = colorConvert();
 
-    const goAddOrder = () => {
-        router.push(`/booking/${params.bookingId}/food`);
-    };
-
   return (
     <Box className="relative w-full h-full pb-4 flex flex-col gap-4 rounded-xl bg-gray-100">
-      <Box className="relative w-full h-56 aspect-[16/10] overflow-hidden rounded-t-xl">
+      <Box className="relative w-full h-56 aspect-[16/10] overflow-hidden">
         <BackButton classProps="absolute top-4 left-4 z-20" route={`/booking`} />
         <img
           className="absolute top-0 z-10 w-full h-full object-cover"
@@ -79,17 +75,8 @@ const page = () => {
       </Box>
       <Box className="w-full flex justify-center">
         <Box className="w-full flex flex-col gap-2 px-4 md:w-3/5"> 
-            <Box className="flex justify-between items-center">
-              <Typography sx={{ ...kanitMedium ,fontSize: 18}}>Room {params.bookingId}</Typography>
-                <Button 
-                  variant='contained'
-                  color='success'
-                  onClick={goAddOrder}
-                >
-                  <AddRoundedIcon />
-                  <Typography>สั่งอาหาร</Typography>
-                </Button>
-            </Box>
+            <Typography sx={{ ...kanitMedium ,fontSize: 18}}>Room {params.bookingId}</Typography>
+                
             {/* Room price */}
             <Box className="w-full flex flex-col gap-4 p-4 bg-white rounded-xl shadow-sm">
               <Box className="flex justify-between items-center">
@@ -99,7 +86,7 @@ const page = () => {
                   </Box>
                   <Box className="flex flex-col">
                     <Typography sx={{ ...kanitMedium ,fontSize:16}}>John Doe</Typography>
-                    <Typography sx={{fontSize:14, color: colorTheme.gray[200]}}>081-123-4567</Typography>
+                    <Typography sx={{fontSize:14, color: colorTheme.textSecondary}}>081-123-4567</Typography>
                   </Box>
                 </Box>
                 <Box className={`flex flex-col items-end ${colorStatus.bg} ${colorStatus.color} px-3 py-1 rounded-2xl`}>

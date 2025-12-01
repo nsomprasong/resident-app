@@ -28,13 +28,11 @@ const DateSelector: React.FC<DateSelectorProps> = ({ date, setDate }) => {
 
   return (
     <Box>
-      <Box className="flex items-center gap-1">
+      <Box className="flex items-center gap-1 bg-surface py-2 px-4 rounded-full cursor-pointer" onClick={handleOpen}>
         <Tooltip title="แสดงวันที่">
-          <IconButton color='success' size='large' onClick={handleOpen}>
-            <EventNoteRoundedIcon sx={{ color:colorTheme.green[300] ,fontSize: 24 }} />
-          </IconButton>
+          <EventNoteRoundedIcon sx={{ color:colorTheme.primary ,fontSize: 24 }} />
         </Tooltip>
-        <Typography sx={{ ...kanitMedium, fontSize:14, color:colorTheme.gray[200] }}>{date?.format("DD-MM-YYYY")}</Typography>
+        <Typography sx={{ ...kanitMedium, fontSize:14, color:colorTheme.textPrimary }}>{date?.format("DD-MM-YYYY")}</Typography>
       </Box>
       <Popover
         open={open}

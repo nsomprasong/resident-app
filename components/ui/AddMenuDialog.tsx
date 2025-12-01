@@ -75,12 +75,12 @@ const AddMenuDialog: React.FC<AddMenuProps> = ({ open, setOpen, menu }) => {
                 <Typography sx={kanitMedium}>{menu.title}</Typography>
                 <Typography sx={kanitMedium}>฿{menu.price.toString()}</Typography>
             </Box>
-            <Divider sx={{borderColor: colorTheme.gray[100]}} />
+            <Divider sx={{borderColor: colorTheme.gray}} />
             <Box className="w-full">
                 <Typography sx={{fontSize: 14}}>รายละเอียดเพิ่มเติม</Typography>
                 <TextField fullWidth placeholder='ระบุสิ่งที่ไม่ต้องการ หรือ สิ่งที่แพ้' onChange={handleReason} />
             </Box>
-            <Divider sx={{ borderColor: colorTheme.gray[100], mt:2 }} />
+            <Divider sx={{ borderColor: colorTheme.gray, mt:2 }} />
             <Box className="flex gap-4">
                 <Box className="flex items-center gap-4">
                     <Tooltip title="ลดจำนวน">
@@ -108,7 +108,7 @@ const AddMenuDialog: React.FC<AddMenuProps> = ({ open, setOpen, menu }) => {
                 </Box>
                 <Button 
                     variant='contained' 
-                    color='success' 
+                    color='primary' 
                     fullWidth 
                     disabled={amount <= 0}
                     onClick={handleAddBasket}

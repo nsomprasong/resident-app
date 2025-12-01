@@ -25,9 +25,9 @@ const Status: React.FC<StatusProps> = ({ status }) => {
     }
 
   return (
-     <Box className={`flex items-center gap-2 ${colorStatus()}`}>
+     <Box className={`flex items-center gap-1 ${colorStatus()}`}>
         <CircleRoundedIcon sx={{ fontSize: 12 }} />
-        <Typography sx={{fontSize: 14, color: colorTheme.gray[200]}}>{status}</Typography>
+        <Typography sx={{fontSize: 14, color: colorTheme.textSecondary}}>{status}</Typography>
     </Box>
   )
 }

@@ -70,40 +70,42 @@ const page = () => {
           <Typography sx={{ ...kanitMedium, fontSize:18 }}>รายการจองห้องพัก</Typography>
           <Tooltip title="เพิ่มรายการจองห้องพัก">
             <IconButton color='success' size='small' onClick={handleOpenSoloOrGroup}>
-              <AddCircleRoundedIcon sx={{ color:colorTheme.green[300] ,fontSize: 30 }} />
+              <AddCircleRoundedIcon sx={{ color:colorTheme.primary ,fontSize: 30 }} />
             </IconButton>
           </Tooltip>
         </Box> 
-        <DateSelector date={date} setDate={setDate} />
-        <Tabs
-          value={tab}
-          onChange={handleChange}
-          scrollButtons
-          allowScrollButtonsMobile
-          aria-label="scrollable force tabs example"
-        >
-          <Tab icon={<GroupsIcon />} iconPosition="start"  label="กลุ่ม" />
-          <Tab icon={<PersonRoundedIcon />} iconPosition="start" label="เดี่ยว" />
-        </Tabs>
+        <Box className="flex items-center justify-between mt-1">
+          <Tabs
+            value={tab}
+            onChange={handleChange}
+            scrollButtons
+            allowScrollButtonsMobile
+            aria-label="scrollable force tabs example"
+          >
+            <Tab icon={<GroupsIcon />} iconPosition="start"  label="กลุ่ม" />
+            <Tab icon={<PersonRoundedIcon />} iconPosition="start" label="เดี่ยว" />
+          </Tabs>
+          <DateSelector date={date} setDate={setDate} />
+        </Box>
         {tab === 0 &&
           <Box className="mt-2">
-            <Typography sx={{ ...kanitMedium, fontSize: 14, color: colorTheme.gray[300] }}>รายการจองห้องพักแบบกลุ่ม</Typography>
+            <Typography sx={{ ...kanitMedium, fontSize: 16, color: colorTheme.textPrimary }}>รายการจองห้องพักแบบกลุ่ม</Typography>
             <Box className="flex flex-col gap-2 mt-2">
               {groupList.map((cus, index) => 
-                <RoomGroupItem key={index} id={cus.id} customerName={cus.customerName} status={cus.status} roomInGroupList={roomInGroupList} />
+                <RoomGroupItem key={index} id={cus.id} customerName={cus.customerName} status={cus.status} roomInGroupList={roomInGroupList} showStatus={true} />
               )}
             </Box>
           </Box>
         }
         {tab === 1 &&
-        <Box className="mt-2">
-          <Typography sx={{ ...kanitMedium, fontSize: 14, color: colorTheme.gray[300] }}>รายการจองห้องพักแบบเดี่ยว</Typography>
-           <Box className="flex flex-col gap-2 mt-2">
-            {roomSoloList.map((room, index) => (
-              <RoomItem key={index} id={room.id} name={room.name} status={room.status} image={room.image} />
-            ))}
+          <Box className="mt-2">
+            <Typography sx={{ ...kanitMedium, fontSize: 16, color: colorTheme.textPrimary }}>รายการจองห้องพักแบบเดี่ยว</Typography>
+            <Box className="flex flex-col gap-2 mt-2">
+              {roomSoloList.map((room, index) => (
+                <RoomItem key={index} id={room.id} name={room.name} status={room.status} image={room.image} showStatus={true} />
+              ))}
+            </Box>
           </Box>
-        </Box>
         }
       </Box>
 

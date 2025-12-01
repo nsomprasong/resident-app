@@ -21,10 +21,8 @@ export default function MainLayoutClient({ children }: { children: React.ReactNo
         </Box>
         <Box className="flex min-h-screen">
           <Sidebar open={sidebarOpen} onClose={toggleSidebar(false)} />
-          <Box className="flex-1 w-full min-h-screen p-4 bg-gray-50">
-            <Box className="w-full h-full rounded-xl bg-white shadow-md">
-              {children}
-            </Box>
+          <Box className="flex-1 w-full min-h-screen bg-background">
+            {children}
           </Box>
         </Box>
       </Provider>

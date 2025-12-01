@@ -20,11 +20,11 @@ const BackButton: React.FC<ButtonProps> = ({ classProps, route }) => {
           size='small' 
           sx={{
               backgroundColor: 'white',  
-              '&:hover': { backgroundColor: colorTheme.gray[100] },       
+              '&:hover': { backgroundColor: colorTheme.textSecondary },       
           }} 
           onClick={() => router.push(route)}
         >
-          <ArrowBackIosRoundedIcon color='success' />
+          <ArrowBackIosRoundedIcon color='primary' />
         </IconButton>
     </Tooltip>
   )

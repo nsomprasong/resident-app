@@ -46,7 +46,7 @@ const CardMenu: React.FC<CardMenuProps> = ({ image, alt, title, price }) => {
                     <Typography>฿ {price.toString()}</Typography>
                     <Box className="flex items-center">
                         <Tooltip title="เพิ่มรายการ">                  
-                            <Box className='text-green-600 hover:text-green-700 cursor-pointer' onClick={() => setOpen(true)}>
+                            <Box className='text-primary hover:text-secondary cursor-pointer' onClick={() => setOpen(true)}>
                                 <AddCircleRoundedIcon sx={{ fontSize: 30 }} />
                             </Box>
                         </Tooltip>

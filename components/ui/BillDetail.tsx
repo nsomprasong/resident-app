@@ -13,7 +13,7 @@ interface BillDetailProps {
 const BillDetail: React.FC<BillDetailProps> = ({ title, price, isEdit, summarize }) => {
   return (
     <Box className="w-full flex justify-between items-center">
-        <Typography sx={{color: colorTheme.gray[300]}}>{title}</Typography>
+        <Typography sx={{color: colorTheme.textSecondary}}>{title}</Typography>
         <Box className="flex items-center gap-2">
             <Typography>{price.toString()} ฿</Typography>
             {!summarize && isEdit &&

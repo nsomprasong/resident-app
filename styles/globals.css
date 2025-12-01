@@ -1,5 +1,21 @@
 @import "tailwindcss";
 
+@theme {
+  /* Base colors */
+  --color-primary: #6366f1;
+  --color-secondary: #a78bfa;
+  --color-background: #f3f4f6;
+  --color-surface: #ffffff;
+
+  /* Text colors */
+  --color-text-primary: #1f2937;
+  --color-text-secondary: #9ca3af;
+
+  /* Status colors */
+  --color-success: #1dc35a;
+  --color-error: #ef4444;
+}
+
 @font-face {
   font-family: "RobotoCondensed";
   src: url("../public/fonts/english/RobotoCondensed-Light.ttf") format("truetype");

@@ -7,13 +7,13 @@ const listItemButtonTheme: Components<Theme>['MuiListItemButton'] = {
             paddingLeft: 0,
             borderRadius: 8,
             "&.Mui-selected": {
-                backgroundColor: colorTheme.green[100],
-                color: colorTheme.green[300],
+                backgroundColor: colorTheme.fourth,
+                color: colorTheme.primary,
                 "& .MuiListItemIcon-root": {
-                color: colorTheme.green[300],
+                color: colorTheme.primary,
                 },
                 "&:hover": {
-                backgroundColor: colorTheme.green[200]
+                backgroundColor: colorTheme.background
                 },
             },
         }

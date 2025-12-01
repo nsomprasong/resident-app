@@ -13,9 +13,10 @@ interface RoomItemProps {
     customerName: string;
     status: string;
     roomInGroupList: BookingDetail[]
+    showStatus: boolean;
 }
 
-const RoomGroupItem: React.FC<RoomItemProps> = ({ id, customerName, status, roomInGroupList }) => {
+const RoomGroupItem: React.FC<RoomItemProps> = ({ id, customerName, status, roomInGroupList, showStatus }) => {
 
   const [open, setOpen] = useState<boolean>(false)
 
@@ -23,18 +24,20 @@ const RoomGroupItem: React.FC<RoomItemProps> = ({ id, customerName, status, room
   const amount = roomList.length
 
   return (
-    <Box className="border-[1px] border-gray-100 rounded-xl p-2 shadow-sm hover:shadow-md cursor-pointer" onClick={() => setOpen(!open)}>
+    <Box className="border-[1px] border-gray-100 bg-surface rounded-xl p-2 shadow-sm hover:shadow-md cursor-pointer" onClick={() => setOpen(!open)}>
       <Box className="flex items-center justify-between">
         <Box className="flex items-center gap-4">
-          <Box className="w-14 h-14 rounded-lg bg-green-500 text-white flex items-center justify-center"> 
+          <Box className="w-14 h-14 rounded-lg bg-white text-primary flex items-center justify-center border-[1px] border-gray-200"> 
             <ContactEmergencyRoundedIcon sx={{fontSize:34}} />
           </Box>
           <Box>
             <Typography>{customerName}</Typography>
-            <Box className="flex gap-2">
-              <Typography sx={{fontSize:14, color:colorTheme.gray[200]}}>{amount} ห้อง</Typography>
-              <Status status={status} />
-            </Box>
+            {showStatus &&
+              <Box className="flex gap-2">
+                <Typography sx={{fontSize:14, color:colorTheme.textPrimary}}>{amount} ห้อง</Typography>
+                <Status status={status} />
+              </Box>
+            }
           </Box>
         </Box>
         <IconButton color="primary">
@@ -44,7 +47,7 @@ const RoomGroupItem: React.FC<RoomItemProps> = ({ id, customerName, status, room
       <Collapse in={open} timeout="auto" unmountOnExit>
         <Box className="flex flex-col gap-2 mt-2">
           {roomList.map((room, index) => 
-            <RoomItem key={index} id={room.id} name={room.name} status={room.status} image={room.image} />
+            <RoomItem key={index} id={room.id} name={room.name} status={room.status} image={room.image} showStatus={true} />
           )}
         </Box>
       </Collapse>

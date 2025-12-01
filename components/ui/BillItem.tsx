@@ -30,10 +30,10 @@ const BillItem: React.FC<BillListProps> = ({ icon, title, items, isEdit }) => {
   const summarizePrice = calculateSummarizePrice(items);
 
   return (
-    <Box className="w-full flex flex-col gap-4 p-4 bg-white rounded-xl shadow-sm">
+    <Box className="w-full flex flex-col gap-4 p-4 bg-white rounded-xl shadow-sm cursor-pointer" onClick={handleToggle}>
       <Box className="flex justify-between items-center">
         <Box className="flex items-center gap-4">
-          <Box className="w-12 h-12 rounded-full flex justify-center items-center bg-slate-400 hover:bg-slate-500 transition-colors duration-300 text-white cursor-pointer" onClick={handleToggle}>
+          <Box className="w-12 h-12 rounded-full flex justify-center items-center bg-slate-400 hover:bg-slate-500 transition-colors duration-300 text-white cursor-pointer">
             {icon}
           </Box>
           <Typography sx={{ ...kanitMedium }}>{title}</Typography>

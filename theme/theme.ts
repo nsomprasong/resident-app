@@ -10,6 +10,12 @@ import {tabTheme, tabsTheme} from "./components/tab";
 
 const theme = createTheme({
   palette: {
+    primary: {
+      main: "#6366F1", 
+      light: "#818CF8",              
+      dark: "#4F46E5",        
+      contrastText: "#FFFFFF" 
+    },
     success: {
       main: "#22c55e",   // emerald green
       light: "#4ade80",

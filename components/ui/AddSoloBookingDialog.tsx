@@ -20,7 +20,7 @@ const AddSoloBookingDialog: React.FC<AddBookingProps> = ({ open, setOpen }) => {
     <Dialog open={open} fullWidth maxWidth="xs">
         <DialogTitle className='w-full flex justify-between'>
             <Box className='flex items-center gap-2'>
-                <Box className='text-green-700'>
+                <Box className='text-primary'>
                     <AddHomeRoundedIcon sx={{ fontSize:28 }} />
                 </Box>
                 <Typography sx={{ ...kanitMedium ,fontSize: 18}}>เพิ่มรายการจองห้องพัก</Typography>
@@ -55,7 +55,7 @@ const AddSoloBookingDialog: React.FC<AddBookingProps> = ({ open, setOpen }) => {
                     <Typography>จำนวนผู้เข้าพัก</Typography>
                     <TextField fullWidth placeholder='0' />
                 </Box>
-                <Button sx={{ mt:1 }} variant='contained' onClick={() => setOpen(false)}>จองห้องพัก</Button>
+                <Button sx={{ mt:1 }} variant='contained' color='primary' onClick={() => setOpen(false)}>จองห้องพัก</Button>
             </Box>
 
         </DialogContent>

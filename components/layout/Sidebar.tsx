@@ -10,11 +10,13 @@ import Groups2RoundedIcon from '@mui/icons-material/Groups2Rounded';
 import ArticleRoundedIcon from '@mui/icons-material/ArticleRounded';
 import PriceChangeRoundedIcon from '@mui/icons-material/PriceChangeRounded';
 import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded';
+import RestaurantIcon from '@mui/icons-material/Restaurant';
 
 export default function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   
   const menuItems = [
     { text: "รายการจอง", icon: <BookmarkRoundedIcon />, path: "/booking" },
+    { text: "สั่งอาหาร", icon: <RestaurantIcon />, path: "/foodOrder" },
     { text: "ครัว", icon: <SoupKitchenRoundedIcon />, path: "/kitchen" },
     { text: "ตารางพนักงาน", icon: <AssignmentIndRoundedIcon />, path: "/employeeSchedule" },
     { text: "แม่บ้าน & มินิบาร์", icon: <Groups2RoundedIcon />, path: "/houseKeeperMinibar" },
@@ -41,7 +43,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
           },
         }}
       >
-        <Box className="h-full w-full bg-gray-50">
+        <Box className="h-full w-full bg-gray-50 border-r-[1px] border-gray-200 ">
           <Box>
             <Typography sx={{ ...robotoBold, fontSize:20}} className="p-4">Hotel Logo</Typography>
           </Box>
