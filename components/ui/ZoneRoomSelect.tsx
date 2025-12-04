@@ -2,9 +2,10 @@ import { kanitMedium } from '@/lib/constants/font'
 import { Dialog, DialogTitle, Box, Typography, Tooltip, IconButton, DialogContent, Select, MenuItem, Button, TextField, Tabs, Tab, Divider } from '@mui/material'
 import AddHomeRoundedIcon from '@mui/icons-material/AddHomeRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import RoomIconSlect from './RoomIconSlect';
 import { colorTheme } from '@/lib/constants/color';
+import axios from 'axios';
 
 interface ZoneRoomProps {
     open: boolean
@@ -38,9 +39,23 @@ const ZoneRoomSelect: React.FC<ZoneRoomProps> = ({ open, setOpen }) => {
 
     const [tab, setTab] = useState<number>(0);
 
+    const fetchRooms = async () => {
+        try {
+            const response = await axios.get('http://localhost:7190/api/v1/rooms/');
+            console.log('Fetched rooms:', response.data);
+        }
+        catch (error) {
+            console.error('Error fetching rooms:', error);
+        }
+    }
+
     const handleChange = (event: React.SyntheticEvent, newValue: number) => {
         setTab(newValue);
     };
+
+    useEffect(() => {
+        fetchRooms();
+    },[open]);
 
   return (
     <Dialog open={open} fullWidth maxWidth="xs">
