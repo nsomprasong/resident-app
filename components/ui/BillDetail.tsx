@@ -1,29 +1,3 @@
-import { colorTheme } from '@/lib/constants/color'
-import { Box, Typography } from '@mui/material'
-import React from 'react'
-import RemoveCircleRoundedIcon from '@mui/icons-material/RemoveCircleRounded';
-
-interface BillDetailProps {
-    title: string;
-    price: number;
-    isEdit: boolean
-    summarize?: boolean;
+export default function BillDetail({ title, price, isEdit, summarize = false }: { title: string; price: number; isEdit: boolean; summarize?: boolean }) {
+  return <div className={`flex items-center justify-between gap-4 py-1 ${summarize ? "font-semibold" : "text-sm"}`}><span>{title}</span>{isEdit ? <input aria-label={`ราคา ${title}`} type="number" defaultValue={price} className="w-28 rounded-lg border border-slate-200 px-2 py-1 text-right outline-none focus:border-indigo-500" /> : <span>฿{price.toLocaleString()}</span>}</div>;
 }
-
-const BillDetail: React.FC<BillDetailProps> = ({ title, price, isEdit, summarize }) => {
-  return (
-    <Box className="w-full flex justify-between items-center">
-        <Typography sx={{color: colorTheme.textSecondary}}>{title}</Typography>
-        <Box className="flex items-center gap-2">
-            <Typography>{price.toString()} ฿</Typography>
-            {!summarize && isEdit &&
-              <Box className="text-red-500 cursor-pointer flex items-center">
-                <RemoveCircleRoundedIcon sx={{ fontSize:20 }} />
-              </Box>
-            }
-        </Box>
-    </Box>
-  )
-}
-
-export default BillDetail

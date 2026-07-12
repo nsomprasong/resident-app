@@ -1,116 +1,14 @@
-'use client'
+"use client";
+import Image from "next/image";
+import { Trash2 } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import BackButton from "@/components/ui/BackButton";
+import { useBasketList } from "@/hooks/useBasketList";
 
-import BackButton from '@/components/ui/BackButton';
-import { useBasketList } from '@/hooks/useBasketList';
-import { colorTheme } from '@/lib/constants/color';
-import { kanitMedium } from '@/lib/constants/font';
-import { Box, Button, Tooltip, Typography } from '@mui/material';
-import { useParams, useRouter } from 'next/navigation';
-import React from 'react'
-import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded';
-
-const Page = () => {
-  const router = useRouter();
-  const params = useParams<{ roomId: string }>();
-  const { basketList, removeFromBasket } = useBasketList();
-
-  const totalPrice = basketList.reduce((sum, item) => sum + item.price, 0);
-
-  const goAddOrder = () => {
-    router.push(`/foodOrder/${params.roomId}/food`);
-  };
-
-  return (
-    <Box className="flex flex-col h-[calc(100vh)]">
-      {/* Header */}
-      <Box className="flex items-center justify-between p-4 bg-primary">
-        <Box className="flex items-center gap-2">
-          <Box className="flex items-center gap-4">
-            <BackButton classProps='' route={`/foodOrder/${params.roomId}/food`} />
-            <Typography sx={{ ...kanitMedium, fontSize: 18, color: 'white' }}>ตะกร้า</Typography>
-          </Box>
-          <Box className="flex items-center gap-2 bg-white text-primary px-3 rounded-2xl">
-            <Typography>ห้อง</Typography>
-            <Typography>{params.roomId}</Typography>
-          </Box>
-        </Box>
-      </Box>
-
-      {/* Scrollable content */}
-      <Box className="flex-1 overflow-y-auto p-4">
-        <Box className="flex justify-between items-end">
-          <Typography sx={kanitMedium}>สรุปคำสั่งซื้อ</Typography>
-          <Typography
-            sx={{ fontSize: 14, color: colorTheme.blue, cursor: 'pointer' }}
-            onClick={goAddOrder}
-          >
-            เพิ่มรายการ
-          </Typography>
-        </Box>
-
-        <Box className="flex flex-col gap-2 mt-4">
-          {basketList.length > 0 ? (
-            basketList.map((item, index) => (
-              <Box key={index} className="flex justify-between bg-white rounded-xl shadow-sm p-4">
-                <Box className="w-10/12 flex items-start gap-4">
-                  <img className="w-16 h-16 rounded-lg" src={item.image} alt={item.alt} />
-                  <Box className="w-full h-full flex flex-col justify-between">
-                    <Typography sx={kanitMedium}>{item.title}</Typography>
-                    <Typography
-                      sx={{
-                        fontSize: 14,
-                        color: colorTheme.textSecondary,
-                        whiteSpace: 'normal',
-                        wordBreak: 'break-word',
-                      }}
-                    >
-                      {item.reason}
-                    </Typography>
-                    <Typography sx={{ fontSize: 14, color: colorTheme.blue, cursor: 'pointer' }}>
-                      แก้ไข
-                    </Typography>
-                  </Box>
-                </Box>
-                <Box className="w-2/12 flex flex-col justify-between items-end">
-                  <Typography>{item.price} ฿</Typography>
-                  <Tooltip title="ลบรายการ">
-                    <Box
-                      className="text-gray-500 hover:text-gray-600 cursor-pointer"
-                      onClick={() => removeFromBasket(item.id)}
-                    >
-                      <DeleteRoundedIcon />
-                    </Box>
-                  </Tooltip>
-                </Box>
-              </Box>
-            ))
-          ) : (
-            <Box className="w-full text-center">
-              <Typography>ไม่มีรายการอาหารที่สั่ง</Typography>
-            </Box>
-          )}
-        </Box>
-      </Box>
-
-      {/* Footer */}
-      {basketList.length > 0 && 
-        <Box className="p-4 bg-white">
-            <Box className="flex justify-between mb-4">
-                <Typography sx={kanitMedium}>ราคารวม</Typography>
-                <Typography sx={kanitMedium}>{totalPrice} ฿</Typography>
-            </Box>
-            <Button
-            variant="contained"
-            color="primary"
-            fullWidth
-            // onClick={goRoom}
-            >
-            <Typography>ยืนยันรายการอาหาร</Typography>
-            </Button>
-        </Box>
-      }
-    </Box>
-  );
-};
-
-export default Page;
+export default function BasketPage() {
+  const { roomId: bookingId } = useParams<{ roomId: string }>(); const router = useRouter(); const { basketList, removeFromBasket, setBasketList } = useBasketList(); const total = basketList.reduce((sum, item) => sum + item.price, 0); const [saving, setSaving] = useState(false); const [error, setError] = useState(""); const [customer, setCustomer] = useState("ลูกค้า");
+  useEffect(() => { const load = async () => { try { const response = await fetch(`/api/bookings/${bookingId}`, { cache: "no-store" }); if (!response.ok) return; const data = await response.json() as { customerName: string }; setCustomer(data.customerName); } catch { /* ใช้ชื่อสำรอง */ } }; void load(); }, [bookingId]);
+  const confirm = async () => { setSaving(true); setError(""); try { const response = await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bookingId, items: basketList.map((item) => ({ productId: item.productId, note: item.reason })) }) }); const data = await response.json() as { message?: string }; if (!response.ok) throw new Error(data.message); setBasketList([]); router.push("/foodOrder"); } catch (reason) { setError(reason instanceof Error ? reason.message : "บันทึกออเดอร์ไม่สำเร็จ"); } finally { setSaving(false); } };
+  return <div className="min-h-screen bg-slate-100"><header className="flex h-16 items-center gap-3 bg-indigo-600 px-4 text-white shadow"><BackButton route={`/foodOrder/${bookingId}/food`} /><div><p className="text-xs text-indigo-200">{customer}</p><h1 className="font-semibold">ตะกร้ารายการอาหาร</h1></div></header><main className="mx-auto max-w-3xl p-4 sm:p-6"><div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-100 p-4"><h2 className="font-medium">สรุปคำสั่งซื้อ</h2><p className="text-sm text-slate-500">{basketList.length} รายการ</p></div>{basketList.length === 0 ? <div className="p-10 text-center text-slate-500">ยังไม่มีรายการในตะกร้า</div> : <ul className="divide-y divide-slate-100">{basketList.map((item) => <li key={item.id} className="flex items-center justify-between gap-3 p-4"><div className="flex min-w-0 items-center gap-3"><Image src={item.image} alt={item.alt} width={56} height={56} className="h-14 w-14 rounded-xl object-cover" /><div className="min-w-0"><p className="font-medium">{item.title}</p>{item.reason && <p className="truncate text-xs text-slate-500">{item.reason}</p>}</div></div><div className="flex items-center gap-3"><span className="text-sm">฿{item.price}</span><button type="button" aria-label={`ลบ ${item.title}`} onClick={() => removeFromBasket(item.id)} className="rounded-lg p-2 text-red-500 hover:bg-red-50"><Trash2 size={18} /></button></div></li>)}</ul>}<div className="border-t border-slate-100 bg-slate-50 p-4"><div className="mb-4 flex justify-between text-lg font-semibold"><span>ราคารวม</span><span>฿{total.toLocaleString()}</span></div>{error && <p className="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}<button type="button" disabled={!basketList.length || saving} onClick={confirm} className="w-full rounded-xl bg-indigo-600 px-4 py-3 font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300">{saving ? "กำลังบันทึกออเดอร์..." : "ยืนยันรายการอาหาร"}</button></div></div></main></div>;
+}

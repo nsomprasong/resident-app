@@ -1,62 +1,22 @@
-"use client"
+"use client";
 
-import { Box, Typography, List, ListItem, ListItemButton, ListItemIcon, ListItemText, IconButton, Collapse } from '@mui/material'
-import Link from 'next/link'
-import React, { useState } from 'react'
-import AddRoundedIcon from '@mui/icons-material/AddRounded';
-import RemoveRoundedIcon from '@mui/icons-material/RemoveRounded';
+import type { LucideIcon } from "lucide-react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-interface MenuItems {
-  text: string
-  icon: React.ReactNode
-  path: string
-}
+interface MenuItem { text: string; icon: LucideIcon; path: string }
 
-interface MenuItemsProps {
-  menuItems: MenuItems[]
-  title: string
-  onClose: () => void
-}
-
-const ListMenu: React.FC<MenuItemsProps> = ({ menuItems, title, onClose }) => {
-
-    const [open, setOpen] = useState(true);
-
-    const pathname = usePathname();
-
-    const handleToggle = () => {
-        setOpen((prev) => !prev);
-    };
-
+export default function ListMenu({ menuItems, title, onClose }: { menuItems: MenuItem[]; title: string; onClose: () => void }) {
+  const pathname = usePathname();
   return (
-    <Box className="w-64 px-4">
-        <Box className="flex justify-between items-center text-gray-500">
-            <Typography sx={{fontSize: 15}}>{title}</Typography>
-            <IconButton onClick={handleToggle}>
-                {open ? <AddRoundedIcon /> : <RemoveRoundedIcon />}
-            </IconButton>
-        </Box>
-        <Collapse in={open} timeout="auto" unmountOnExit>
-          <Box>
-            <List>
-                {menuItems.map((item) => (
-                <ListItem key={item.text} disablePadding onClick={onClose}>
-                    <ListItemButton 
-                      component={Link} 
-                      href={item.path} 
-                      selected={pathname === item.path}
-                    >
-                      <ListItemIcon sx={{ minWidth:0, paddingX: 2 }}>{item.icon}</ListItemIcon>
-                      <ListItemText primary={item.text} />
-                    </ListItemButton>
-                </ListItem>
-                ))}
-            </List>
-          </Box>
-        </Collapse>
-    </Box>
-  )
+    <nav className="px-3">
+      <p className="px-3 pb-2 text-xs font-medium uppercase tracking-widest text-slate-400">{title}</p>
+      <ul className="space-y-1">
+        {menuItems.map(({ text, icon: Icon, path }) => {
+          const active = pathname === path || pathname.startsWith(`${path}/`);
+          return <li key={path}><Link onClick={onClose} href={path} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ${active ? "bg-indigo-50 font-medium text-indigo-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}><Icon size={19} />{text}</Link></li>;
+        })}
+      </ul>
+    </nav>
+  );
 }
-
-export default ListMenu

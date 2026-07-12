@@ -12,9 +12,13 @@
 
 # testing
 /coverage
+/playwright/.auth/
+/playwright-report/
+/test-results/
 
 # next.js
 /.next/
+/.next-test/
 /out/
 
 # production
@@ -32,6 +36,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+
+# generated Prisma Client
+/generated/prisma
 
 # vercel
 .vercel

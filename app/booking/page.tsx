@@ -1,118 +1,168 @@
-'use client'
+"use client";
 
-import { colorTheme } from '@/lib/constants/color'
-import { kanitMedium } from '@/lib/constants/font'
-import { Box, IconButton, Tab, Tabs, Tooltip, Typography } from '@mui/material'
-import dayjs, { Dayjs } from "dayjs";
-import React, { useState } from 'react'
-import AddCircleRoundedIcon from '@mui/icons-material/AddCircleRounded';
-import DateSelector from '@/components/ui/DateSelector';
-import RoomItem from '@/components/ui/RoomItem';
-import AddSoloBookingDialog from '@/components/ui/AddSoloBookingDialog';
-import GroupsIcon from '@mui/icons-material/Groups';
-import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
-import RoomGroupItem from '@/components/ui/RoomGroupItem';
-import AddGroupBookingDialog from '@/components/ui/AddGroupBookingDialog';
-import { BookingDetail } from '@/interface/BookingDetailModel';
+import { History, Plus, UserRound, Users } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import AddGroupBookingDialog from "@/components/ui/AddGroupBookingDialog";
+import AddSoloBookingDialog from "@/components/ui/AddSoloBookingDialog";
+import DateSelector from "@/components/ui/DateSelector";
+import RoomGroupItem from "@/components/ui/RoomGroupItem";
+import RoomItem from "@/components/ui/RoomItem";
+import type { BookingDetail } from "@/interface/BookingDetailModel";
 
-const roomSoloList = [
-  { id: 1, name: "Room 1", status: "รอดำเนินการ", image: "/images/room/room1.jpg" },
-  { id: 2, name: "Room 2", status: "ยืนยันแล้ว", image: "/images/room/room2.jpg" },
-  { id: 3, name: "Room 3", status: "เช็คอิน", image: "/images/room/room3.jpg" },
-  { id: 4, name: "Room 4", status: "เช็คเอาท์", image: "/images/room/room4.jpg" },
-];
-
-const groupList = [
-  { id: 1, customerName: "Jhon Group", status: "รอดำเนินการ" },
-  { id: 2, customerName: "Non Group", status: "ยืนยันแล้ว" },
-  { id: 3, customerName: "Eiei Group", status: "เช็คอิน" },
-  { id: 4, customerName: "Hello Group", status: "เช็คเอาท์" },
-];
-
-const roomInGroupList: BookingDetail[] = [
-  { id: 1, name: "Room 1", status: "รอดำเนินการ", image: "/images/room/room1.jpg" },
-  { id: 2, name: "Room 2", status: "ยืนยันแล้ว", image: "/images/room/room2.jpg" },
-  { id: 3, name: "Room 3", status: "เช็คอิน", image: "/images/room/room3.jpg" },
-  { id: 4, name: "Room 4", status: "เช็คเอาท์", image: "/images/room/room4.jpg" },
-  { id: 1, name: "Room 1", status: "รอดำเนินการ", image: "/images/room/room1.jpg" },
-  { id: 1, name: "Room 2", status: "ยืนยันแล้ว", image: "/images/room/room2.jpg" },
-  { id: 1, name: "Room 3", status: "เช็คอิน", image: "/images/room/room3.jpg" },
-  { id: 2, name: "Room 4", status: "เช็คเอาท์", image: "/images/room/room4.jpg" },
-  { id: 2, name: "Room 1", status: "รอดำเนินการ", image: "/images/room/room1.jpg" },
-  { id: 3, name: "Room 2", status: "ยืนยันแล้ว", image: "/images/room/room2.jpg" },
-  { id: 3, name: "Room 3", status: "เช็คอิน", image: "/images/room/room3.jpg" },
-  { id: 4, name: "Room 4", status: "เช็คเอาท์", image: "/images/room/room4.jpg" },
-];
-
-const page = () => {
-
-  const [date, setDate] = useState<Dayjs | null>(dayjs());
-  const [openSolo, setOpenSolo] = useState<boolean>(false);
-  const [openGroup, setOpenGroup] = useState<boolean>(false);
-  const [tab, setTab] = useState<number>(0);
-
-  const handleChange = (event: React.SyntheticEvent, newValue: number) => {
-    setTab(newValue);
-  };
-
-  const handleOpenSoloOrGroup = () => {
-    if(tab === 0){
-      setOpenGroup(true);
-    } else {
-      setOpenSolo(true);
-    }
-  }
-
-  return (
-    <>
-      <Box className="p-4">
-        <Box className="flex justify-between items-center">
-          <Typography sx={{ ...kanitMedium, fontSize:18 }}>รายการจองห้องพัก</Typography>
-          <Tooltip title="เพิ่มรายการจองห้องพัก">
-            <IconButton color='success' size='small' onClick={handleOpenSoloOrGroup}>
-              <AddCircleRoundedIcon sx={{ color:colorTheme.primary ,fontSize: 30 }} />
-            </IconButton>
-          </Tooltip>
-        </Box> 
-        <Box className="flex items-center justify-between mt-1">
-          <Tabs
-            value={tab}
-            onChange={handleChange}
-            scrollButtons
-            allowScrollButtonsMobile
-            aria-label="scrollable force tabs example"
-          >
-            <Tab icon={<GroupsIcon />} iconPosition="start"  label="กลุ่ม" />
-            <Tab icon={<PersonRoundedIcon />} iconPosition="start" label="เดี่ยว" />
-          </Tabs>
-          <DateSelector date={date} setDate={setDate} />
-        </Box>
-        {tab === 0 &&
-          <Box className="mt-2">
-            <Typography sx={{ ...kanitMedium, fontSize: 16, color: colorTheme.textPrimary }}>รายการจองห้องพักแบบกลุ่ม</Typography>
-            <Box className="flex flex-col gap-2 mt-2">
-              {groupList.map((cus, index) => 
-                <RoomGroupItem key={index} id={cus.id} customerName={cus.customerName} status={cus.status} roomInGroupList={roomInGroupList} showStatus={true} />
-              )}
-            </Box>
-          </Box>
-        }
-        {tab === 1 &&
-          <Box className="mt-2">
-            <Typography sx={{ ...kanitMedium, fontSize: 16, color: colorTheme.textPrimary }}>รายการจองห้องพักแบบเดี่ยว</Typography>
-            <Box className="flex flex-col gap-2 mt-2">
-              {roomSoloList.map((room, index) => (
-                <RoomItem key={index} id={room.id} name={room.name} status={room.status} image={room.image} showStatus={true} />
-              ))}
-            </Box>
-          </Box>
-        }
-      </Box>
-
-      <AddSoloBookingDialog open={openSolo} setOpen={setOpenSolo} />
-      <AddGroupBookingDialog open={openGroup} setOpen={setOpenGroup} />
-    </>
-  )
+interface BookingResult {
+  id: string;
+  mode: "solo" | "group";
+  customerName: string;
+  status: string;
+  rooms: BookingDetail[];
+  rafts: Array<{ id: string; name: string; capacity: number }>;
 }
+type Tab = "group" | "solo" | "history";
 
-export default page
+export default function BookingPage() {
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [tab, setTab] = useState<Tab>("group");
+  const [openSolo, setOpenSolo] = useState(false);
+  const [openGroup, setOpenGroup] = useState(false);
+  const [bookings, setBookings] = useState<BookingResult[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [refresh, setRefresh] = useState(0);
+  const loadBookings = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const query = tab === "history" ? "history=true" : `date=${date}`;
+      const response = await fetch(`/api/bookings?${query}`, {
+        cache: "no-store",
+      });
+      const data = (await response.json()) as
+        BookingResult[] | { message: string };
+      if (!response.ok || !Array.isArray(data))
+        throw new Error(
+          "message" in data ? data.message : "โหลดข้อมูลไม่สำเร็จ",
+        );
+      setBookings(data);
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "โหลดข้อมูลไม่สำเร็จ",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [date, tab]);
+  useEffect(() => {
+    void loadBookings();
+  }, [loadBookings, refresh]);
+  const visible =
+    tab === "history"
+      ? bookings
+      : bookings.filter((booking) => booking.mode === tab);
+  const created = () => setRefresh((value) => value + 1);
+  return (
+    <div className="mx-auto max-w-5xl p-4 sm:p-6 lg:p-8">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-sm text-indigo-600">งานประจำวัน</p>
+          <h1 className="text-2xl font-semibold">
+            {tab === "history" ? "ประวัติการจอง" : "รายการจอง"}
+          </h1>
+        </div>
+        {tab !== "history" && (
+          <button
+            type="button"
+            onClick={() =>
+              tab === "group" ? setOpenGroup(true) : setOpenSolo(true)
+            }
+            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white"
+          >
+            <Plus size={18} />
+            เพิ่มการจอง
+          </button>
+        )}
+      </div>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex rounded-xl bg-slate-200/70 p-1">
+          <button
+            onClick={() => setTab("group")}
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm ${tab === "group" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500"}`}
+          >
+            <Users size={17} />
+            แบบกลุ่ม
+          </button>
+          <button
+            onClick={() => setTab("solo")}
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm ${tab === "solo" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500"}`}
+          >
+            <UserRound size={17} />
+            แบบเดี่ยว
+          </button>
+          <button
+            onClick={() => setTab("history")}
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm ${tab === "history" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500"}`}
+          >
+            <History size={17} />
+            ประวัติ
+          </button>
+        </div>
+        {tab !== "history" && <DateSelector date={date} setDate={setDate} />}
+      </div>
+      {loading ? (
+        <p className="rounded-2xl bg-white p-8 text-center text-slate-500">
+          กำลังโหลดรายการจอง...
+        </p>
+      ) : error ? (
+        <p className="rounded-2xl bg-red-50 p-4 text-red-700">{error}</p>
+      ) : (
+        <div className="space-y-3">
+          {visible.map((booking, index) => {
+            const resources =
+              [
+                ...booking.rooms.map((room) => room.name),
+                ...booking.rafts.map((raft) => raft.name),
+              ].join(", ") || "ไม่มีห้องหรือแพ";
+            return booking.mode === "group" ? (
+              <RoomGroupItem
+                key={booking.id}
+                id={booking.id}
+                customerName={`${booking.customerName} · ${resources}`}
+                status={booking.status}
+                roomInGroupList={booking.rooms}
+                showStatus
+              />
+            ) : (
+              <RoomItem
+                key={booking.id}
+                id={booking.id}
+                name={`${booking.customerName} · ${resources}`}
+                status={booking.status}
+                image={
+                  booking.rooms[0]?.image ??
+                  `/images/room/room${(index % 4) + 1}.jpg`
+                }
+                showStatus
+              />
+            );
+          })}
+          {visible.length === 0 && (
+            <p className="rounded-2xl bg-white p-8 text-center text-slate-500">
+              {tab === "history"
+                ? "ยังไม่มีประวัติการเช็กเอาต์หรือยกเลิก"
+                : "ไม่มีรายการจองในวันที่เลือก"}
+            </p>
+          )}
+        </div>
+      )}
+      <AddSoloBookingDialog
+        open={openSolo}
+        setOpen={setOpenSolo}
+        onCreated={created}
+      />
+      <AddGroupBookingDialog
+        open={openGroup}
+        setOpen={setOpenGroup}
+        onCreated={created}
+      />
+    </div>
+  );
+}

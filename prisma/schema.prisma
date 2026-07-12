@@ -1,0 +1,422 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum RoomStatus {
+  AVAILABLE
+  OCCUPIED
+  CLEANING
+  MAINTENANCE
+}
+
+enum RaftStatus {
+  AVAILABLE
+  MAINTENANCE
+}
+
+enum InspectionStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum InspectionItemType {
+  MINIBAR
+  DAMAGE
+  STAIN
+  MISSING
+  OTHER
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CHECKED_IN
+  CHECKED_OUT
+  CANCELLED
+}
+
+enum ProductType {
+  FOOD
+  MINIBAR
+  OTHER
+}
+
+enum OrderStatus {
+  PENDING
+  PREPARING
+  READY
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  CASH
+  PROMPTPAY
+  TRANSFER
+  CARD
+  ROOM_CHARGE
+}
+
+enum ChargeType {
+  ROOM
+  RAFT
+  FOOD
+  MINIBAR
+  DAMAGE
+  CLEANING
+  OTHER
+}
+
+model Zone {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique
+  rooms     Room[]
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("zones")
+}
+
+model RoomType {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique
+  description String?
+  basePrice   Decimal  @map("base_price") @db.Decimal(10, 2)
+  capacity    Int      @default(2)
+  bedType     String?  @map("bed_type")
+  rooms       Room[]
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("room_types")
+}
+
+model Room {
+  id           String        @id @default(uuid()) @db.Uuid
+  number       String        @unique
+  floor        Int?
+  status       RoomStatus    @default(AVAILABLE)
+  zoneId       String        @map("zone_id") @db.Uuid
+  roomTypeId   String        @map("room_type_id") @db.Uuid
+  zone         Zone          @relation(fields: [zoneId], references: [id])
+  roomType     RoomType      @relation(fields: [roomTypeId], references: [id])
+  bookingRooms BookingRoom[]
+  orders       Order[]
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  @@index([zoneId, status])
+  @@map("rooms")
+}
+
+model Raft {
+  id           String        @id @default(uuid()) @db.Uuid
+  number       String        @unique
+  name         String
+  capacity     Int           @default(10)
+  basePrice    Decimal       @map("base_price") @db.Decimal(10, 2)
+  status       RaftStatus    @default(AVAILABLE)
+  bookingRafts BookingRaft[]
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@map("rafts")
+}
+
+model Guest {
+  id        String    @id @default(uuid()) @db.Uuid
+  firstName String    @map("first_name")
+  lastName  String    @map("last_name")
+  phone     String?
+  email     String?
+  idNumber  String?   @map("id_number")
+  bookings  Booking[]
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  @@index([phone])
+  @@map("guests")
+}
+
+model TourGroup {
+  id          String    @id @default(uuid()) @db.Uuid
+  name        String
+  contactName String    @map("contact_name")
+  phone       String
+  bookings    Booking[]
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@map("tour_groups")
+}
+
+model Booking {
+  id             String        @id @default(uuid()) @db.Uuid
+  reference      String        @unique
+  status         BookingStatus @default(PENDING)
+  checkIn        DateTime      @map("check_in") @db.Date
+  checkOut       DateTime      @map("check_out") @db.Date
+  guestId        String?       @map("guest_id") @db.Uuid
+  tourGroupId    String?       @map("tour_group_id") @db.Uuid
+  guest          Guest?        @relation(fields: [guestId], references: [id])
+  tourGroup      TourGroup?    @relation(fields: [tourGroupId], references: [id])
+  rooms          BookingRoom[]
+  rafts          BookingRaft[]
+  charges        Charge[]
+  payments       Payment[]
+  orders         Order[]
+  notes          String?
+  guestCount     Int?          @map("guest_count")
+  pricePerPerson Decimal?      @map("price_per_person") @db.Decimal(10, 2)
+  closedAt       DateTime?     @map("closed_at")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  @@index([checkIn, checkOut, status])
+  @@map("bookings")
+}
+
+model BookingRoom {
+  id         String          @id @default(uuid()) @db.Uuid
+  bookingId  String          @map("booking_id") @db.Uuid
+  roomId     String          @map("room_id") @db.Uuid
+  rate       Decimal         @db.Decimal(10, 2)
+  extraBeds  Int             @default(0) @map("extra_beds")
+  isExtra    Boolean         @default(false) @map("is_extra")
+  booking    Booking         @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  room       Room            @relation(fields: [roomId], references: [id])
+  inspection RoomInspection?
+
+  @@unique([bookingId, roomId])
+  @@index([roomId])
+  @@map("booking_rooms")
+}
+
+model RoomInspection {
+  id            String           @id @default(uuid()) @db.Uuid
+  bookingRoomId String           @unique @map("booking_room_id") @db.Uuid
+  status        InspectionStatus @default(PENDING)
+  notes         String?
+  completedAt   DateTime?        @map("completed_at")
+  bookingRoom   BookingRoom      @relation(fields: [bookingRoomId], references: [id], onDelete: Cascade)
+  items         InspectionItem[]
+  charge        Charge?
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@map("room_inspections")
+}
+
+model InspectionItem {
+  id           String             @id @default(uuid()) @db.Uuid
+  inspectionId String             @map("inspection_id") @db.Uuid
+  type         InspectionItemType
+  description  String
+  quantity     Int                @default(1)
+  unitPrice    Decimal            @map("unit_price") @db.Decimal(10, 2)
+  catalogId    String?            @map("catalog_id") @db.Uuid
+  inspection   RoomInspection     @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  catalog      InspectionCatalog? @relation(fields: [catalogId], references: [id], onDelete: SetNull)
+  createdAt    DateTime           @default(now()) @map("created_at")
+
+  @@map("inspection_items")
+}
+
+model InspectionCatalog {
+  id        String             @id @default(uuid()) @db.Uuid
+  name      String             @unique
+  type      InspectionItemType
+  unitPrice Decimal            @map("unit_price") @db.Decimal(10, 2)
+  isActive  Boolean            @default(true) @map("is_active")
+  items     InspectionItem[]
+  createdAt DateTime           @default(now()) @map("created_at")
+  updatedAt DateTime           @updatedAt @map("updated_at")
+
+  @@index([type, isActive])
+  @@map("inspection_catalogs")
+}
+
+model BookingRaft {
+  id        String  @id @default(uuid()) @db.Uuid
+  bookingId String  @map("booking_id") @db.Uuid
+  raftId    String  @map("raft_id") @db.Uuid
+  rate      Decimal @db.Decimal(10, 2)
+  isExtra   Boolean @default(false) @map("is_extra")
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  raft      Raft    @relation(fields: [raftId], references: [id])
+
+  @@unique([bookingId, raftId])
+  @@index([raftId])
+  @@map("booking_rafts")
+}
+
+model Product {
+  id          String      @id @default(uuid()) @db.Uuid
+  name        String
+  description String?
+  price       Decimal     @db.Decimal(10, 2)
+  type        ProductType
+  imageUrl    String?     @map("image_url")
+  isActive    Boolean     @default(true) @map("is_active")
+  orderItems  OrderItem[]
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  @@index([type, isActive])
+  @@map("products")
+}
+
+model Order {
+  id        String      @id @default(uuid()) @db.Uuid
+  number    String      @unique
+  status    OrderStatus @default(PENDING)
+  bookingId String?     @map("booking_id") @db.Uuid
+  roomId    String?     @map("room_id") @db.Uuid
+  booking   Booking?    @relation(fields: [bookingId], references: [id])
+  room      Room?       @relation(fields: [roomId], references: [id])
+  items     OrderItem[]
+  note      String?
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
+
+  @@index([status, createdAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String  @id @default(uuid()) @db.Uuid
+  orderId   String  @map("order_id") @db.Uuid
+  productId String  @map("product_id") @db.Uuid
+  quantity  Int     @default(1)
+  unitPrice Decimal @map("unit_price") @db.Decimal(10, 2)
+  note      String?
+  isExtra   Boolean @default(true) @map("is_extra")
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id])
+
+  @@map("order_items")
+}
+
+model Charge {
+  id           String          @id @default(uuid()) @db.Uuid
+  bookingId    String          @map("booking_id") @db.Uuid
+  inspectionId String?         @unique @map("inspection_id") @db.Uuid
+  type         ChargeType
+  description  String
+  amount       Decimal         @db.Decimal(10, 2)
+  booking      Booking         @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  inspection   RoomInspection? @relation(fields: [inspectionId], references: [id], onDelete: SetNull)
+  createdAt    DateTime        @default(now()) @map("created_at")
+
+  @@index([bookingId, type])
+  @@map("charges")
+}
+
+model Payment {
+  id        String          @id @default(uuid()) @db.Uuid
+  bookingId String          @map("booking_id") @db.Uuid
+  amount    Decimal         @db.Decimal(10, 2)
+  method    PaymentMethod
+  status    PaymentStatus   @default(PENDING)
+  reference String?
+  channelId String?         @map("channel_id") @db.Uuid
+  paidAt    DateTime?       @map("paid_at")
+  booking   Booking         @relation(fields: [bookingId], references: [id])
+  channel   PaymentChannel? @relation(fields: [channelId], references: [id], onDelete: SetNull)
+  createdAt DateTime        @default(now()) @map("created_at")
+
+  @@index([bookingId, status])
+  @@map("payments")
+}
+
+model PaymentChannel {
+  id        String        @id @default(uuid()) @db.Uuid
+  name      String        @unique
+  method    PaymentMethod
+  isActive  Boolean       @default(true) @map("is_active")
+  payments  Payment[]
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  @@index([isActive])
+  @@map("payment_channels")
+}
+
+model Role {
+  id          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code        String           @unique
+  displayName String           @map("display_name")
+  isActive    Boolean          @default(true) @map("is_active")
+  permissions RolePermission[]
+  employees   Employee[]
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code        String           @unique
+  description String?
+  roles       RolePermission[]
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String     @map("role_id") @db.Uuid
+  permissionId String     @map("permission_id") @db.Uuid
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+model Employee {
+  id         String      @id @default(uuid()) @db.Uuid
+  authUserId String?     @unique @map("auth_user_id") @db.Uuid
+  name       String
+  phone      String?
+  role       String
+  roleId     String?     @map("role_id") @db.Uuid
+  roleRecord Role?       @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  hourlyRate Decimal?    @map("hourly_rate") @db.Decimal(10, 2)
+  shifts     WorkShift[]
+  createdAt  DateTime    @default(now()) @map("created_at")
+  updatedAt  DateTime    @updatedAt @map("updated_at")
+
+  @@index([roleId])
+  @@map("employees")
+}
+
+model WorkShift {
+  id         String   @id @default(uuid()) @db.Uuid
+  employeeId String   @map("employee_id") @db.Uuid
+  startsAt   DateTime @map("starts_at")
+  endsAt     DateTime @map("ends_at")
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId, startsAt])
+  @@map("work_shifts")
+}

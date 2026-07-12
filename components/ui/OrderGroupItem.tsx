@@ -1,45 +1,8 @@
-import React, { useState } from 'react'
-import { Box, Collapse, IconButton, Typography } from '@mui/material'
-import ContactEmergencyRoundedIcon from '@mui/icons-material/ContactEmergencyRounded';
-import { colorTheme } from '@/lib/constants/color';
-import KeyboardArrowUpRoundedIcon from '@mui/icons-material/KeyboardArrowUpRounded';
-import KeyboardArrowDownRoundedIcon from '@mui/icons-material/KeyboardArrowDownRounded';
-import Status from './Status';
-import { BookingDetail } from '@/interface/BookingDetailModel';
-import KeyboardArrowRightRoundedIcon from '@mui/icons-material/KeyboardArrowRightRounded';
-import RoomItem from './RoomItem';
-import { useRouter } from 'next/navigation';
+"use client";
+import { ChevronRight, ContactRound } from "lucide-react";
+import { useRouter } from "next/navigation";
 
-interface OrderGroupItemProps {
-    id: number;
-    customerName: string;
+export default function OrderGroupItem({ id, customerName, subtitle }: { id: string | number; customerName: string; subtitle?: string }) {
+  const router = useRouter();
+  return <button type="button" onClick={() => router.push(`/foodOrder/${id}/food`)} className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white p-3 text-left shadow-sm hover:shadow-md"><span className="flex items-center gap-3"><span className="grid h-14 w-14 place-items-center rounded-xl bg-indigo-50 text-indigo-600"><ContactRound size={28} /></span><span><span className="block font-medium">{customerName}</span>{subtitle && <span className="text-xs text-slate-500">{subtitle}</span>}</span></span><ChevronRight size={20} className="text-indigo-600" /></button>;
 }
-
-const OrderGroupItem: React.FC<OrderGroupItemProps> = ({ id, customerName }) => {
-
-    const router = useRouter();
-
-    const goToOrder = () => {
-        router.push(`/foodOrder/${id}/food`);
-    };
-
-  return (
-    <Box className="border-[1px] border-gray-100 bg-surface rounded-xl p-2 shadow-sm hover:shadow-md cursor-pointer" onClick={goToOrder}>
-      <Box className="flex items-center justify-between">
-        <Box className="flex items-center gap-4">
-          <Box className="w-14 h-14 rounded-lg bg-white text-primary flex items-center justify-center border-[1px] border-gray-200"> 
-            <ContactEmergencyRoundedIcon sx={{fontSize:34}} />
-          </Box>
-          <Box>
-            <Typography>{customerName}</Typography>
-          </Box>
-        </Box>
-        <IconButton color="primary">
-          <KeyboardArrowRightRoundedIcon />
-        </IconButton>
-      </Box>
-    </Box>
-  )
-}
-
-export default OrderGroupItem

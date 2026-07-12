@@ -1,78 +1,15 @@
-import { kanitMedium } from '@/lib/constants/font'
-import { Dialog, DialogTitle, Typography, DialogContent, TextField, Box, IconButton, Tooltip, Button, Select, MenuItem } from '@mui/material'
-import React, { useState } from 'react'
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { DatePicker } from '@mui/x-date-pickers/DatePicker';
-import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
-import AddHomeWorkRoundedIcon from '@mui/icons-material/AddHomeWorkRounded';
-import ZoneRoomSelect from './ZoneRoomSelect';
+"use client";
+import { useState, type FormEvent } from "react";
+import BookingFoodSelect, { type BookingFoodItem } from "./BookingFoodSelect";
+import Modal from "./Modal";
+import RaftSelect from "./RaftSelect";
+import ZoneRoomSelect from "./ZoneRoomSelect";
+const dateText = (offset = 0) => { const value = new Date(); value.setDate(value.getDate() + offset); return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`; };
+const nextDate = (date: string) => { if (!date) return ""; const value = new Date(`${date}T00:00:00Z`); value.setUTCDate(value.getUTCDate() + 1); return value.toISOString().slice(0, 10); };
 
-interface AddBookingProps {
-    open: boolean
-    setOpen: React.Dispatch<React.SetStateAction<boolean>>
+export default function AddGroupBookingDialog({ open, setOpen, onCreated }: { open: boolean; setOpen: (open: boolean) => void; onCreated?: () => void }) {
+  const [name, setName] = useState(""); const [contactName, setContactName] = useState(""); const [phone, setPhone] = useState(""); const [checkIn, setCheckIn] = useState(dateText()); const [checkOut, setCheckOut] = useState(dateText(1)); const [guestCount, setGuestCount] = useState(1); const [pricePerPerson, setPricePerPerson] = useState(0); const [roomIds, setRoomIds] = useState<string[]>([]); const [raftIds, setRaftIds] = useState<string[]>([]); const [foodItems, setFoodItems] = useState<BookingFoodItem[]>([]); const [error, setError] = useState(""); const [saving, setSaving] = useState(false);
+  const submit = async (event: FormEvent) => { event.preventDefault(); setSaving(true); setError(""); try { const response = await fetch("/api/bookings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "group", name, contactName, phone, checkIn, checkOut, guestCount, pricePerPerson, roomIds, raftIds, foodItems }) }); const data = await response.json() as { message?: string }; if (!response.ok) throw new Error(data.message); setOpen(false); setRoomIds([]); setRaftIds([]); setFoodItems([]); onCreated?.(); } catch (reason) { setError(reason instanceof Error ? reason.message : "บันทึกไม่สำเร็จ"); } finally { setSaving(false); } };
+  const changeDates = (value: string) => { setCheckIn(value); setCheckOut(nextDate(value)); setRoomIds([]); setRaftIds([]); };
+  return <Modal open={open} onClose={() => setOpen(false)} title="เพิ่มการจองแบบกลุ่ม"><form onSubmit={submit} className="space-y-4"><div className="grid gap-4 sm:grid-cols-2"><label className="text-sm text-slate-600 sm:col-span-2">ชื่อกรุ๊ปทัวร์<input required value={name} onChange={(e) => setName(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" /></label><label className="text-sm text-slate-600">ผู้ติดต่อ<input required value={contactName} onChange={(e) => setContactName(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" /></label><label className="text-sm text-slate-600">เบอร์โทร<input required value={phone} onChange={(e) => setPhone(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" /></label><label className="text-sm text-slate-600">จำนวนคน<input required min={1} type="number" value={guestCount} onChange={(e) => setGuestCount(Number(e.target.value))} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" /></label><label className="text-sm text-slate-600">ราคาต่อหัว<input required min={0} type="number" value={pricePerPerson} onChange={(e) => setPricePerPerson(Number(e.target.value))} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" /></label><label className="text-sm text-slate-600">วันเช็กอิน<input required type="date" min={dateText()} value={checkIn} onChange={(e) => changeDates(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" /></label><label className="text-sm text-slate-600">วันเช็กเอาต์<input required type="date" min={nextDate(checkIn)} value={checkOut} onChange={(e) => { setCheckOut(e.target.value); setRoomIds([]); setRaftIds([]); }} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" /></label></div><div className="rounded-xl bg-violet-50 p-3 text-sm text-violet-800">ราคาเหมารวม: ฿{(guestCount * pricePerPerson).toLocaleString()} — ห้อง แพ และอาหารที่เลือกตอนนี้รวมในราคาเหมา</div><ZoneRoomSelect selectedRoomIds={roomIds} onChange={setRoomIds} checkIn={checkIn} checkOut={checkOut} /><RaftSelect selectedRaftIds={raftIds} onChange={setRaftIds} checkIn={checkIn} checkOut={checkOut} /><BookingFoodSelect items={foodItems} onChange={setFoodItems} included />{error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}<button disabled={saving} className="w-full rounded-xl bg-indigo-600 px-4 py-3 font-medium text-white disabled:opacity-50">{saving ? "กำลังบันทึก..." : "บันทึกการจองกลุ่ม"}</button></form></Modal>;
 }
-
-const AddGroupBookingDialog: React.FC<AddBookingProps> = ({ open, setOpen }) => {
-    
-    const [openZone, setOpenZone] = useState<boolean>(false);
-
-  return (
-    <>
-        <Dialog open={open} fullWidth maxWidth="xs">
-            <DialogTitle className='w-full flex justify-between'>
-                <Box className='flex items-center gap-2'>
-                    <Box className='text-primary'>
-                        <AddHomeWorkRoundedIcon sx={{ fontSize:28 }} />
-                    </Box>
-                    <Typography sx={{ ...kanitMedium ,fontSize: 18}}>เพิ่มรายการจองห้องพัก</Typography>
-                </Box>
-                <Tooltip title='ปิด'>
-                    <IconButton onClick={() => setOpen(false)}>
-                        <CloseRoundedIcon />
-                    </IconButton>
-                </Tooltip>
-            </DialogTitle>
-            <DialogContent className="flex flex-col items-center gap-4">
-                <Box className="flex flex-col gap-3">
-                    <LocalizationProvider dateAdapter={AdapterDayjs}>
-                        <Box className="text-gray-500">
-                            <Typography>วันที่เช็คอิน</Typography>
-                            <DatePicker
-                                slotProps={{ textField: { size: 'small', fullWidth: true }}}
-                            />
-                        </Box>
-                        <Box className="text-gray-500">
-                            <Typography>วันที่เช็คเอาท์</Typography>
-                            <DatePicker
-                                slotProps={{ textField: { size: 'small', fullWidth: true }}}
-                            />
-                        </Box>
-                    </LocalizationProvider>
-                    <Box className="text-gray-500">
-                        <Typography>โซน</Typography>
-                        <Select fullWidth size='small' defaultValue={10}>
-                            <MenuItem value={10}>A</MenuItem>
-                            <MenuItem value={20}>B</MenuItem>
-                        </Select>
-                    </Box>
-                    <Box className="text-gray-500">
-                        <Typography>ห้อง</Typography>
-                        <Button sx={{ borderRadius: 1 }} color='primary' variant='outlined' fullWidth onClick={() => setOpenZone(true)}>
-                            <Typography>123</Typography>
-                        </Button>
-                    </Box>
-                    <Box className="text-gray-500">
-                        <Typography>จำนวนผู้เข้าพัก</Typography>
-                        <TextField fullWidth placeholder='0' />
-                    </Box>
-                    <Button sx={{ mt:1 }} variant='contained' onClick={() => setOpen(false)}>จองห้องพัก</Button>
-                </Box>
-            </DialogContent>
-        </Dialog>
-        <ZoneRoomSelect open={openZone} setOpen={setOpenZone} />
-    </>
-  )
-}
-
-export default AddGroupBookingDialog

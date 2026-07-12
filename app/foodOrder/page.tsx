@@ -1,110 +1,14 @@
-'use client'
+"use client";
+import { UserRound, Users } from "lucide-react";
+import { useEffect, useState } from "react";
+import DateSelector from "@/components/ui/DateSelector";
+import OrderGroupItem from "@/components/ui/OrderGroupItem";
+import OrderItem from "@/components/ui/OrderItem";
 
-import { colorTheme } from '@/lib/constants/color'
-import { kanitMedium } from '@/lib/constants/font'
-import { Box, IconButton, Tab, Tabs, Tooltip, Typography } from '@mui/material'
-import dayjs, { Dayjs } from "dayjs";
-import React, { useState } from 'react'
-import AddCircleRoundedIcon from '@mui/icons-material/AddCircleRounded';
-import DateSelector from '@/components/ui/DateSelector';
-import RoomItem from '@/components/ui/RoomItem';
-import AddSoloBookingDialog from '@/components/ui/AddSoloBookingDialog';
-import GroupsIcon from '@mui/icons-material/Groups';
-import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
-import RoomGroupItem from '@/components/ui/RoomGroupItem';
-import AddGroupBookingDialog from '@/components/ui/AddGroupBookingDialog';
-import { BookingDetail } from '@/interface/BookingDetailModel';
-import OrderGroupItem from '@/components/ui/OrderGroupItem';
-import OrderItem from '@/components/ui/OrderItem';
-
-const roomSoloList = [
-  { id: 1, name: "Room 1", status: "รอดำเนินการ", image: "/images/room/room1.jpg" },
-  { id: 2, name: "Room 2", status: "ยืนยันแล้ว", image: "/images/room/room2.jpg" },
-  { id: 3, name: "Room 3", status: "เช็คอิน", image: "/images/room/room3.jpg" },
-  { id: 4, name: "Room 4", status: "เช็คเอาท์", image: "/images/room/room4.jpg" },
-];
-
-const groupList = [
-  { id: 1, customerName: "Jhon Group", status: "รอดำเนินการ" },
-  { id: 2, customerName: "Non Group", status: "ยืนยันแล้ว" },
-  { id: 3, customerName: "Eiei Group", status: "เช็คอิน" },
-  { id: 4, customerName: "Hello Group", status: "เช็คเอาท์" },
-];
-
-const roomInGroupList: BookingDetail[] = [
-  { id: 1, name: "Room 1", status: "รอดำเนินการ", image: "/images/room/room1.jpg" },
-  { id: 2, name: "Room 2", status: "ยืนยันแล้ว", image: "/images/room/room2.jpg" },
-  { id: 3, name: "Room 3", status: "เช็คอิน", image: "/images/room/room3.jpg" },
-  { id: 4, name: "Room 4", status: "เช็คเอาท์", image: "/images/room/room4.jpg" },
-  { id: 1, name: "Room 1", status: "รอดำเนินการ", image: "/images/room/room1.jpg" },
-  { id: 1, name: "Room 2", status: "ยืนยันแล้ว", image: "/images/room/room2.jpg" },
-  { id: 1, name: "Room 3", status: "เช็คอิน", image: "/images/room/room3.jpg" },
-  { id: 2, name: "Room 4", status: "เช็คเอาท์", image: "/images/room/room4.jpg" },
-  { id: 2, name: "Room 1", status: "รอดำเนินการ", image: "/images/room/room1.jpg" },
-  { id: 3, name: "Room 2", status: "ยืนยันแล้ว", image: "/images/room/room2.jpg" },
-  { id: 3, name: "Room 3", status: "เช็คอิน", image: "/images/room/room3.jpg" },
-  { id: 4, name: "Room 4", status: "เช็คเอาท์", image: "/images/room/room4.jpg" },
-];
-
-const page = () => {
-
-  const [date, setDate] = useState<Dayjs | null>(dayjs());
-  const [openSolo, setOpenSolo] = useState<boolean>(false);
-  const [openGroup, setOpenGroup] = useState<boolean>(false);
-  const [tab, setTab] = useState<number>(0);
-
-  const handleChange = (event: React.SyntheticEvent, newValue: number) => {
-    setTab(newValue);
-  };
-
-  const handleOpenSoloOrGroup = () => {
-    if(tab === 0){
-      setOpenGroup(true);
-    } else {
-      setOpenSolo(true);
-    }
-  }
-
-  return (
-    <Box className="p-4">
-      <Box className="flex justify-between items-center">
-        <Typography sx={{ ...kanitMedium, fontSize:18 }}>สั่งอาหาร</Typography>
-      </Box> 
-      <Box className="flex items-center justify-between mt-1">
-        <Tabs
-          value={tab}
-          onChange={handleChange}
-          scrollButtons
-          allowScrollButtonsMobile
-          aria-label="scrollable force tabs example"
-        >
-          <Tab icon={<GroupsIcon />} iconPosition="start"  label="กลุ่ม" />
-          <Tab icon={<PersonRoundedIcon />} iconPosition="start" label="เดี่ยว" />
-        </Tabs>
-        <DateSelector date={date} setDate={setDate} />
-      </Box>
-      {tab === 0 &&
-        <Box className="mt-2">
-          <Typography sx={{ ...kanitMedium, fontSize: 16, color: colorTheme.textPrimary }}>สั่งอาหารแบบกลุ่ม</Typography>
-          <Box className="flex flex-col gap-2 mt-2">
-            {groupList.map((cus, index) => 
-              <OrderGroupItem key={index} id={cus.id} customerName={cus.customerName} />
-            )}
-          </Box>
-        </Box>
-      }
-      {tab === 1 &&
-        <Box className="mt-2">
-          <Typography sx={{ ...kanitMedium, fontSize: 16, color: colorTheme.textPrimary }}>สั่งอาหารแบบเดี่ยว</Typography>
-          <Box className="flex flex-col gap-2 mt-2">
-            {roomSoloList.map((room, index) => (
-              <OrderItem key={index} id={room.id} name={room.name} image={room.image} />
-            ))}
-          </Box>
-        </Box>
-      }
-    </Box>
-  )
+interface BookingCustomer { id: string; mode: "solo" | "group"; customerName: string; status: string; rooms: Array<{ name: string; image: string }> }
+export default function FoodOrderPage() {
+  const [tab, setTab] = useState<"group" | "solo">("group"); const [date, setDate] = useState(new Date().toISOString().slice(0, 10)); const [bookings, setBookings] = useState<BookingCustomer[]>([]); const [loading, setLoading] = useState(true); const [error, setError] = useState("");
+  useEffect(() => { const load = async () => { setLoading(true); setError(""); try { const response = await fetch(`/api/bookings?date=${date}`, { cache: "no-store" }); const data = await response.json() as BookingCustomer[] | { message: string }; if (!response.ok || !Array.isArray(data)) throw new Error("message" in data ? data.message : "โหลดลูกค้าไม่สำเร็จ"); setBookings(data); } catch (reason) { setError(reason instanceof Error ? reason.message : "โหลดลูกค้าไม่สำเร็จ"); } finally { setLoading(false); } }; void load(); }, [date]);
+  const visible = bookings.filter((booking) => booking.mode === tab); const roomLabel = (booking: BookingCustomer) => booking.rooms.map((room) => room.name).join(", ") || "ยังไม่มีห้อง";
+  return <div className="mx-auto max-w-5xl p-4 sm:p-6 lg:p-8"><div className="mb-6"><p className="text-sm text-indigo-600">รูมเซอร์วิส</p><h1 className="text-2xl font-semibold">เลือกลูกค้าเพื่อสั่งอาหาร</h1><p className="mt-1 text-sm text-slate-500">เลือกจากลูกค้าที่เข้าพักในวันที่กำหนด แล้วจึงเลือกรายการอาหาร</p></div><div className="mb-5 flex flex-wrap items-center justify-between gap-3"><div className="inline-flex rounded-xl bg-slate-200/70 p-1"><button onClick={() => setTab("group")} className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm ${tab === "group" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500"}`}><Users size={17} />แบบกลุ่ม</button><button onClick={() => setTab("solo")} className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm ${tab === "solo" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500"}`}><UserRound size={17} />แบบเดี่ยว</button></div><DateSelector date={date} setDate={setDate} /></div>{loading ? <p className="rounded-2xl bg-white p-8 text-center text-slate-500">กำลังโหลดรายชื่อลูกค้า...</p> : error ? <p className="rounded-2xl bg-red-50 p-4 text-red-700">{error}</p> : <div className="space-y-3">{visible.map((booking, index) => booking.mode === "group" ? <OrderGroupItem key={booking.id} id={booking.id} customerName={booking.customerName} subtitle={`${roomLabel(booking)} · ${booking.status}`} /> : <OrderItem key={booking.id} id={booking.id} name={booking.customerName} subtitle={`${roomLabel(booking)} · ${booking.status}`} image={booking.rooms[0]?.image ?? `/images/room/room${index % 4 + 1}.jpg`} />)}{visible.length === 0 && <p className="rounded-2xl bg-white p-8 text-center text-slate-500">ไม่มีลูกค้าในวันที่เลือก</p>}</div>}</div>;
 }
-
-export default page

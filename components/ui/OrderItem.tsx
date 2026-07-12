@@ -1,37 +1,9 @@
-import { Box, IconButton, Typography } from '@mui/material'
-import React, { useState } from 'react'
-import KeyboardArrowRightRoundedIcon from '@mui/icons-material/KeyboardArrowRightRounded';
-import { usePathname, useRouter } from "next/navigation";
+"use client";
+import Image from "next/image";
+import { ChevronRight } from "lucide-react";
+import { useRouter } from "next/navigation";
 
-interface OrderItemProps {
-    id: number;
-    name: string;
-    image: string;
+export default function OrderItem({ id, name, image, subtitle }: { id: string | number; name: string; image: string; subtitle?: string }) {
+  const router = useRouter();
+  return <button type="button" onClick={() => router.push(`/foodOrder/${id}/food`)} className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white p-3 text-left shadow-sm hover:shadow-md"><span className="flex items-center gap-3"><Image src={image} alt={name} width={60} height={60} className="h-15 w-15 rounded-xl object-cover" /><span><span className="block font-medium">{name}</span>{subtitle && <span className="text-xs text-slate-500">{subtitle}</span>}</span></span><ChevronRight size={20} className="text-indigo-600" /></button>;
 }
-
-const OrderItem: React.FC<OrderItemProps> = ({ id, name, image  }) => {
-
-    const router = useRouter();
-    
-    const goToOrder = () => {
-        router.push(`/foodOrder/${id}/food`);
-    };
-
-  return (
-    <Box className="border-[1px] border-gray-100 bg-surface rounded-xl p-2 shadow-sm hover:shadow-md cursor-pointer" onClick={goToOrder}>
-        <Box className="flex items-center justify-between gap-4">
-            <Box className="flex items-center gap-4">
-                <img src={image} alt="room 1" className="w-14 h-14 rounded-lg" />
-                <Box>
-                    <Typography sx={{fontSize: 16}}>{name}</Typography>
-                </Box>
-            </Box>
-            <IconButton color="primary">
-                <KeyboardArrowRightRoundedIcon />
-            </IconButton>
-        </Box>
-    </Box>
-  )
-}
-
-export default OrderItem

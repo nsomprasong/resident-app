@@ -1,33 +1,8 @@
-import { colorTheme } from '@/lib/constants/color'
-import { Tooltip, IconButton } from '@mui/material'
-import ArrowBackIosRoundedIcon from '@mui/icons-material/ArrowBackIosRounded';
-import React from 'react'
-import { useRouter } from 'next/navigation';
+"use client";
+import { ArrowLeft } from "lucide-react";
+import { useRouter } from "next/navigation";
 
-interface ButtonProps {
-  classProps: string
-  route: string
-}
-
-const BackButton: React.FC<ButtonProps> = ({ classProps, route }) => {
-
+export default function BackButton({ classProps = "", route }: { classProps?: string; route: string }) {
   const router = useRouter();
-
-  return (
-    <Tooltip title="ย้อนกลับ">
-        <IconButton 
-          className={classProps}
-          size='small' 
-          sx={{
-              backgroundColor: 'white',  
-              '&:hover': { backgroundColor: colorTheme.textSecondary },       
-          }} 
-          onClick={() => router.push(route)}
-        >
-          <ArrowBackIosRoundedIcon color='primary' />
-        </IconButton>
-    </Tooltip>
-  )
+  return <button type="button" aria-label="ย้อนกลับ" onClick={() => router.push(route)} className={`inline-flex h-10 w-10 items-center justify-center rounded-full bg-white text-indigo-600 shadow-sm hover:bg-slate-100 ${classProps}`}><ArrowLeft size={20} /></button>;
 }
-
-export default BackButton

@@ -1,35 +1,10 @@
-import { colorTheme } from '@/lib/constants/color';
-import { Box, Typography } from '@mui/material';
-import CircleRoundedIcon from '@mui/icons-material/CircleRounded';
-import React from 'react'
+const styles: Record<string, string> = {
+  "รอดำเนินการ": "bg-amber-50 text-amber-700 ring-amber-200",
+  "ยืนยันแล้ว": "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  "เช็คอิน": "bg-blue-50 text-blue-700 ring-blue-200",
+  "เช็คเอาท์": "bg-slate-100 text-slate-600 ring-slate-200",
+};
 
-interface StatusProps {
-    status: string
+export default function Status({ status }: { status: string }) {
+  return <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs ring-1 ring-inset ${styles[status] ?? styles["เช็คเอาท์"]}`}><span className="h-1.5 w-1.5 rounded-full bg-current" />{status}</span>;
 }
-
-const Status: React.FC<StatusProps> = ({ status }) => {
-
-    const colorStatus = () => {
-        switch (status) {
-            case "รอดำเนินการ":
-                return "text-orange-300";
-            case "ยืนยันแล้ว":
-                return "text-green-500";
-            case "เช็คอิน":
-                return "text-blue-500";
-            case "เช็คเอาท์":
-                return "text-gray-300";
-            default:
-                return "text-gray-300";
-        }
-    }
-
-  return (
-     <Box className={`flex items-center gap-1 ${colorStatus()}`}>
-        <CircleRoundedIcon sx={{ fontSize: 12 }} />
-        <Typography sx={{fontSize: 14, color: colorTheme.textSecondary}}>{status}</Typography>
-    </Box>
-  )
-}
-
-export default Status

@@ -1,0 +1,33 @@
+import { getCurrentUser } from "@/lib/auth/current-user";
+import {
+  type Permission,
+} from "@/lib/auth/authorization";
+
+export type AuthorizationResult =
+  | { status: "unauthenticated" }
+  | { status: "unmapped" }
+  | { status: "unknown_role" }
+  | { status: "forbidden"; role: string }
+  | {
+      status: "authorized";
+      role: string;
+      currentUser: NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>;
+    };
+
+export async function authorizeCurrentUser(
+  permission: Permission,
+): Promise<AuthorizationResult> {
+  const currentUser = await getCurrentUser();
+
+  if (!currentUser) return { status: "unauthenticated" };
+  if (!currentUser.employee) return { status: "unmapped" };
+
+  const role = currentUser.employee.role;
+  if (!role || !role.isActive) return { status: "unknown_role" };
+
+  if (!role.permissions.includes(permission)) {
+    return { status: "forbidden", role: role.code };
+  }
+
+  return { status: "authorized", role: role.code, currentUser };
+}

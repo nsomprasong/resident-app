@@ -1,57 +1,10 @@
-import { kanitMedium } from '@/lib/constants/font'
-import { Box, Typography, Divider, IconButton, Collapse } from '@mui/material'
-import React, { useState } from 'react'
-import BillDetail from './BillDetail'
+"use client";
+import { ChevronDown } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import BillDetail from "./BillDetail";
 
-interface BillItem {
-  title: string;
-  price: number;
+interface Item { title: string; price: number }
+export default function BillItem({ icon, title, items, isEdit }: { icon?: ReactNode; title: string; items: Item[]; isEdit: boolean }) {
+  const [open, setOpen] = useState(false); const total = items.reduce((sum, item) => sum + item.price, 0);
+  return <div className="rounded-2xl border border-slate-200 bg-white shadow-sm"><button type="button" onClick={() => setOpen(!open)} className="flex w-full items-center justify-between p-4"><span className="flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-xl bg-slate-100 text-slate-600">{icon}</span><span className="font-medium">{title}</span></span><span className="flex items-center gap-3"><span>฿{total.toLocaleString()}</span><ChevronDown size={18} className={`transition ${open ? "rotate-180" : ""}`} /></span></button>{open && <div className="space-y-1 border-t border-slate-100 px-4 py-3">{items.map((item) => <BillDetail key={item.title} {...item} isEdit={isEdit} />)}<div className="mt-2 border-t border-slate-100 pt-2"><BillDetail title="รวมราคา" price={total} isEdit={isEdit} summarize /></div></div>}</div>;
 }
-
-interface BillListProps {
-  icon?: React.ReactNode;
-  title: string;
-  items: BillItem[];
-  isEdit: boolean;
-}
-
-const BillItem: React.FC<BillListProps> = ({ icon, title, items, isEdit }) => {
-
-  const [open, setOpen] = useState(false);
-  
-  const handleToggle = () => {
-      setOpen((prev) => !prev);
-  };
-
-  const calculateSummarizePrice = (items: BillItem[]) => {
-    return items.reduce((sum, item) => sum + item.price, 0);
-  }
-
-  const summarizePrice = calculateSummarizePrice(items);
-
-  return (
-    <Box className="w-full flex flex-col gap-4 p-4 bg-white rounded-xl shadow-sm cursor-pointer" onClick={handleToggle}>
-      <Box className="flex justify-between items-center">
-        <Box className="flex items-center gap-4">
-          <Box className="w-12 h-12 rounded-full flex justify-center items-center bg-slate-400 hover:bg-slate-500 transition-colors duration-300 text-white cursor-pointer">
-            {icon}
-          </Box>
-          <Typography sx={{ ...kanitMedium }}>{title}</Typography>
-        </Box>
-        {!open && <Typography>{summarizePrice} ฿</Typography>}
-      </Box>
-
-       <Collapse in={open} timeout="auto" unmountOnExit>
-        <Box className="flex flex-col gap-2 mt-2">
-          {items.map((item, idx) => (
-            <BillDetail key={idx} title={item.title} price={item.price} isEdit={isEdit} />
-          ))}
-          <Divider />
-          <BillDetail title="รวมราคา" price={summarizePrice} isEdit={isEdit} summarize={true} />
-        </Box>
-      </Collapse>
-    </Box>
-  )
-}
-
-export default BillItem

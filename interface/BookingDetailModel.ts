@@ -1,5 +1,5 @@
 export interface BookingDetail {
-  id: number;
+  id: string | number;
   name: string;
   status: string;
   image: string;

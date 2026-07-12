@@ -1,136 +1,375 @@
-'use client';
+"use client";
+import Image from "next/image";
+import {
+  CalendarDays,
+  CircleUserRound,
+  ClipboardCheck,
+  DoorOpen,
+  Plus,
+  ReceiptText,
+  Refrigerator,
+  ShipWheel,
+  Utensils,
+} from "lucide-react";
+import { useParams } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import AddBookingResourcesDialog from "@/components/ui/AddBookingResourcesDialog";
+import BackButton from "@/components/ui/BackButton";
+import BillItem from "@/components/ui/BillItem";
+import PayButton from "@/components/ui/PayButton";
+import Status from "@/components/ui/Status";
 
-import { Box, Button, Divider, IconButton, Tooltip, Typography } from '@mui/material';
-import { useParams, useRouter } from "next/navigation";
-import React, { useState } from 'react'
-import { colorTheme } from '@/lib/constants/color';
-import ArrowBackIosRoundedIcon from '@mui/icons-material/ArrowBackIosRounded';
-import { kanitMedium } from '@/lib/constants/font';
-import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
-import BillDetail from '@/components/ui/BillDetail';
-import FastfoodRoundedIcon from '@mui/icons-material/FastfoodRounded';
-import RestaurantRoundedIcon from '@mui/icons-material/RestaurantRounded';
-import ReorderRoundedIcon from '@mui/icons-material/ReorderRounded';
-import LocalOfferRoundedIcon from '@mui/icons-material/LocalOfferRounded';
-import BillItem from '@/components/ui/BillItem';
-import PayButton from '@/components/ui/PayButton';
-import AddRoundedIcon from '@mui/icons-material/AddRounded';
-import BackButton from '@/components/ui/BackButton';
-import { useBookingDetail } from '@/hooks/useBookingDetail';
-
-interface BillDetail {
-    title: string;
-    price: number;
+interface Item {
+  id: string;
+  type: string;
+  title: string;
+  price: number;
 }
+interface Detail {
+  id: string;
+  reference: string;
+  statusLabel: string;
+  status: string;
+  jobClosed: boolean;
+  customerName: string;
+  contactName?: string;
+  phone: string;
+  checkIn: string;
+  checkOut: string;
+  rooms: Array<{
+    id: string;
+    number: string;
+    zone: string;
+    roomType: string;
+    rate: number;
+    inspectionStatus?: string | null;
+  }>;
+  rafts: Array<{ id: string; name: string; capacity: number; rate: number }>;
+  charges: Item[];
+  orders: Item[];
+  payments: Item[];
+  totals: { grand: number; paid: number; outstanding: number };
+  allowedStatuses: string[];
+  housekeepingReady: boolean;
+}
+const actionLabels: Record<string, string> = {
+  CONFIRMED: "ยืนยันการจอง",
+  CHECKED_IN: "เช็กอิน",
+  CHECKED_OUT: "เช็กเอาต์",
+  CANCELLED: "ยกเลิกการจอง",
+};
 
-const foodList: BillDetail[] = [
-    { title: "ข้าวผัด", price: 50 },
-    { title: "ต้มยำกุ้ง", price: 150 },
-    { title: "ส้มตำ", price: 70 },
-];
-
-const minibarList: BillDetail[] = [
-    { title: "เลย์ x 1", price: 20 },
-    { title: "โค๊ก x 1", price: 15 },
-]
-
-const otherList: BillDetail[] = [
-    { title: "ทำความสะอาด x 1", price: 100 },
-]
-
-const page = () => {
-
-    const params = useParams<{ bookingId: string }>();
-    const router = useRouter();
-
-    const { bookingDetail } = useBookingDetail();
-    const [isEdit, setIsEdit] = useState<boolean>(false);
-    
-    const colorConvert = () => {
-        switch (bookingDetail.status) {
-            case "รอดำเนินการ":
-                return { bg:"bg-orange-100", color:"text-orange-400", icon:"bg-orange-300"};
-            case "ยืนยันแล้ว":
-                return { bg:"bg-emerald-100", color:"text-emerald-400", icon:"bg-emerald-400"};
-            case "เช็คอิน":
-                return { bg:"bg-blue-100", color:"text-blue-500", icon:"bg-blue-500"};
-            case "เช็คเอาท์":
-                return { bg:"bg-gray-100", color:"text-gray-500", icon:"bg-gray-400"};
-            default:
-                return { bg:"bg-gray-100", color:"text-gray-500", icon:"bg-gray-400"};
-        }
+export default function BookingDetailPage() {
+  const { bookingId } = useParams<{ bookingId: string }>();
+  const [data, setData] = useState<Detail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [updating, setUpdating] = useState(false);
+  const [openAdd, setOpenAdd] = useState(false);
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/bookings/${bookingId}`, {
+        cache: "no-store",
+      });
+      const result = (await response.json()) as Detail & { message?: string };
+      if (!response.ok) throw new Error(result.message);
+      setData(result);
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "โหลดข้อมูลไม่สำเร็จ",
+      );
+    } finally {
+      setLoading(false);
     }
-
-    const colorStatus = colorConvert();
-
+  }, [bookingId]);
+  useEffect(() => {
+    void load();
+  }, [load]);
+  const updateStatus = async (status: string) => {
+    if (
+      status === "CHECKED_OUT" &&
+      !window.confirm(
+        "ยืนยันเช็กเอาต์? ห้องทั้งหมดจะถูกส่งให้แม่บ้านและเปลี่ยนเป็นสถานะรอตรวจห้อง",
+      )
+    )
+      return;
+    setUpdating(true);
+    try {
+      const response = await fetch(`/api/bookings/${bookingId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      const result = (await response.json()) as { message?: string };
+      if (!response.ok) throw new Error(result.message);
+      await load();
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "เปลี่ยนสถานะไม่สำเร็จ",
+      );
+    } finally {
+      setUpdating(false);
+    }
+  };
+  const confirmPayment = async (
+    amount: number,
+    method: string,
+    channelId: string,
+  ) => {
+    const response = await fetch(`/api/bookings/${bookingId}/payments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount, method, channelId }),
+    });
+    const result = (await response.json()) as { message?: string };
+    if (!response.ok) throw new Error(result.message);
+    await load();
+  };
+  const confirmRefund = async (
+    amount: number,
+    _method: string,
+    channelId: string,
+  ) => {
+    const response = await fetch(`/api/bookings/${bookingId}/refunds`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount, channelId }),
+    });
+    const result = (await response.json()) as { message?: string };
+    if (!response.ok) throw new Error(result.message);
+    await load();
+  };
+  const closeJob = async () => {
+    if (!window.confirm("ยืนยันปิดงาน? รายการนี้จะถูกนำออกจากหน้าแม่บ้าน"))
+      return;
+    setUpdating(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/bookings/${bookingId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ closeJob: true }),
+      });
+      const result = (await response.json()) as { message?: string };
+      if (!response.ok) throw new Error(result.message);
+      await load();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "ปิดงานไม่สำเร็จ");
+    } finally {
+      setUpdating(false);
+    }
+  };
+  if (loading && !data)
+    return (
+      <div className="grid min-h-screen place-items-center text-slate-500">
+        กำลังโหลด...
+      </div>
+    );
+  if (!data)
+    return (
+      <div className="p-8">
+        <BackButton route="/booking" />
+        <p className="mt-5 text-red-600">{error}</p>
+      </div>
+    );
+  const food = data.orders.filter((item) => item.type === "FOOD");
+  const minibar = data.orders.filter((item) => item.type === "MINIBAR");
   return (
-    <Box className="relative w-full h-full pb-4 flex flex-col gap-4 rounded-xl bg-gray-100">
-      <Box className="relative w-full h-56 aspect-[16/10] overflow-hidden">
-        <BackButton classProps="absolute top-4 left-4 z-20" route={`/booking`} />
-        <img
-          className="absolute top-0 z-10 w-full h-full object-cover"
-          src={bookingDetail.image}
-          alt="room image"
-        />
-      </Box>
-      <Box className="w-full flex justify-center">
-        <Box className="w-full flex flex-col gap-2 px-4 md:w-3/5"> 
-            <Typography sx={{ ...kanitMedium ,fontSize: 18}}>Room {params.bookingId}</Typography>
-                
-            {/* Room price */}
-            <Box className="w-full flex flex-col gap-4 p-4 bg-white rounded-xl shadow-sm">
-              <Box className="flex justify-between items-center">
-                <Box className="flex items-center gap-4">
-                  <Box className={`w-12 h-12 rounded-full flex justify-center items-center ${colorStatus.icon} text-white`}>
-                    <PersonRoundedIcon sx={{fontSize:30}} />
-                  </Box>
-                  <Box className="flex flex-col">
-                    <Typography sx={{ ...kanitMedium ,fontSize:16}}>John Doe</Typography>
-                    <Typography sx={{fontSize:14, color: colorTheme.textSecondary}}>081-123-4567</Typography>
-                  </Box>
-                </Box>
-                <Box className={`flex flex-col items-end ${colorStatus.bg} ${colorStatus.color} px-3 py-1 rounded-2xl`}>
-                  <Typography sx={{ ...kanitMedium ,fontSize:14}}>{bookingDetail.status}</Typography>
-                </Box>
-              </Box>
-              <Divider /> 
-              <BillDetail title="ค่าห้องพัก" price={1200} isEdit={isEdit} />
-              <BillDetail title="ค่าแพ" price={1500} isEdit={isEdit} /> 
-            </Box>
-            {/* food price */}
-            <BillItem title='ค่าอาหาร' icon={<RestaurantRoundedIcon sx={{ fontSize: 30 }} />} items={foodList} isEdit={isEdit} />
-            {/* minibar price */}
-            <BillItem title='ค่ามินิบาร์' icon={<FastfoodRoundedIcon sx={{ fontSize: 30 }} />} items={minibarList} isEdit={isEdit} />
-            {/* other price */}
-            <BillItem title='ค่าอื่นๆ' icon={<ReorderRoundedIcon sx={{ fontSize: 30 }} />} items={otherList} isEdit={isEdit} />
-            {/* Summary Bill */}
-            <Box className="w-full flex flex-col gap-4 p-4 bg-white rounded-xl shadow-sm">
-              <Box className="flex justify-between items-center">
-                <Box className="flex items-center gap-4">
-                  <Box className={`w-12 h-12 rounded-full flex justify-center items-center bg-red-500 text-white`}>
-                    <LocalOfferRoundedIcon sx={{fontSize:30}} />
-                  </Box>
-                  <Box>
-                    <Typography sx={{ ...kanitMedium ,fontSize:16}}>สรุปรายการรวม</Typography>
-                    <Box className={`flex text-red-500`}>
-                      <Typography sx={{...kanitMedium, fontSize:12}}>ยังไม่ได้ชำระ</Typography>
-                    </Box>
-                  </Box>
-                </Box>
-                <Typography sx={{ ...kanitMedium ,fontSize:16}}>4,045 ฿</Typography>
-              </Box>
-            </Box>
-            {isEdit ?
-              <Button variant="contained" color="primary" sx={{ mt: 1 }} onClick={() => setIsEdit(!isEdit)}>
-                ยืนยัน
-              </Button>
-              :
-              <PayButton amount={4045} />
-            }
-        </Box>
-      </Box>
-    </Box>
-  )
+    <>
+      <div className="min-h-screen bg-slate-100 pb-8">
+        <div className="relative h-56 overflow-hidden">
+          <Image
+            fill
+            src="/images/room/room1.jpg"
+            alt="การจอง"
+            className="object-cover"
+            priority
+          />
+          <div className="absolute inset-0 bg-slate-950/45" />
+          <BackButton
+            classProps="absolute left-4 top-4 z-10"
+            route="/booking"
+          />
+          <div className="absolute bottom-5 left-5 text-white">
+            <p className="text-sm text-white/70">{data.reference}</p>
+            <h1 className="text-2xl font-semibold">{data.customerName}</h1>
+          </div>
+        </div>
+        <div className="relative z-10 mx-auto -mt-3 max-w-3xl space-y-3 px-4">
+          <section className="rounded-2xl bg-white p-5 shadow-sm">
+            <div className="flex justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <span className="grid h-12 w-12 place-items-center rounded-full bg-indigo-100 text-indigo-600">
+                  <CircleUserRound />
+                </span>
+                <div>
+                  <h2 className="font-semibold">{data.customerName}</h2>
+                  <p className="text-sm text-slate-500">{data.phone}</p>
+                </div>
+              </div>
+              <Status status={data.statusLabel} />
+            </div>
+            <div className="mt-4 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-2">
+              <p className="flex items-center gap-2 text-sm">
+                <CalendarDays size={17} />
+                {data.checkIn} ถึง {data.checkOut}
+              </p>
+              <div className="flex items-start gap-2 text-sm">
+                <DoorOpen size={17} className="mt-1 shrink-0" />
+                <div className="flex flex-wrap gap-2">
+                  {data.rooms.length ? (
+                    data.rooms.map((room) => (
+                      <span
+                        key={room.id}
+                        className="rounded-full bg-slate-100 px-2.5 py-1"
+                      >
+                        ห้อง {room.number}
+                        {data.status === "CHECKED_OUT" && (
+                          <span
+                            className={
+                              room.inspectionStatus === "COMPLETED"
+                                ? "text-emerald-700"
+                                : "text-amber-700"
+                            }
+                          >
+                            {" "}
+                            ·{" "}
+                            {room.inspectionStatus === "COMPLETED"
+                              ? "ตรวจสอบเสร็จแล้ว"
+                              : "รอตรวจสอบห้อง"}
+                          </span>
+                        )}
+                      </span>
+                    ))
+                  ) : (
+                    <span>ยังไม่มีห้อง</span>
+                  )}
+                </div>
+              </div>
+              <p className="flex items-center gap-2 text-sm sm:col-span-2">
+                <ShipWheel size={17} />
+                {data.rafts.length
+                  ? data.rafts.map((raft) => raft.name).join(", ")
+                  : "ยังไม่มีแพ"}
+              </p>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
+              {!["CHECKED_OUT", "CANCELLED"].includes(data.status) && (
+                <button
+                  onClick={() => setOpenAdd(true)}
+                  className="inline-flex items-center gap-2 rounded-xl border border-indigo-200 px-4 py-2 text-sm text-indigo-700"
+                >
+                  <Plus size={17} />
+                  เพิ่มห้องหรือแพ
+                </button>
+              )}
+              {data.allowedStatuses.map((status) => (
+                <button
+                  key={status}
+                  disabled={updating}
+                  onClick={() => updateStatus(status)}
+                  className={`rounded-xl px-4 py-2 text-sm ${status === "CANCELLED" ? "border border-red-200 text-red-600" : "bg-indigo-600 text-white"}`}
+                >
+                  {actionLabels[status]}
+                </button>
+              ))}
+              {data.status === "CHECKED_OUT" && !data.jobClosed && (
+                <button
+                  disabled={updating || !data.housekeepingReady}
+                  onClick={closeJob}
+                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm text-white disabled:bg-slate-300"
+                >
+                  <ClipboardCheck size={17} />
+                  {data.housekeepingReady ? "ปิดงาน" : "รอตรวจครบทุกห้อง"}
+                </button>
+              )}
+              {data.jobClosed && (
+                <span className="inline-flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
+                  <ClipboardCheck size={17} />
+                  ปิดงานแล้ว
+                </span>
+              )}
+            </div>
+            {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+          </section>
+          <BillItem
+            title="ค่าห้อง แพ และค่าใช้จ่าย"
+            icon={<ReceiptText size={22} />}
+            items={data.charges}
+            isEdit={false}
+          />
+          {food.length > 0 && (
+            <BillItem
+              title="ค่าอาหาร"
+              icon={<Utensils size={22} />}
+              items={food}
+              isEdit={false}
+            />
+          )}
+          {minibar.length > 0 && (
+            <BillItem
+              title="ค่ามินิบาร์"
+              icon={<Refrigerator size={22} />}
+              items={minibar}
+              isEdit={false}
+            />
+          )}
+          {data.payments.length > 0 && (
+            <BillItem
+              title="ประวัติการรับเงิน"
+              icon={<ReceiptText size={22} />}
+              items={data.payments}
+              isEdit={false}
+            />
+          )}
+          <section className="rounded-2xl bg-slate-900 p-5 text-white">
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <p className="text-xs text-slate-400">ยอดรวม</p>
+                <p className="text-xl">฿{data.totals.grand.toLocaleString()}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-400">ชำระแล้ว</p>
+                <p className="text-xl text-emerald-400">
+                  ฿{data.totals.paid.toLocaleString()}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-400">คงเหลือ</p>
+                <p className="text-xl text-amber-400">
+                  ฿{data.totals.outstanding.toLocaleString()}
+                </p>
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end">
+              {data.status === "CANCELLED"
+                ? data.totals.paid > 0 && (
+                    <PayButton
+                      amount={data.totals.paid}
+                      mode="refund"
+                      onConfirm={confirmRefund}
+                    />
+                  )
+                : data.totals.outstanding > 0 && (
+                    <PayButton
+                      amount={data.totals.outstanding}
+                      onConfirm={confirmPayment}
+                    />
+                  )}
+            </div>
+          </section>
+        </div>
+      </div>
+      <AddBookingResourcesDialog
+        open={openAdd}
+        setOpen={setOpenAdd}
+        bookingId={bookingId}
+        checkIn={data.checkIn}
+        checkOut={data.checkOut}
+        onAdded={() => void load()}
+      />
+    </>
+  );
 }
-
-export default page

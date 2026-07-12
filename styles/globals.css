@@ -14,19 +14,26 @@
   /* Status colors */
   --color-success: #1dc35a;
   --color-error: #ef4444;
+  --font-sans: "KanitCustom", ui-sans-serif, system-ui, sans-serif;
 }
+
+* { box-sizing: border-box; }
+html { background: #f8fafc; }
+body { margin: 0; min-height: 100vh; font-family: "KanitCustom", sans-serif; }
+button, input, select, textarea { font: inherit; }
+button { cursor: pointer; }
 
 @font-face {
   font-family: "RobotoCondensed";
   src: url("../public/fonts/english/RobotoCondensed-Light.ttf") format("truetype");
-  font-weight: 100;
+  font-weight: 300;
   font-style: normal;
 }
 
 @font-face {
   font-family: "RobotoCondensed";
   src: url("../public/fonts/english/RobotoCondensed-Regular.ttf") format("truetype");
-  font-weight: 300;
+  font-weight: 400;
   font-style: normal;
 }
 
@@ -47,14 +54,14 @@
 @font-face {
   font-family: "KanitCustom";
   src: url("../public/fonts/thai/Kanit-Light.ttf") format("truetype");
-  font-weight: 100;
+  font-weight: 300;
   font-style: normal;
 }
 
 @font-face {
   font-family: "KanitCustom";
   src: url("../public/fonts/thai/Kanit-Regular.ttf") format("truetype");
-  font-weight: 300;
+  font-weight: 400;
   font-style: normal;
 }
 

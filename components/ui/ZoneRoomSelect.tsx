@@ -1,103 +1,12 @@
-import { kanitMedium } from '@/lib/constants/font'
-import { Dialog, DialogTitle, Box, Typography, Tooltip, IconButton, DialogContent, Select, MenuItem, Button, TextField, Tabs, Tab, Divider } from '@mui/material'
-import AddHomeRoundedIcon from '@mui/icons-material/AddHomeRounded';
-import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
-import React, { useEffect, useState } from 'react'
-import RoomIconSlect from './RoomIconSlect';
-import { colorTheme } from '@/lib/constants/color';
-import axios from 'axios';
+"use client";
+import { useEffect, useState } from "react";
+import RoomIconSelect from "./RoomIconSlect";
 
-interface ZoneRoomProps {
-    open: boolean
-    setOpen: React.Dispatch<React.SetStateAction<boolean>>
+interface Room { id: string | number; number?: string; roomNo?: number; booked?: boolean; zone?: { id: string; name: string }; roomType?: { name: string; bedType?: string | null } }
+const fallbackRooms: Room[] = Array.from({ length: 10 }, (_, index) => ({ id: index + 1, roomNo: 101 + index, booked: index === 2 }));
+export default function ZoneRoomSelect({ selectedRoomIds = [], onChange, checkIn, checkOut }: { selectedRoomIds?: string[]; onChange?: (roomIds: string[]) => void; checkIn?: string; checkOut?: string }) {
+  const [rooms, setRooms] = useState<Room[]>(fallbackRooms); const [zone, setZone] = useState("all"); const [loading, setLoading] = useState(false);
+  useEffect(() => { const load = async () => { try { setLoading(true); const query = checkIn && checkOut ? `?checkIn=${encodeURIComponent(checkIn)}&checkOut=${encodeURIComponent(checkOut)}` : ""; const response = await fetch(`/api/rooms${query}`, { cache: "no-store" }); if (!response.ok) throw new Error(); const data = await response.json() as Room[]; if (data.length) setRooms(data); } catch { /* ใช้ข้อมูลสำรอง */ } finally { setLoading(false); } }; void load(); }, [checkIn, checkOut]);
+  const zones = Array.from(new Map(rooms.filter((room) => room.zone).map((room) => [room.zone!.id, room.zone!])).values()); const visibleRooms = zone === "all" ? rooms : rooms.filter((room) => room.zone?.id === zone); const toggle = (id: string) => onChange?.(selectedRoomIds.includes(id) ? selectedRoomIds.filter((item) => item !== id) : [...selectedRoomIds, id]);
+  return <fieldset className="rounded-2xl border border-slate-200 p-4"><legend className="px-2 text-sm font-medium">เลือกห้องพัก</legend><label className="mb-3 block text-sm text-slate-600">โซน<select value={zone} onChange={(event) => setZone(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5"><option value="all">ทุกโซน</option>{zones.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>{loading ? <p className="text-sm text-slate-500">กำลังตรวจสอบห้องว่าง...</p> : <div className="flex flex-wrap gap-2">{visibleRooms.map((room) => { const id = String(room.id); return <RoomIconSelect key={id} roomNo={Number(room.number ?? room.roomNo ?? room.id)} booked={Boolean(room.booked)} selected={selectedRoomIds.includes(id)} onToggle={() => toggle(id)} roomType={room.roomType?.name} bedType={room.roomType?.bedType} />; })}</div>}<div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500"><span>เลือกแล้ว {selectedRoomIds.length} ห้อง</span><span>🛏 เดี่ยว = เตียงเดี่ยว</span><span>🛏🛏 คู่ = เตียงคู่/คิงไซส์</span><span className="text-red-500">สีแดง = ไม่ว่าง</span><span>ชี้เมาส์เพื่อดูประเภทห้อง</span></div></fieldset>;
 }
-
-const rooms = [
-    { roomNo: 1, booked: false },
-    { roomNo: 2, booked: true },
-    { roomNo: 3, booked: false },
-    { roomNo: 4, booked: false },
-    { roomNo: 5, booked: true },
-    { roomNo: 6, booked: false },
-    { roomNo: 7, booked: false },
-    { roomNo: 8, booked: true },
-    { roomNo: 9, booked: false },
-    { roomNo: 10, booked: false },
-    { roomNo: 11, booked: true },
-    { roomNo: 12, booked: false },
-    { roomNo: 13, booked: false },
-    { roomNo: 14, booked: true },
-    { roomNo: 15, booked: false },
-    { roomNo: 16, booked: false },
-    { roomNo: 17, booked: true },
-    { roomNo: 18, booked: false },
-    { roomNo: 19, booked: false },
-    { roomNo: 20, booked: true },
-];
-
-const ZoneRoomSelect: React.FC<ZoneRoomProps> = ({ open, setOpen }) => {
-
-    const [tab, setTab] = useState<number>(0);
-
-    const fetchRooms = async () => {
-        try {
-            const response = await axios.get('http://localhost:7190/api/v1/rooms/');
-            console.log('Fetched rooms:', response.data);
-        }
-        catch (error) {
-            console.error('Error fetching rooms:', error);
-        }
-    }
-
-    const handleChange = (event: React.SyntheticEvent, newValue: number) => {
-        setTab(newValue);
-    };
-
-    useEffect(() => {
-        fetchRooms();
-    },[open]);
-
-  return (
-    <Dialog open={open} fullWidth maxWidth="xs">
-        <DialogTitle className='w-full flex justify-between'>
-            <Box className='flex items-center gap-2'>
-                <Box className='text-primary'>
-                    <AddHomeRoundedIcon sx={{ fontSize:28 }} />
-                </Box>
-                <Typography sx={{ ...kanitMedium ,fontSize: 18}}>เพิ่มรายการจองห้องพัก</Typography>
-            </Box>
-            <Tooltip title='ปิด'>
-                <IconButton onClick={() => setOpen(false)}>
-                    <CloseRoundedIcon />
-                </IconButton>
-            </Tooltip>
-        </DialogTitle>
-        <DialogContent className="flex flex-col items-center gap-4">
-           <Tabs
-                value={tab}
-                onChange={handleChange}
-                scrollButtons
-                allowScrollButtonsMobile
-                aria-label="scrollable force tabs example"
-            >
-                <Tab label="A" />
-                <Tab label="B" />
-            </Tabs>
-            <Box className="w-full flex flex-wrap items-center justify-center gap-1 p-2">
-                {rooms.map((item, index) => 
-                    <RoomIconSlect key={index} roomNo={item.roomNo} booked={item.booked} />   
-                )}    
-            </Box>
-            <Box sx={{ width: '100%'}}>
-                <Divider />
-            </Box>
-            <Box className="w-full flex flex-wrap">
-                <Typography sx={{ ...kanitMedium, color: colorTheme.textPrimary }}>ห้องที่เลือก 1, 2, 3, 4, 5, 6</Typography>
-            </Box>
-            <Button fullWidth variant='contained' onClick={() => setOpen(false)}>ยืนยัน</Button>
-        </DialogContent>
-    </Dialog>
-  )
-}
-
-export default ZoneRoomSelect
