@@ -3,22 +3,23 @@ import {
   ChargeType,
   OrderStatus,
 } from "@/generated/prisma/client";
+import {
+  apiErrorResponse,
+  readJsonObject,
+  validationErrorResponse,
+  type ValidationIssue,
+} from "@/lib/api/validation";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { recordAuditLog } from "@/lib/audit/audit-log";
+import {
+  activeBookingConflictStatuses,
+  availableRaftStatuses,
+  availableRoomStatuses,
+} from "@/lib/bookings/availability";
+import { acquireBookingResourceLocks } from "@/lib/bookings/resource-locks";
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 
-interface Body {
-  mode: "solo" | "group";
-  name: string;
-  contactName?: string;
-  phone: string;
-  checkIn: string;
-  checkOut: string;
-  guestCount?: number;
-  pricePerPerson?: number;
-  roomIds?: string[];
-  raftIds?: string[];
-  foodItems?: Array<{ productId: string; quantity: number }>;
-}
 const labels: Record<BookingStatus, string> = {
   PENDING: "รอดำเนินการ",
   CONFIRMED: "ยืนยันแล้ว",
@@ -115,65 +116,185 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = (await request.json()) as Body;
-    const roomIds = body.roomIds ?? [];
-    const raftIds = body.raftIds ?? [];
-    const foodItems = (body.foodItems ?? []).filter(
-      (item) => item.quantity > 0,
-    );
-    if (
-      !body.name?.trim() ||
-      !body.phone?.trim() ||
-      !body.checkIn ||
-      !body.checkOut ||
-      (!roomIds.length && !raftIds.length) ||
-      !["solo", "group"].includes(body.mode)
-    )
-      return NextResponse.json(
-        { message: "กรุณากรอกข้อมูลและเลือกห้องหรือแพอย่างน้อย 1 รายการ" },
-        { status: 400 },
+    const currentUser = await getCurrentUser();
+    const parsed = await readJsonObject(request);
+    if (!parsed.ok) return parsed.response;
+
+    const issues: ValidationIssue[] = [];
+    const modeValue = parsed.body.mode;
+    const name =
+      typeof parsed.body.name === "string" ? parsed.body.name.trim() : "";
+    const contactName =
+      typeof parsed.body.contactName === "string"
+        ? parsed.body.contactName.trim()
+        : undefined;
+    const phone =
+      typeof parsed.body.phone === "string" ? parsed.body.phone.trim() : "";
+    const checkInValue =
+      typeof parsed.body.checkIn === "string" ? parsed.body.checkIn : "";
+    const checkOutValue =
+      typeof parsed.body.checkOut === "string" ? parsed.body.checkOut : "";
+    const roomIdsValue = parsed.body.roomIds;
+    const raftIdsValue = parsed.body.raftIds;
+    const foodItemsValue = parsed.body.foodItems;
+    const roomIds: string[] | null =
+      roomIdsValue === undefined
+        ? []
+        : Array.isArray(roomIdsValue) && roomIdsValue.every((id) => typeof id === "string" && id.trim())
+          ? roomIdsValue.map((id) => id.trim())
+          : null;
+    const raftIds: string[] | null =
+      raftIdsValue === undefined
+        ? []
+        : Array.isArray(raftIdsValue) && raftIdsValue.every((id) => typeof id === "string" && id.trim())
+          ? raftIdsValue.map((id) => id.trim())
+          : null;
+    const foodItems: Array<{
+      productId: string;
+      quantity: number;
+      isExtra: boolean;
+    }> = [];
+
+    if (!name) issues.push({ path: "name", message: "Customer name is required" });
+    if (!phone) issues.push({ path: "phone", message: "Customer phone is required" });
+    if (!checkInValue) issues.push({ path: "checkIn", message: "Check-in date is required" });
+    if (!checkOutValue) issues.push({ path: "checkOut", message: "Check-out date is required" });
+    if (modeValue !== "solo" && modeValue !== "group") {
+      issues.push({ path: "mode", message: "Booking mode is invalid" });
+    }
+    if (!roomIds) issues.push({ path: "roomIds", message: "Room ids must be strings" });
+    if (!raftIds) issues.push({ path: "raftIds", message: "Raft ids must be strings" });
+    if (roomIds && raftIds && !roomIds.length && !raftIds.length) {
+      issues.push({ path: "resources", message: "At least one room or raft is required" });
+    }
+    if (foodItemsValue !== undefined && !Array.isArray(foodItemsValue)) {
+      issues.push({ path: "foodItems", message: "Food items must be an array" });
+    }
+    if (Array.isArray(foodItemsValue)) {
+      foodItemsValue.forEach((item, index) => {
+        if (typeof item !== "object" || item === null || Array.isArray(item)) {
+          issues.push({ path: `foodItems.${index}`, message: "Food item must be an object" });
+          return;
+        }
+        const itemRecord = item as Record<string, unknown>;
+        const productId =
+          typeof itemRecord.productId === "string" ? itemRecord.productId.trim() : "";
+        const quantity = Number(itemRecord.quantity);
+        const isExtraValue = itemRecord.isExtra;
+        const isExtra =
+          isExtraValue === undefined
+            ? undefined
+            : typeof isExtraValue === "boolean"
+              ? isExtraValue
+              : null;
+        if (!productId) {
+          issues.push({ path: `foodItems.${index}.productId`, message: "Product id is required" });
+        }
+        if (!Number.isFinite(quantity) || quantity <= 0) {
+          issues.push({ path: `foodItems.${index}.quantity`, message: "Food quantity must be greater than 0" });
+        }
+        if (isExtra === null) {
+          issues.push({
+            path: `foodItems.${index}.isExtra`,
+            message: "isExtra must be boolean",
+          });
+        }
+        if (
+          productId &&
+          Number.isFinite(quantity) &&
+          quantity > 0 &&
+          isExtra !== null
+        ) {
+          foodItems.push({
+            productId,
+            quantity,
+            isExtra:
+              modeValue === "group"
+                ? isExtra === undefined
+                  ? false
+                  : isExtra
+                : true,
+          });
+        }
+      });
+    }
+    if (issues.length)
+      return validationErrorResponse(
+        "กรุณากรอกข้อมูลและเลือกห้องหรือแพอย่างน้อย 1 รายการ",
+        issues,
       );
+
+    const mode = modeValue as "solo" | "group";
+    const guestCount =
+      parsed.body.guestCount === undefined ? undefined : Number(parsed.body.guestCount);
+    const pricePerPerson =
+      parsed.body.pricePerPerson === undefined
+        ? undefined
+        : Number(parsed.body.pricePerPerson);
+    const groupIssues: ValidationIssue[] = [];
     if (
-      body.mode === "group" &&
-      (!body.guestCount ||
-        body.guestCount < 1 ||
-        body.pricePerPerson === undefined ||
-        body.pricePerPerson < 0)
-    )
-      return NextResponse.json(
-        { message: "กรุณาระบุจำนวนคนและราคาต่อหัว" },
-        { status: 400 },
+      mode === "group" &&
+      (!Number.isFinite(guestCount) ||
+        !guestCount ||
+        guestCount < 1)
+    ) {
+      groupIssues.push({ path: "guestCount", message: "Guest count must be greater than 0" });
+    }
+    if (
+      mode === "group" &&
+      (!Number.isFinite(pricePerPerson) ||
+        pricePerPerson === undefined ||
+        pricePerPerson < 0)
+    ) {
+      groupIssues.push({ path: "pricePerPerson", message: "Price per person must be 0 or greater" });
+    }
+    if (groupIssues.length)
+      return validationErrorResponse(
+        "กรุณาระบุจำนวนคนและราคาต่อหัว",
+        groupIssues,
       );
-    const checkIn = parseDate(body.checkIn);
-    const checkOut = parseDate(body.checkOut);
+    const checkIn = parseDate(checkInValue);
+    const checkOut = parseDate(checkOutValue);
     if (
       Number.isNaN(checkIn.getTime()) ||
       Number.isNaN(checkOut.getTime()) ||
       checkOut <= checkIn
     )
-      return NextResponse.json(
-        { message: "วันเช็กเอาต์ต้องอยู่หลังวันเช็กอิน" },
-        { status: 400 },
+      return validationErrorResponse(
+        "วันเช็กเอาต์ต้องอยู่หลังวันเช็กอิน",
+        [{ path: "checkOut", message: "Check-out date must be after check-in date" }],
       );
     if (checkIn < todayBangkok())
-      return NextResponse.json(
-        { message: "วันเช็กอินต้องเป็นวันนี้หรือวันในอนาคต" },
-        { status: 400 },
+      return validationErrorResponse(
+        "วันเช็กอินต้องเป็นวันนี้หรือวันในอนาคต",
+        [{ path: "checkIn", message: "Check-in date cannot be in the past" }],
       );
+    const selectedRoomIds = roomIds ?? [];
+    const selectedRaftIds = raftIds ?? [];
     const result = await prisma.$transaction(async (tx) => {
+      await acquireBookingResourceLocks(tx, {
+        roomIds: selectedRoomIds,
+        raftIds: selectedRaftIds,
+      });
       const rooms = await tx.room.findMany({
-        where: { id: { in: roomIds } },
+        where: { id: { in: selectedRoomIds } },
         include: { roomType: true },
       });
-      const rafts = await tx.raft.findMany({ where: { id: { in: raftIds } } });
+      const rafts = await tx.raft.findMany({ where: { id: { in: selectedRaftIds } } });
       const products = await tx.product.findMany({
         where: {
           id: { in: foodItems.map((item) => item.productId) },
           isActive: true,
         },
       });
-      if (rooms.length !== roomIds.length) throw new Error("ROOM_NOT_FOUND");
-      if (rafts.length !== raftIds.length) throw new Error("RAFT_NOT_FOUND");
+      if (rooms.length !== selectedRoomIds.length) throw new Error("ROOM_NOT_FOUND");
+      if (rafts.length !== selectedRaftIds.length) throw new Error("RAFT_NOT_FOUND");
+      if (rooms.some((room) => !availableRoomStatuses.includes(room.status))) {
+        throw new Error("ROOM_NOT_AVAILABLE");
+      }
+      if (rafts.some((raft) => !availableRaftStatuses.includes(raft.status))) {
+        throw new Error("RAFT_NOT_AVAILABLE");
+      }
       if (
         products.length !==
         new Set(foodItems.map((item) => item.productId)).size
@@ -181,10 +302,10 @@ export async function POST(request: NextRequest) {
         throw new Error("PRODUCT_NOT_FOUND");
       const roomConflict = await tx.bookingRoom.findFirst({
         where: {
-          roomId: { in: roomIds },
+          roomId: { in: selectedRoomIds },
           booking: {
             status: {
-              notIn: [BookingStatus.CANCELLED, BookingStatus.CHECKED_OUT],
+              in: activeBookingConflictStatuses,
             },
             checkIn: { lt: checkOut },
             checkOut: { gt: checkIn },
@@ -196,9 +317,9 @@ export async function POST(request: NextRequest) {
         throw new Error(`ROOM_CONFLICT:${roomConflict.room.number}`);
       const raftConflict = await tx.bookingRaft.findFirst({
         where: {
-          raftId: { in: raftIds },
+          raftId: { in: selectedRaftIds },
           booking: {
-            status: { not: BookingStatus.CANCELLED },
+            status: { in: activeBookingConflictStatuses },
             checkIn: { lt: checkOut },
             checkOut: { gt: checkIn },
           },
@@ -209,22 +330,22 @@ export async function POST(request: NextRequest) {
         throw new Error(`RAFT_CONFLICT:${raftConflict.raft.number}`);
       let guestId: string | undefined;
       let tourGroupId: string | undefined;
-      if (body.mode === "group") {
+      if (mode === "group") {
         const group = await tx.tourGroup.create({
           data: {
-            name: body.name.trim(),
-            contactName: body.contactName?.trim() || body.name.trim(),
-            phone: body.phone.trim(),
+            name,
+            contactName: contactName || name,
+            phone,
           },
         });
         tourGroupId = group.id;
       } else {
-        const [firstName, ...last] = body.name.trim().split(/\s+/);
+        const [firstName, ...last] = name.split(/\s+/);
         const guest = await tx.guest.create({
           data: {
             firstName,
             lastName: last.join(" ") || "-",
-            phone: body.phone.trim(),
+            phone,
           },
         });
         guestId = guest.id;
@@ -242,8 +363,8 @@ export async function POST(request: NextRequest) {
         0,
       );
       const groupPackage =
-        body.mode === "group"
-          ? (body.guestCount ?? 0) * (body.pricePerPerson ?? 0)
+        mode === "group"
+          ? (guestCount ?? 0) * (pricePerPerson ?? 0)
           : 0;
       const booking = await tx.booking.create({
         data: {
@@ -253,9 +374,9 @@ export async function POST(request: NextRequest) {
           checkOut,
           guestId,
           tourGroupId,
-          guestCount: body.mode === "group" ? body.guestCount : undefined,
+          guestCount: mode === "group" ? guestCount : undefined,
           pricePerPerson:
-            body.mode === "group" ? body.pricePerPerson : undefined,
+            mode === "group" ? pricePerPerson : undefined,
           rooms: {
             create: rooms.map((room) => ({
               roomId: room.id,
@@ -272,11 +393,11 @@ export async function POST(request: NextRequest) {
           },
           charges: {
             create:
-              body.mode === "group"
+              mode === "group"
                 ? [
                     {
                       type: ChargeType.OTHER,
-                      description: `ราคาเหมากลุ่ม ${body.guestCount} คน × ฿${body.pricePerPerson}`,
+                      description: `ราคาเหมากลุ่ม ${guestCount} คน × ฿${pricePerPerson}`,
                       amount: groupPackage,
                     },
                   ]
@@ -315,7 +436,7 @@ export async function POST(request: NextRequest) {
             bookingId: booking.id,
             roomId: rooms[0]?.id,
             note:
-              body.mode === "group"
+              mode === "group"
                 ? "อาหารหลักรวมในราคาเหมา"
                 : "อาหารสั่งพร้อมการจอง",
             items: {
@@ -323,7 +444,7 @@ export async function POST(request: NextRequest) {
                 productId: item.productId,
                 quantity: item.quantity,
                 unitPrice: productMap.get(item.productId)!.price,
-                isExtra: body.mode !== "group",
+                isExtra: item.isExtra,
               })),
             },
           },
@@ -331,35 +452,43 @@ export async function POST(request: NextRequest) {
       }
       return booking;
     });
+    await recordAuditLog({
+      actor: {
+        employeeId: currentUser?.employee?.id,
+        authUserId: currentUser?.user.id,
+      },
+      action: "BOOKING_CREATED",
+      entityType: "BOOKING",
+      entityId: result.id,
+      metadata: {
+        mode,
+        roomCount: selectedRoomIds.length,
+        raftCount: selectedRaftIds.length,
+        foodItemCount: foodItems.length,
+        nights: Math.max(
+          1,
+          Math.ceil((checkOut.getTime() - checkIn.getTime()) / 86_400_000),
+        ),
+      },
+    });
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (message === "ROOM_NOT_FOUND")
-      return NextResponse.json(
-        { message: "ไม่พบห้องที่เลือก" },
-        { status: 400 },
-      );
+      return apiErrorResponse("ไม่พบห้องที่เลือก", 400, "ROOM_NOT_FOUND");
     if (message === "RAFT_NOT_FOUND")
-      return NextResponse.json({ message: "ไม่พบแพที่เลือก" }, { status: 400 });
+      return apiErrorResponse("ไม่พบแพที่เลือก", 400, "RAFT_NOT_FOUND");
+    if (message === "ROOM_NOT_AVAILABLE")
+      return apiErrorResponse("ห้องที่เลือกไม่พร้อมใช้งาน", 409, "ROOM_NOT_AVAILABLE");
+    if (message === "RAFT_NOT_AVAILABLE")
+      return apiErrorResponse("แพที่เลือกไม่พร้อมใช้งาน", 409, "RAFT_NOT_AVAILABLE");
     if (message === "PRODUCT_NOT_FOUND")
-      return NextResponse.json(
-        { message: "ไม่พบอาหารที่เลือก" },
-        { status: 400 },
-      );
+      return apiErrorResponse("ไม่พบอาหารที่เลือก", 400, "PRODUCT_NOT_FOUND");
     if (message.startsWith("ROOM_CONFLICT:"))
-      return NextResponse.json(
-        { message: `ห้อง ${message.split(":")[1]} ไม่ว่าง` },
-        { status: 409 },
-      );
+      return apiErrorResponse(`ห้อง ${message.split(":")[1]} ไม่ว่าง`, 409, "ROOM_CONFLICT");
     if (message.startsWith("RAFT_CONFLICT:"))
-      return NextResponse.json(
-        { message: `แพ ${message.split(":")[1]} ไม่ว่าง` },
-        { status: 409 },
-      );
+      return apiErrorResponse(`แพ ${message.split(":")[1]} ไม่ว่าง`, 409, "RAFT_CONFLICT");
     console.error("POST bookings failed", error);
-    return NextResponse.json(
-      { message: "ไม่สามารถบันทึกการจองได้" },
-      { status: 500 },
-    );
+    return apiErrorResponse("ไม่สามารถบันทึกการจองได้", 500, "INTERNAL_ERROR");
   }
 }

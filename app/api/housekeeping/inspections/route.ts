@@ -1,4 +1,5 @@
 import { BookingStatus } from "@/generated/prisma/client";
+import { calculateBookingFinancialSummary } from "@/lib/payments/financial-summary";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
@@ -46,23 +47,11 @@ export async function GET() {
     return NextResponse.json(
       inspections.map((inspection) => {
         const booking = inspection.bookingRoom.booking;
-        const grand =
-          booking.charges.reduce((sum, item) => sum + Number(item.amount), 0) +
-          booking.orders.reduce(
-            (sum, order) =>
-              sum +
-              order.items.reduce(
-                (sub, item) =>
-                  sub +
-                  (item.isExtra ? Number(item.unitPrice) * item.quantity : 0),
-                0,
-              ),
-            0,
-          );
-        const paid = booking.payments.reduce(
-          (sum, item) => sum + Number(item.amount),
-          0,
-        );
+        const financialSummary = calculateBookingFinancialSummary({
+          charges: booking.charges,
+          orders: booking.orders,
+          payments: booking.payments,
+        });
         return {
           id: inspection.id,
           status: inspection.status,
@@ -74,7 +63,9 @@ export async function GET() {
             [booking.guest?.firstName, booking.guest?.lastName]
               .filter(Boolean)
               .join(" "),
-          paid: paid >= grand && grand > 0,
+          paid:
+            financialSummary.netPaidTotal >= financialSummary.grandTotal &&
+            financialSummary.grandTotal > 0,
           items: inspection.items.map((item) => ({
             id: item.id,
             catalogId: item.catalogId,

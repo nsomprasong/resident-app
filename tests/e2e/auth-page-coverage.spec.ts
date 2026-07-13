@@ -8,6 +8,7 @@ const protectedPages = [
   "/",
   "/booking",
   "/booking/" + id,
+  "/today",
   "/dashboard",
   "/employeeSchedule",
   "/foodOrder",
@@ -16,6 +17,8 @@ const protectedPages = [
   "/houseKeeperMinibar",
   "/kitchen",
   "/report",
+  "/settings",
+  "/system/data-reset",
   "/wage",
 ] as const;
 

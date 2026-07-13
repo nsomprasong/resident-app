@@ -1,25 +1,54 @@
 @import "tailwindcss";
 
+/*
+  NomadKit semantic design tokens (DESIGN.md).
+  Change the palette here only — UI should use these utilities, not raw palette classes.
+*/
 @theme {
-  /* Base colors */
-  --color-primary: #6366f1;
-  --color-secondary: #a78bfa;
-  --color-background: #f3f4f6;
+  --color-background: #fffdf7;
+  --color-foreground: #1c1917;
+
   --color-surface: #ffffff;
+  --color-surface-muted: #f7f3eb;
 
-  /* Text colors */
-  --color-text-primary: #1f2937;
-  --color-text-secondary: #9ca3af;
+  --color-primary: #d4a373;
+  --color-primary-foreground: #1c1917;
 
-  /* Status colors */
-  --color-success: #1dc35a;
-  --color-error: #ef4444;
+  --color-secondary: #0891b2;
+  --color-secondary-foreground: #ffffff;
+
+  --color-success: #166534;
+  --color-success-foreground: #ffffff;
+
+  --color-warning: #ca8a04;
+  --color-warning-foreground: #ffffff;
+
+  --color-error: #dc2626;
+  --color-error-foreground: #ffffff;
+
+  --color-destructive: #dc2626;
+  --color-destructive-foreground: #ffffff;
+
+  --color-info: #0891b2;
+  --color-info-foreground: #ffffff;
+
+  --color-border: #e7e0d5;
+  --color-muted: #f5f0e8;
+  --color-muted-foreground: #78716c;
+  --color-ring: #d4a373;
+
   --font-sans: "KanitCustom", ui-sans-serif, system-ui, sans-serif;
 }
 
 * { box-sizing: border-box; }
-html { background: #f8fafc; }
-body { margin: 0; min-height: 100vh; font-family: "KanitCustom", sans-serif; }
+html { background: var(--color-background); }
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "KanitCustom", sans-serif;
+  background: var(--color-background);
+  color: var(--color-foreground);
+}
 button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 

@@ -1,0 +1,24 @@
+-- Localize permission descriptions (Thai). Permission codes are unchanged.
+UPDATE "permissions" SET "description" = 'ดูการจอง', "updated_at" = CURRENT_TIMESTAMP WHERE "code" = 'booking.read';
+UPDATE "permissions" SET "description" = 'สร้างและแก้ไขการจอง', "updated_at" = CURRENT_TIMESTAMP WHERE "code" = 'booking.write';
+UPDATE "permissions" SET "description" = 'เปลี่ยนสถานะการจอง', "updated_at" = CURRENT_TIMESTAMP WHERE "code" = 'booking.lifecycle';
+UPDATE "permissions" SET "description" = 'ดูห้องและแพ', "updated_at" = CURRENT_TIMESTAMP WHERE "code" = 'resource.read';
+UPDATE "permissions" SET "description" = 'จัดการห้องและแพ', "updated_at" = CURRENT_TIMESTAMP WHERE "code" = 'resource.manage';
+UPDATE "permissions" SET "description" = 'ดูออเดอร์อาหาร', "updated_at" = CURRENT_TIMESTAMP WHERE "code" = 'order.read';
+UPDATE "permissions" SET "description" = 'สั่งอาหาร', "updated_at" = CURRENT_TIMESTAMP WHERE "code" = 'order.write';
+UPDATE "permissions" SET "description" = 'ดำเนินงานครัว', "updated_at" = CURRENT_TIMESTAMP WHERE "code" = 'order.kitchen';
+UPDATE "permissions" SET "description" = 'ดูการชำระเงิน', "updated_at" = CURRENT_TIMESTAMP WHERE "code" = 'payment.read';
+UPDATE "permissions" SET "description" = 'รับชำระเงิน', "updated_at" = CURRENT_TIMESTAMP WHERE "code" = 'payment.collect';
+UPDATE "permissions" SET "description" = 'คืนเงิน', "updated_at" = CURRENT_TIMESTAMP WHERE "code" = 'payment.refund';
+UPDATE "permissions" SET "description" = 'จัดการช่องทางรับชำระ', "updated_at" = CURRENT_TIMESTAMP WHERE "code" = 'payment_channel.manage';
+UPDATE "permissions" SET "description" = 'ดูรายการตรวจห้อง', "updated_at" = CURRENT_TIMESTAMP WHERE "code" = 'inspection.read';
+UPDATE "permissions" SET "description" = 'บันทึกการตรวจห้อง', "updated_at" = CURRENT_TIMESTAMP WHERE "code" = 'inspection.write';
+UPDATE "permissions" SET "description" = 'ปิดงานตรวจห้อง', "updated_at" = CURRENT_TIMESTAMP WHERE "code" = 'inspection.complete';
+UPDATE "permissions" SET "description" = 'ดูสินค้าและรายการตรวจ', "updated_at" = CURRENT_TIMESTAMP WHERE "code" = 'catalog.read';
+UPDATE "permissions" SET "description" = 'จัดการสินค้าและรายการตรวจ', "updated_at" = CURRENT_TIMESTAMP WHERE "code" = 'catalog.manage';
+UPDATE "permissions" SET "description" = 'ดูข้อมูลและตารางพนักงาน', "updated_at" = CURRENT_TIMESTAMP WHERE "code" = 'employee.read';
+UPDATE "permissions" SET "description" = 'จัดการพนักงาน', "updated_at" = CURRENT_TIMESTAMP WHERE "code" = 'employee.manage';
+UPDATE "permissions" SET "description" = 'ดูค่าแรง', "updated_at" = CURRENT_TIMESTAMP WHERE "code" = 'wage.read';
+UPDATE "permissions" SET "description" = 'ดูรายงานและแดชบอร์ด', "updated_at" = CURRENT_TIMESTAMP WHERE "code" = 'report.read';
+UPDATE "permissions" SET "description" = 'จัดการข้อมูลหลัก', "updated_at" = CURRENT_TIMESTAMP WHERE "code" = 'settings.manage';
+UPDATE "permissions" SET "description" = 'จัดการบทบาทและสิทธิ์', "updated_at" = CURRENT_TIMESTAMP WHERE "code" = 'authorization.manage';

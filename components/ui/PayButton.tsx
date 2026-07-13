@@ -1,5 +1,5 @@
 "use client";
-import { CircleCheck, Plus } from "lucide-react";
+import { Banknote, CircleCheck, Plus, Save, Undo2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import Modal from "./Modal";
 type Method = "CASH" | "TRANSFER" | "PROMPTPAY" | "CARD";
@@ -87,8 +87,9 @@ export default function PayButton({
           setOpen(true);
           void loadChannels();
         }}
-        className={`rounded-xl px-5 py-3 font-medium text-white disabled:bg-slate-400 ${refund ? "bg-rose-600 hover:bg-rose-700" : "bg-indigo-600 hover:bg-indigo-700"}`}
+        className={`inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 font-medium disabled:bg-muted-foreground ${refund ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : "bg-primary text-primary-foreground hover:bg-primary/90"}`}
       >
+        {refund ? <Undo2 size={18} /> : <Banknote size={18} />}
         {refund ? "คืนเงิน" : amount > 0 ? "รับชำระเงิน" : "ชำระครบแล้ว"}
       </button>
       <Modal
@@ -96,7 +97,7 @@ export default function PayButton({
         onClose={() => setOpen(false)}
         title={refund ? "บันทึกคืนเงิน" : "บันทึกรับชำระเงิน"}
       >
-        <div className="space-y-4 text-slate-900">
+        <div className="space-y-4 text-foreground">
           <label className="block text-sm font-medium">
             {refund ? "จำนวนเงินที่คืน" : "จำนวนเงินที่ได้รับ"}
             <input
@@ -106,10 +107,10 @@ export default function PayButton({
               step="0.01"
               value={paidAmount}
               onChange={(e) => setPaidAmount(Number(e.target.value))}
-              className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-lg font-semibold text-slate-900 outline-none focus:border-indigo-500"
+              className="mt-1 w-full rounded-xl border border-border bg-surface px-4 py-3 text-lg font-semibold text-foreground outline-none focus:border-primary"
             />
           </label>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-muted-foreground">
             {refund ? "ยอดที่คืนได้" : "ยอดคงเหลือ"} ฿{amount.toLocaleString()}
           </p>
           <div>
@@ -120,7 +121,7 @@ export default function PayButton({
               <button
                 type="button"
                 onClick={() => setAdding(!adding)}
-                className="inline-flex items-center gap-1 text-xs text-indigo-700"
+                className="inline-flex items-center gap-1 text-xs text-secondary"
               >
                 <Plus size={14} />
                 เพิ่มช่องทาง
@@ -129,7 +130,7 @@ export default function PayButton({
             <select
               value={channelId}
               onChange={(e) => setChannelId(e.target.value)}
-              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:border-indigo-500"
+              className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-foreground outline-none focus:border-primary"
             >
               <option value="">เลือกช่องทาง</option>
               {channels.map((channel) => (
@@ -140,17 +141,17 @@ export default function PayButton({
             </select>
           </div>
           {adding && (
-            <div className="space-y-2 rounded-xl border border-indigo-100 bg-indigo-50 p-3">
+            <div className="space-y-2 rounded-xl border border-primary/20 bg-primary/10 p-3">
               <input
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 placeholder="ชื่อช่องทาง เช่น ธนาคารกสิกร"
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900"
+                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-foreground"
               />
               <select
                 value={newMethod}
                 onChange={(e) => setNewMethod(e.target.value as Method)}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900"
+                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-foreground"
               >
                 <option value="TRANSFER">เงินโอน</option>
                 <option value="CASH">เงินสด</option>
@@ -160,19 +161,20 @@ export default function PayButton({
               <button
                 type="button"
                 onClick={addChannel}
-                className="w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm text-white"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground"
               >
+                <Save size={16} />
                 บันทึกช่องทาง
               </button>
             </div>
           )}
-          <p className="rounded-xl bg-indigo-50 p-3 text-sm text-indigo-700">
+          <p className="rounded-xl bg-primary/10 p-3 text-sm text-primary">
             {refund
               ? "ระบบจะบันทึกยอดคืนเงินไว้ในประวัติการรับเงิน"
               : "ยอดรับครั้งแรกจะบันทึกเป็น “เงินมัดจำ” อัตโนมัติ"}
           </p>
           {error && (
-            <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">
+            <p className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">
               {error}
             </p>
           )}
@@ -180,7 +182,7 @@ export default function PayButton({
             type="button"
             disabled={saving}
             onClick={confirm}
-            className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 font-medium text-white disabled:opacity-50 ${refund ? "bg-rose-600" : "bg-emerald-600"}`}
+            className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 font-medium disabled:opacity-50 ${refund ? "bg-destructive text-destructive-foreground" : "bg-success text-success-foreground"}`}
           >
             <CircleCheck size={19} />
             {saving

@@ -4,25 +4,9 @@ async function main() {
   const { prisma } = await import("../lib/prisma");
 
   try {
-    const legacyRoles = await prisma.employee.groupBy({
-      by: ["role"],
-      _count: { _all: true },
-      orderBy: { role: "asc" },
-    });
-
-    console.log(
-      JSON.stringify(
-        legacyRoles.map(({ role, _count }) => ({
-          role,
-          count: _count._all,
-        })),
-        null,
-        2,
-      ),
-    );
-
-    const [roleCount, permissionCount, matrixCount, linkedCount, missingRoleCount] =
+    const [employeeCount, roleCount, permissionCount, matrixCount, linkedCount, missingRoleCount] =
       await Promise.all([
+        prisma.employee.count(),
         prisma.role.count(),
         prisma.permission.count(),
         prisma.rolePermission.count(),
@@ -30,14 +14,10 @@ async function main() {
         prisma.employee.count({ where: { roleId: null } }),
       ]);
 
-    const unknownFixtureCount = await prisma.employee.count({
-      where: { role: "UNKNOWN_E2E", roleId: null },
-    });
-
     let invalidReferenceRejected = false;
     try {
       await prisma.employee.updateMany({
-        where: { role: "UNKNOWN_E2E" },
+        where: { roleId: null },
         data: { roleId: "00000000-0000-0000-0000-000000000000" },
       });
     } catch (error: unknown) {
@@ -49,12 +29,12 @@ async function main() {
     }
 
     const result = {
+      employees: employeeCount,
       roles: roleCount,
       permissions: permissionCount,
       rolePermissions: matrixCount,
       employeesWithRole: linkedCount,
       employeesWithoutRole: missingRoleCount,
-      unknownFixtureWithoutRole: unknownFixtureCount,
       invalidReferenceRejected,
     };
 
@@ -62,9 +42,11 @@ async function main() {
 
     if (
       roleCount !== 6 ||
-      permissionCount !== 23 ||
-      matrixCount !== 68 ||
-      unknownFixtureCount !== 1 ||
+      permissionCount !== 24 ||
+      matrixCount !== 69 ||
+      employeeCount !== 8 ||
+      linkedCount !== 7 ||
+      missingRoleCount !== 1 ||
       !invalidReferenceRejected
     ) {
       throw new Error("Relational RBAC reconciliation failed");

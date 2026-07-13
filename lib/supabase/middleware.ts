@@ -12,7 +12,16 @@ const PUBLIC_ROUTES = new Set([
   "/login",
   "/access-denied",
   "/forbidden",
+  "/api/health",
   "/api/auth/logout",
+  "/api/auth/register",
+]);
+
+const PASSWORD_RESET_ALLOWED_ROUTES = new Set([
+  "/set-password",
+  "/api/auth/set-password",
+  "/api/auth/logout",
+  "/api/auth/me",
 ]);
 
 function copyResponseCookies(source: NextResponse, target: NextResponse) {
@@ -106,6 +115,52 @@ export async function updateSession(request: NextRequest) {
         response,
         NextResponse.redirect(accessDeniedUrl),
       );
+    }
+
+    if (!employee.isActive) {
+      if (pathname.startsWith("/api/")) {
+        return NextResponse.json(
+          { message: "Employee account is disabled" },
+          { status: 403 },
+        );
+      }
+
+      const accessDeniedUrl = request.nextUrl.clone();
+      accessDeniedUrl.pathname = "/access-denied";
+      accessDeniedUrl.search = "";
+
+      return copyResponseCookies(
+        response,
+        NextResponse.redirect(accessDeniedUrl),
+      );
+    }
+
+    if (employee.mustResetPassword) {
+      if (!PASSWORD_RESET_ALLOWED_ROUTES.has(pathname)) {
+        if (pathname.startsWith("/api/")) {
+          return NextResponse.json(
+            { message: "Password reset required", code: "PASSWORD_RESET_REQUIRED" },
+            { status: 403 },
+          );
+        }
+
+        const setPasswordUrl = request.nextUrl.clone();
+        setPasswordUrl.pathname = "/set-password";
+        setPasswordUrl.search = "";
+        return copyResponseCookies(
+          response,
+          NextResponse.redirect(setPasswordUrl),
+        );
+      }
+
+      return response;
+    }
+
+    if (pathname === "/set-password") {
+      const homeUrl = request.nextUrl.clone();
+      homeUrl.pathname = "/";
+      homeUrl.search = "";
+      return copyResponseCookies(response, NextResponse.redirect(homeUrl));
     }
 
     if (!employee.role || !employee.role.isActive) {

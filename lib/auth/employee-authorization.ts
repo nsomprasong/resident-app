@@ -6,6 +6,8 @@ export async function findEmployeeAuthorization(authUserId: string) {
     select: {
       id: true,
       name: true,
+      isActive: true,
+      mustResetPassword: true,
       roleRecord: {
         select: {
           code: true,
@@ -24,6 +26,8 @@ export async function findEmployeeAuthorization(authUserId: string) {
   return {
     id: employee.id,
     name: employee.name,
+    isActive: employee.isActive,
+    mustResetPassword: employee.mustResetPassword,
     role: employee.roleRecord
       ? {
           code: employee.roleRecord.code,

@@ -20,7 +20,7 @@ export default function MainLayoutClient({ children }: { children: React.ReactNo
       <Header onMenuClick={() => setSidebarOpen(true)} />
       <div className="flex min-h-screen pt-16 md:pt-0">
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-        <main className="min-w-0 flex-1 bg-slate-50 md:ml-64">{children}</main>
+        <main className="min-w-0 flex-1 bg-background md:ml-64">{children}</main>
       </div>
     </Provider>
   );

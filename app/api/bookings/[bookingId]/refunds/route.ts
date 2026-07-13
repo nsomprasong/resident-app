@@ -1,4 +1,14 @@
 import { PaymentStatus } from "@/generated/prisma/client";
+import {
+  apiErrorResponse,
+  readJsonObject,
+  validationErrorResponse,
+  type ValidationIssue,
+} from "@/lib/api/validation";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { recordAuditLog } from "@/lib/audit/audit-log";
+import { acquireBookingFinancialLock } from "@/lib/payments/financial-locks";
+import { calculateBookingFinancialSummary } from "@/lib/payments/financial-summary";
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 export async function POST(
@@ -7,17 +17,30 @@ export async function POST(
 ) {
   try {
     const { bookingId } = await params;
-    const body = (await request.json()) as {
-      amount?: number;
-      channelId?: string;
-    };
-    const amount = Number(body.amount);
-    if (!Number.isFinite(amount) || amount <= 0)
-      return NextResponse.json(
-        { message: "กรุณาระบุจำนวนเงินคืนมากกว่า 0 บาท" },
-        { status: 400 },
+    const currentUser = await getCurrentUser();
+    const parsed = await readJsonObject(request);
+    if (!parsed.ok) return parsed.response;
+
+    const issues: ValidationIssue[] = [];
+    const amount = Number(parsed.body.amount);
+    const channelId =
+      typeof parsed.body.channelId === "string"
+        ? parsed.body.channelId.trim()
+        : undefined;
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      issues.push({ path: "amount", message: "Refund amount must be greater than 0" });
+    }
+    if (!channelId) {
+      issues.push({ path: "channelId", message: "Refund channel id is required" });
+    }
+    if (issues.length)
+      return validationErrorResponse(
+        "กรุณาระบุจำนวนเงินคืนมากกว่า 0 บาท",
+        issues,
       );
     const refund = await prisma.$transaction(async (tx) => {
+      await acquireBookingFinancialLock(tx, bookingId);
       const booking = await tx.booking.findUnique({
         where: { id: bookingId },
         include: {
@@ -30,21 +53,16 @@ export async function POST(
       });
       if (!booking) throw new Error("NOT_FOUND");
       if (booking.status !== "CANCELLED") throw new Error("NOT_CANCELLED");
-      const channel = body.channelId
-        ? await tx.paymentChannel.findFirst({
-            where: { id: body.channelId, isActive: true },
-          })
-        : null;
+      const channel = await tx.paymentChannel.findFirst({
+        where: { id: channelId, isActive: true },
+      });
       if (!channel) throw new Error("CHANNEL_NOT_FOUND");
-      const refundable = booking.payments.reduce(
-        (sum, payment) =>
-          sum +
-          (payment.status === PaymentStatus.REFUNDED
-            ? -Number(payment.amount)
-            : Number(payment.amount)),
-        0,
-      );
-      if (amount > refundable) throw new Error("OVER_REFUND");
+      const summary = calculateBookingFinancialSummary({
+        charges: [],
+        orders: [],
+        payments: booking.payments,
+      });
+      if (amount > summary.refundableTotal) throw new Error("OVER_REFUND");
       const refundCount =
         booking.payments.filter(
           (item) => item.status === PaymentStatus.REFUNDED,
@@ -65,6 +83,20 @@ export async function POST(
         select: { id: true, amount: true },
       });
     });
+    await recordAuditLog({
+      actor: {
+        employeeId: currentUser?.employee?.id,
+        authUserId: currentUser?.user.id,
+      },
+      action: "REFUND_CREATED",
+      entityType: "PAYMENT",
+      entityId: refund.id,
+      metadata: {
+        bookingId,
+        amount,
+        status: PaymentStatus.REFUNDED,
+      },
+    });
     return NextResponse.json(
       { ...refund, amount: Number(refund.amount) },
       { status: 201 },
@@ -78,14 +110,8 @@ export async function POST(
       OVER_REFUND: ["จำนวนเงินคืนต้องไม่เกินยอดที่รับไว้", 400],
     };
     if (errors[message])
-      return NextResponse.json(
-        { message: errors[message][0] },
-        { status: errors[message][1] },
-      );
+      return apiErrorResponse(errors[message][0], errors[message][1], message);
     console.error("POST refund failed", error);
-    return NextResponse.json(
-      { message: "บันทึกคืนเงินไม่สำเร็จ" },
-      { status: 500 },
-    );
+    return apiErrorResponse("บันทึกคืนเงินไม่สำเร็จ", 500, "INTERNAL_ERROR");
   }
 }

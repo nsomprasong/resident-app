@@ -19,6 +19,13 @@ export async function GET() {
     );
   }
 
+  if (!currentUser.employee.isActive) {
+    return NextResponse.json(
+      { message: "Employee account is disabled" },
+      { status: 403 },
+    );
+  }
+
   if (!currentUser.employee.role || !currentUser.employee.role.isActive) {
     return NextResponse.json(
       { message: "Employee role is not configured" },

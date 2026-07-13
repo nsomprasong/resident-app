@@ -15,7 +15,7 @@ export default function RootLayout({
   
   return (
     <html lang="th">
-      <body className="bg-slate-50 text-slate-900 antialiased">
+      <body className="bg-background text-foreground antialiased">
         <MainLayoutClient>{children}</MainLayoutClient>
       </body>
     </html>

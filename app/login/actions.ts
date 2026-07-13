@@ -40,12 +40,36 @@ export async function login(
 
   const employee = await prisma.employee.findUnique({
     where: { authUserId: user.id },
-    select: { id: true },
+    select: {
+      id: true,
+      isActive: true,
+      roleId: true,
+      mustResetPassword: true,
+    },
   });
 
   if (!employee) {
     await supabase.auth.signOut();
     return { error: "บัญชีนี้ยังไม่ได้รับสิทธิ์เข้าใช้งานระบบ" };
+  }
+
+  if (!employee.isActive) {
+    await supabase.auth.signOut();
+    return {
+      error:
+        "บัญชีรอการเปิดใช้งานจากผู้ดูแลระบบ กรุณาติดต่อผู้จัดการเพื่อกำหนดสิทธิ์",
+    };
+  }
+
+  if (!employee.roleId) {
+    await supabase.auth.signOut();
+    return {
+      error: "บัญชียังไม่ได้กำหนดสิทธิ์ กรุณาติดต่อผู้ดูแลระบบ",
+    };
+  }
+
+  if (employee.mustResetPassword) {
+    redirect("/set-password");
   }
 
   redirect("/");

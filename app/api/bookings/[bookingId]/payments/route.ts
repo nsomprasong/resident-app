@@ -1,4 +1,19 @@
-import { PaymentMethod, PaymentStatus } from "@/generated/prisma/client";
+import {
+  BookingStatus,
+  PaymentMethod,
+  PaymentStatus,
+} from "@/generated/prisma/client";
+import {
+  apiErrorResponse,
+  readJsonObject,
+  validationErrorResponse,
+  type ValidationIssue,
+} from "@/lib/api/validation";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { recordAuditLog } from "@/lib/audit/audit-log";
+import { cancelUnfinishedOrdersForBooking } from "@/lib/orders/kitchen-workflow";
+import { acquireBookingFinancialLock } from "@/lib/payments/financial-locks";
+import { calculateBookingFinancialSummary } from "@/lib/payments/financial-summary";
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -8,29 +23,53 @@ export async function POST(
 ) {
   try {
     const { bookingId } = await params;
-    const body = (await request.json()) as {
-      amount?: number;
-      method?: PaymentMethod;
-      channelId?: string;
-      reference?: string;
-    };
-    const amount = Number(body.amount);
-    const method =
-      body.method && Object.values(PaymentMethod).includes(body.method)
-        ? body.method
-        : PaymentMethod.TRANSFER;
-    if (!Number.isFinite(amount) || amount <= 0)
-      return NextResponse.json(
-        { message: "กรุณาระบุจำนวนเงินมากกว่า 0 บาท" },
-        { status: 400 },
+    const currentUser = await getCurrentUser();
+    const parsed = await readJsonObject(request);
+    if (!parsed.ok) return parsed.response;
+
+    const issues: ValidationIssue[] = [];
+    const amount = Number(parsed.body.amount);
+    const methodValue = parsed.body.method;
+    const channelId =
+      typeof parsed.body.channelId === "string"
+        ? parsed.body.channelId.trim()
+        : undefined;
+    const reference =
+      typeof parsed.body.reference === "string"
+        ? parsed.body.reference.trim()
+        : undefined;
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      issues.push({ path: "amount", message: "Payment amount must be greater than 0" });
+    }
+    if (
+      methodValue !== undefined &&
+      (typeof methodValue !== "string" ||
+        !Object.values(PaymentMethod).includes(methodValue as PaymentMethod))
+    ) {
+      issues.push({ path: "method", message: "Payment method is invalid" });
+    }
+    if (parsed.body.channelId !== undefined && !channelId) {
+      issues.push({ path: "channelId", message: "Payment channel id must be a string" });
+    }
+    if (parsed.body.reference !== undefined && typeof parsed.body.reference !== "string") {
+      issues.push({ path: "reference", message: "Payment reference must be a string" });
+    }
+    if (issues.length)
+      return validationErrorResponse(
+        "กรุณาระบุจำนวนเงินมากกว่า 0 บาท",
+        issues,
       );
+
+    const method = methodValue ? (methodValue as PaymentMethod) : PaymentMethod.TRANSFER;
     const payment = await prisma.$transaction(async (tx) => {
-      const channel = body.channelId
+      await acquireBookingFinancialLock(tx, bookingId);
+      const channel = channelId
         ? await tx.paymentChannel.findFirst({
-            where: { id: body.channelId, isActive: true },
+            where: { id: channelId, isActive: true },
           })
         : null;
-      if (body.channelId && !channel) throw new Error("CHANNEL_NOT_FOUND");
+      if (channelId && !channel) throw new Error("CHANNEL_NOT_FOUND");
       const booking = await tx.booking.findUnique({
         where: { id: bookingId },
         include: {
@@ -47,28 +86,16 @@ export async function POST(
       });
       if (!booking) throw new Error("NOT_FOUND");
       if (booking.status === "CANCELLED") throw new Error("CANCELLED");
-      const grand =
-        booking.charges.reduce((sum, item) => sum + Number(item.amount), 0) +
-        booking.orders.reduce(
-          (sum, order) =>
-            sum +
-            order.items.reduce(
-              (sub, item) =>
-                sub +
-                (item.isExtra ? Number(item.unitPrice) * item.quantity : 0),
-              0,
-            ),
-          0,
-        );
-      const paid = booking.payments.reduce(
-        (sum, item) => sum + Number(item.amount),
-        0,
-      );
-      const outstanding = Math.max(0, grand - paid);
+      const summary = calculateBookingFinancialSummary({
+        charges: booking.charges,
+        orders: booking.orders,
+        payments: booking.payments,
+      });
+      const outstanding = summary.outstandingTotal;
       if (outstanding <= 0) throw new Error("ALREADY_PAID");
       if (amount > outstanding) throw new Error("OVERPAY");
       const installment = booking.payments.length + 1;
-      return tx.payment.create({
+      const created = await tx.payment.create({
         data: {
           bookingId,
           amount,
@@ -76,7 +103,7 @@ export async function POST(
           channelId: channel?.id,
           status: PaymentStatus.PAID,
           reference:
-            body.reference?.trim() ||
+            reference ||
             (installment === 1
               ? "เงินมัดจำ"
               : `ชำระเงินครั้งที่ ${installment}`),
@@ -90,9 +117,49 @@ export async function POST(
           reference: true,
         },
       });
+
+      let cancelledUnfinishedOrders = 0;
+      const paymentsAfterPay = [
+        ...booking.payments,
+        { amount, status: PaymentStatus.PAID },
+      ];
+      const settlementAfterPay = calculateBookingFinancialSummary({
+        charges: booking.charges,
+        orders: booking.orders.filter((order) => order.status === "DELIVERED"),
+        payments: paymentsAfterPay,
+      });
+      if (
+        booking.status === BookingStatus.CHECKED_OUT &&
+        settlementAfterPay.outstandingTotal <= 0
+      ) {
+        const cancelled = await cancelUnfinishedOrdersForBooking(tx, bookingId);
+        cancelledUnfinishedOrders = cancelled.count;
+      }
+
+      return { created, cancelledUnfinishedOrders };
+    });
+    await recordAuditLog({
+      actor: {
+        employeeId: currentUser?.employee?.id,
+        authUserId: currentUser?.user.id,
+      },
+      action: "PAYMENT_COLLECTED",
+      entityType: "PAYMENT",
+      entityId: payment.created.id,
+      metadata: {
+        bookingId,
+        amount,
+        method: payment.created.method,
+        status: payment.created.status,
+        cancelledUnfinishedOrders: payment.cancelledUnfinishedOrders,
+      },
     });
     return NextResponse.json(
-      { ...payment, amount: Number(payment.amount) },
+      {
+        ...payment.created,
+        amount: Number(payment.created.amount),
+        cancelledUnfinishedOrders: payment.cancelledUnfinishedOrders,
+      },
       { status: 201 },
     );
   } catch (error) {
@@ -105,14 +172,12 @@ export async function POST(
       OVERPAY: ["จำนวนเงินต้องไม่เกินยอดคงเหลือ", 400],
     };
     if (errors[message])
-      return NextResponse.json(
-        { message: errors[message][0] },
-        { status: errors[message][1] },
-      );
+      return apiErrorResponse(errors[message][0], errors[message][1], message);
     console.error("POST payment failed", error);
-    return NextResponse.json(
-      { message: "ไม่สามารถบันทึกการชำระเงินได้" },
-      { status: 500 },
+    return apiErrorResponse(
+      "ไม่สามารถบันทึกการชำระเงินได้",
+      500,
+      "INTERNAL_ERROR",
     );
   }
 }

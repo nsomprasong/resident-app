@@ -4,12 +4,25 @@
 
 ## กติกาการอ่าน (สำคัญที่สุด)
 
-ทุกงานให้อ่านตามลำดับนี้เท่านั้น:
+ทุกงานให้อ่านตามลำดับนี้
 
-1. `AGENTS.md`
-2. `docs/CURRENT_TASK.md`
-3. Source Code/Schema/Test เฉพาะไฟล์ที่เกี่ยวข้อง
-4. เปิด `docs/PROJECT_CONTEXT.md` หรือเอกสารใน `docs/reference/` เฉพาะเมื่อจำเป็น
+1. AGENTS.md
+2. CURRENT_TASK.md
+
+หาก CURRENT_TASK ไม่มี Next Task
+
+3. MASTER_PLAN.md
+
+เปิด DECISIONS.md เฉพาะเมื่อ
+
+- architecture
+- database
+- deployment
+- security
+- infrastructure
+
+จากนั้นจึงเปิด Source Code ที่เกี่ยวข้อง
+ห้ามอ่าน MASTER_PLAN.md ระหว่างการ implement งานปกติ
 
 **ห้ามอ่านทั้งโฟลเดอร์ `docs/` ซ้ำทุกงาน** และ **ห้ามอ่าน `docs/archive/`** เว้นแต่ผู้ใช้สั่งหรือข้อมูลจำเป็นหายไป
 
@@ -82,3 +95,26 @@ Stack หลัก: Next.js App Router, React, TypeScript strict, Tailwind, Pris
 - `docs/REFERENCE_INDEX.md` — เปิดรายละเอียดตามประเภทงาน
 - `docs/reference/` — เอกสารเชิงลึกที่ยังใช้งาน
 - `docs/archive/` — เอกสารเดิม/ประวัติ ห้ามอ่านตามปกติ
+
+Approval Policy
+
+Approval is required only when:
+
+1. Starting a new Phase.
+2. Performing destructive database/file operations.
+3. Introducing breaking changes.
+4. Completing a Phase.
+
+Within an approved Phase, the agent may:
+- audit
+- design
+- implement
+- pilot
+- rollout
+- verify
+without requesting additional approvals.
+
+The agent must stop only if:
+- acceptance criteria cannot be met,
+- an unexpected blocker appears,
+- a destructive action outside the approved scope is required.

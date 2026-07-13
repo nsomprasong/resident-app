@@ -116,11 +116,64 @@ test("ACCOUNTING can read payments but cannot create bookings", async ({ page })
   );
 });
 
-test("MANAGER reaches an authorized master-data handler", async ({ page }) => {
+test("RECEPTION cannot manage master data settings APIs", async ({ page }) => {
+  await login(page, fixtures[0]);
+  await expectForbidden(await page.request.get("/api/room-types"));
+  await expectForbidden(await page.request.get("/api/rooms/master"));
+  await expectForbidden(await page.request.get("/api/products/master"));
+  await expectForbidden(
+    await page.request.post("/api/products", { data: {} }),
+  );
+  await expectForbidden(
+    await page.request.post("/api/rooms", { data: {} }),
+  );
+});
+
+test("ACCOUNTING can manage payment channels but not settings master lists", async ({
+  page,
+}) => {
+  await login(page, fixtures[3]);
+  const createResponse = await page.request.post("/api/payment-channels", {
+    data: {},
+  });
+  expect(createResponse.status()).not.toBe(401);
+  expect(createResponse.status()).not.toBe(403);
+  await expectForbidden(await page.request.get("/api/payment-channels/master"));
+  await expectForbidden(await page.request.get("/api/room-types"));
+  await expectForbidden(
+    await page.request.post("/api/products", { data: {} }),
+  );
+});
+
+test("MANAGER can access settings master-data handlers", async ({ page }) => {
   await login(page, fixtures[4]);
+  expect((await page.request.get("/api/room-types")).status()).not.toBe(403);
+  expect((await page.request.get("/api/products/master")).status()).not.toBe(403);
+  expect((await page.request.get("/api/payment-channels/master")).status()).not.toBe(
+    403,
+  );
   const response = await page.request.post("/api/payment-channels", { data: {} });
   expect(response.status()).not.toBe(401);
   expect(response.status()).not.toBe(403);
+  await expectForbidden(await page.request.get("/api/roles"));
+  await expectForbidden(await page.request.post("/api/roles", { data: {} }));
+  await expectForbidden(await page.request.get("/api/permissions"));
+  await expectForbidden(
+    await page.request.put(
+      "/api/roles/00000000-0000-0000-0000-000000000000/permissions",
+      { data: { permissionCodes: [] } },
+    ),
+  );
+  await expectForbidden(await page.request.get("/api/employees"));
+  await expectForbidden(await page.request.post("/api/employees", { data: {} }));
+});
+
+test("RECEPTION cannot manage roles authorization APIs", async ({ page }) => {
+  await login(page, fixtures[0]);
+  await expectForbidden(await page.request.get("/api/roles"));
+  await expectForbidden(await page.request.post("/api/roles", { data: {} }));
+  await expectForbidden(await page.request.get("/api/permissions"));
+  await expectForbidden(await page.request.get("/api/employees"));
 });
 
 test("unknown role is denied by the HTTP boundary", async ({ page }) => {

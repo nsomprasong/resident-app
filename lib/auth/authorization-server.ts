@@ -6,6 +6,7 @@ import {
 export type AuthorizationResult =
   | { status: "unauthenticated" }
   | { status: "unmapped" }
+  | { status: "disabled" }
   | { status: "unknown_role" }
   | { status: "forbidden"; role: string }
   | {
@@ -21,6 +22,7 @@ export async function authorizeCurrentUser(
 
   if (!currentUser) return { status: "unauthenticated" };
   if (!currentUser.employee) return { status: "unmapped" };
+  if (!currentUser.employee.isActive) return { status: "disabled" };
 
   const role = currentUser.employee.role;
   if (!role || !role.isActive) return { status: "unknown_role" };

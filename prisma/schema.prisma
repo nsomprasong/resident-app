@@ -41,12 +41,6 @@ enum BookingStatus {
   CANCELLED
 }
 
-enum ProductType {
-  FOOD
-  MINIBAR
-  OTHER
-}
-
 enum OrderStatus {
   PENDING
   PREPARING
@@ -83,10 +77,12 @@ enum ChargeType {
 model Zone {
   id        String   @id @default(uuid()) @db.Uuid
   name      String   @unique
+  isActive  Boolean  @default(true) @map("is_active")
   rooms     Room[]
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  @@index([isActive])
   @@map("zones")
 }
 
@@ -97,10 +93,12 @@ model RoomType {
   basePrice   Decimal  @map("base_price") @db.Decimal(10, 2)
   capacity    Int      @default(2)
   bedType     String?  @map("bed_type")
+  isActive    Boolean  @default(true) @map("is_active")
   rooms       Room[]
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
+  @@index([isActive])
   @@map("room_types")
 }
 
@@ -265,19 +263,50 @@ model BookingRaft {
   @@map("booking_rafts")
 }
 
+model FoodCategory {
+  id        String    @id @default(uuid()) @db.Uuid
+  name      String    @unique
+  isActive  Boolean   @default(true) @map("is_active")
+  products  Product[]
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  @@index([isActive, name])
+  @@map("food_categories")
+}
+
+model ProductType {
+  id                   String    @id @default(uuid()) @db.Uuid
+  name                 String    @unique
+  requiresFoodCategory Boolean   @default(false) @map("requires_food_category")
+  isActive             Boolean   @default(true) @map("is_active")
+  products             Product[]
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  @@index([isActive, name])
+  @@map("product_types")
+}
+
 model Product {
-  id          String      @id @default(uuid()) @db.Uuid
+  id          String         @id @default(uuid()) @db.Uuid
   name        String
   description String?
-  price       Decimal     @db.Decimal(10, 2)
-  type        ProductType
-  imageUrl    String?     @map("image_url")
-  isActive    Boolean     @default(true) @map("is_active")
+  price       Decimal        @db.Decimal(10, 2)
+  typeId      String         @map("type_id") @db.Uuid
+  type        ProductType    @relation(fields: [typeId], references: [id])
+  categoryId  String?        @map("category_id") @db.Uuid
+  category    FoodCategory?  @relation(fields: [categoryId], references: [id])
+  isMinibar   Boolean        @default(false) @map("is_minibar")
+  imageUrl    String?        @map("image_url")
+  isActive    Boolean        @default(true) @map("is_active")
   orderItems  OrderItem[]
-  createdAt   DateTime    @default(now()) @map("created_at")
-  updatedAt   DateTime    @updatedAt @map("updated_at")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
 
-  @@index([type, isActive])
+  @@index([typeId, isActive])
+  @@index([isMinibar, isActive])
+  @@index([typeId, categoryId, isActive])
   @@map("products")
 }
 
@@ -394,19 +423,23 @@ model RolePermission {
 }
 
 model Employee {
-  id         String      @id @default(uuid()) @db.Uuid
-  authUserId String?     @unique @map("auth_user_id") @db.Uuid
-  name       String
-  phone      String?
-  role       String
-  roleId     String?     @map("role_id") @db.Uuid
-  roleRecord Role?       @relation(fields: [roleId], references: [id], onDelete: SetNull)
-  hourlyRate Decimal?    @map("hourly_rate") @db.Decimal(10, 2)
-  shifts     WorkShift[]
-  createdAt  DateTime    @default(now()) @map("created_at")
-  updatedAt  DateTime    @updatedAt @map("updated_at")
+  id                 String      @id @default(uuid()) @db.Uuid
+  authUserId         String?     @unique @map("auth_user_id") @db.Uuid
+  email              String?     @unique
+  name               String
+  phone              String?
+  roleId             String?     @map("role_id") @db.Uuid
+  roleRecord         Role?       @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  hourlyRate         Decimal?    @map("hourly_rate") @db.Decimal(10, 2)
+  isActive           Boolean     @default(true) @map("is_active")
+  mustResetPassword  Boolean     @default(false) @map("must_reset_password")
+  shifts             WorkShift[]
+  auditLogs          AuditLog[]
+  createdAt          DateTime    @default(now()) @map("created_at")
+  updatedAt          DateTime    @updatedAt @map("updated_at")
 
   @@index([roleId])
+  @@index([isActive])
   @@map("employees")
 }
 
@@ -419,4 +452,22 @@ model WorkShift {
 
   @@index([employeeId, startsAt])
   @@map("work_shifts")
+}
+
+model AuditLog {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  actorEmployeeId String?   @map("actor_employee_id") @db.Uuid
+  actorAuthUserId String?   @map("actor_auth_user_id") @db.Uuid
+  action          String
+  entityType      String    @map("entity_type")
+  entityId        String?   @map("entity_id")
+  metadata        Json?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  actorEmployee   Employee? @relation(fields: [actorEmployeeId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([action, createdAt])
+  @@index([entityType, entityId])
+  @@index([actorEmployeeId, createdAt])
+  @@map("audit_logs")
 }

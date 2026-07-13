@@ -1,8 +1,8 @@
 const styles: Record<string, string> = {
-  "รอดำเนินการ": "bg-amber-50 text-amber-700 ring-amber-200",
-  "ยืนยันแล้ว": "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  "เช็คอิน": "bg-blue-50 text-blue-700 ring-blue-200",
-  "เช็คเอาท์": "bg-slate-100 text-slate-600 ring-slate-200",
+  "รอดำเนินการ": "bg-warning/10 text-warning ring-warning/30",
+  "ยืนยันแล้ว": "bg-success/10 text-success ring-success/30",
+  "เช็คอิน": "bg-info/10 text-info ring-info/30",
+  "เช็คเอาท์": "bg-muted text-muted-foreground ring-border",
 };
 
 export default function Status({ status }: { status: string }) {

@@ -3,6 +3,17 @@ import {
   InspectionStatus,
   RoomStatus,
 } from "@/generated/prisma/client";
+import {
+  apiErrorResponse,
+  readJsonObject,
+  validationErrorResponse,
+  type ValidationIssue,
+} from "@/lib/api/validation";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { recordAuditLog } from "@/lib/audit/audit-log";
+import { cancelUnfinishedOrdersForBooking } from "@/lib/orders/kitchen-workflow";
+import { acquireBookingFinancialLock } from "@/lib/payments/financial-locks";
+import { calculateBookingFinancialSummary } from "@/lib/payments/financial-summary";
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 const labels: Record<BookingStatus, string> = {
@@ -13,7 +24,9 @@ const labels: Record<BookingStatus, string> = {
   CANCELLED: "ยกเลิก",
 };
 const transitions: Record<BookingStatus, BookingStatus[]> = {
-  PENDING: [BookingStatus.CONFIRMED, BookingStatus.CANCELLED],
+  // Skip confirm step — check in directly from pending.
+  PENDING: [BookingStatus.CHECKED_IN, BookingStatus.CANCELLED],
+  // Keep path for bookings that were confirmed before this change.
   CONFIRMED: [BookingStatus.CHECKED_IN, BookingStatus.CANCELLED],
   CHECKED_IN: [BookingStatus.CHECKED_OUT],
   CHECKED_OUT: [],
@@ -45,35 +58,29 @@ export async function GET(
         },
         orders: {
           where: { status: { not: "CANCELLED" } },
-          include: { items: { include: { product: true } } },
+          include: {
+            items: {
+              include: {
+                product: {
+                  include: {
+                    type: { select: { name: true } },
+                  },
+                },
+              },
+            },
+            room: { select: { id: true, number: true } },
+          },
           orderBy: { createdAt: "desc" },
         },
       },
     });
     if (!booking)
       return NextResponse.json({ message: "ไม่พบรายการจอง" }, { status: 404 });
-    const charges = booking.charges.reduce(
-      (sum, item) => sum + Number(item.amount),
-      0,
-    );
-    const orders = booking.orders.reduce(
-      (sum, order) =>
-        sum +
-        order.items.reduce(
-          (sub, item) =>
-            sub + (item.isExtra ? Number(item.unitPrice) * item.quantity : 0),
-          0,
-        ),
-      0,
-    );
-    const paid = booking.payments.reduce(
-      (sum, item) =>
-        sum +
-        (item.status === "REFUNDED"
-          ? -Number(item.amount)
-          : Number(item.amount)),
-      0,
-    );
+    const financialSummary = calculateBookingFinancialSummary({
+      charges: booking.charges,
+      orders: booking.orders,
+      payments: booking.payments,
+    });
     return NextResponse.json({
       id: booking.id,
       reference: booking.reference,
@@ -94,21 +101,23 @@ export async function GET(
         : null,
       checkIn: booking.checkIn.toISOString().slice(0, 10),
       checkOut: booking.checkOut.toISOString().slice(0, 10),
-      rooms: booking.rooms.map(({ room, rate, extraBeds, inspection }) => ({
+      rooms: booking.rooms.map(({ room, rate, extraBeds, isExtra, inspection }) => ({
         id: room.id,
         number: room.number,
         zone: room.zone.name,
         roomType: room.roomType.name,
         rate: Number(rate),
         extraBeds,
+        isExtra,
         inspectionStatus: inspection?.status ?? null,
       })),
-      rafts: booking.rafts.map(({ raft, rate }) => ({
+      rafts: booking.rafts.map(({ raft, rate, isExtra }) => ({
         id: raft.id,
         number: raft.number,
         name: raft.name,
         capacity: raft.capacity,
         rate: Number(rate),
+        isExtra,
       })),
       charges: booking.charges.map((item) => ({
         id: item.id,
@@ -119,10 +128,21 @@ export async function GET(
       orders: booking.orders.flatMap((order) =>
         order.items.map((item) => ({
           id: item.id,
-          type: item.product.type,
-          title: `${item.product.name} x ${item.quantity}${item.isExtra ? "" : " (รวมในราคาเหมา)"}`,
+          orderId: order.id,
+          orderStatus: order.status,
+          type: item.product.type.name,
+          typeName: item.product.type.name,
+          isMinibar: item.product.isMinibar,
+          title: `${item.product.name}${item.isExtra ? "" : " (รวมในราคาเหมา)"}`,
+          productName: item.product.name,
+          quantity: item.quantity,
+          unitPrice: Number(item.unitPrice),
           price: item.isExtra ? Number(item.unitPrice) * item.quantity : 0,
           isExtra: item.isExtra,
+          editable: order.status === "PENDING",
+          chargeTo: order.roomId ? "room" : "group",
+          roomId: order.room?.id ?? null,
+          roomNumber: order.room?.number ?? null,
         })),
       ),
       payments: booking.payments.map((payment, index) => ({
@@ -141,11 +161,11 @@ export async function GET(
             : Number(payment.amount),
       })),
       totals: {
-        charges,
-        orders,
-        paid,
-        grand: charges + orders,
-        outstanding: Math.max(0, charges + orders - paid),
+        charges: financialSummary.chargeTotal,
+        orders: financialSummary.extraOrderTotal,
+        paid: financialSummary.netPaidTotal,
+        grand: financialSummary.grandTotal,
+        outstanding: financialSummary.outstandingTotal,
       },
       allowedStatuses: transitions[booking.status],
       housekeepingReady: booking.rooms.every(
@@ -167,50 +187,106 @@ export async function PATCH(
 ) {
   try {
     const { bookingId } = await params;
-    const body = (await request.json()) as {
-      status?: BookingStatus;
-      closeJob?: boolean;
-    };
-    if (body.closeJob) {
+    const currentUser = await getCurrentUser();
+    const parsed = await readJsonObject(request);
+    if (!parsed.ok) return parsed.response;
+
+    const issues: ValidationIssue[] = [];
+    const closeJobValue = parsed.body.closeJob;
+    const statusValue = parsed.body.status;
+
+    if (closeJobValue !== undefined && typeof closeJobValue !== "boolean") {
+      issues.push({ path: "closeJob", message: "Close job flag must be boolean" });
+    }
+    if (
+      closeJobValue !== true &&
+      (typeof statusValue !== "string" ||
+        !Object.values(BookingStatus).includes(statusValue as BookingStatus))
+    ) {
+      issues.push({ path: "status", message: "Booking status is invalid" });
+    }
+    if (issues.length)
+      return validationErrorResponse("สถานะไม่ถูกต้อง", issues);
+
+    if (closeJobValue === true) {
       const closed = await prisma.$transaction(async (tx) => {
+        await acquireBookingFinancialLock(tx, bookingId);
         const booking = await tx.booking.findUnique({
           where: { id: bookingId },
-          include: { rooms: { include: { inspection: true } } },
+          include: {
+            rooms: { include: { inspection: true } },
+            charges: true,
+            payments: { where: { status: { in: ["PAID", "REFUNDED"] } } },
+            orders: {
+              where: { status: { not: "CANCELLED" } },
+              include: { items: true },
+            },
+          },
         });
         if (!booking) throw new Error("NOT_FOUND");
         if (booking.status !== BookingStatus.CHECKED_OUT)
           throw new Error("NOT_CHECKED_OUT");
+        const financialSummary = calculateBookingFinancialSummary({
+          charges: booking.charges,
+          orders: booking.orders,
+          payments: booking.payments,
+        });
+        if (financialSummary.outstandingTotal > 0)
+          throw new Error("PAYMENT_OUTSTANDING");
         if (
           booking.rooms.some(
             (room) => room.inspection?.status !== InspectionStatus.COMPLETED,
           )
         )
           throw new Error("INSPECTION_PENDING");
-        return tx.booking.update({
+        const cancelled = await cancelUnfinishedOrdersForBooking(tx, bookingId);
+        const updatedBooking = await tx.booking.update({
           where: { id: bookingId },
           data: { closedAt: new Date() },
           select: { id: true, closedAt: true },
         });
+        return {
+          ...updatedBooking,
+          cancelledUnfinishedOrders: cancelled.count,
+        };
       });
-      return NextResponse.json({ ...closed, jobClosed: true });
+      await recordAuditLog({
+        actor: {
+          employeeId: currentUser?.employee?.id,
+          authUserId: currentUser?.user.id,
+        },
+        action: "BOOKING_JOB_CLOSED",
+        entityType: "BOOKING",
+        entityId: closed.id,
+        metadata: {
+          bookingId,
+          closedAt: closed.closedAt?.toISOString() ?? null,
+          cancelledUnfinishedOrders: closed.cancelledUnfinishedOrders,
+        },
+      });
+      return NextResponse.json({
+        ...closed,
+        jobClosed: true,
+        cancelledUnfinishedOrders: closed.cancelledUnfinishedOrders,
+      });
     }
-    if (!body.status || !Object.values(BookingStatus).includes(body.status))
-      return NextResponse.json({ message: "สถานะไม่ถูกต้อง" }, { status: 400 });
+    const status = statusValue as BookingStatus;
     const updated = await prisma.$transaction(async (tx) => {
       const booking = await tx.booking.findUnique({
         where: { id: bookingId },
         include: { rooms: { include: { inspection: true } } },
       });
       if (!booking) throw new Error("NOT_FOUND");
-      if (!transitions[booking.status].includes(body.status!))
+      const previousStatus = booking.status;
+      if (!transitions[booking.status].includes(status))
         throw new Error("INVALID_TRANSITION");
       const roomIds = booking.rooms.map((item) => item.roomId);
-      if (body.status === BookingStatus.CHECKED_IN)
+      if (status === BookingStatus.CHECKED_IN)
         await tx.room.updateMany({
           where: { id: { in: roomIds } },
           data: { status: RoomStatus.OCCUPIED },
         });
-      if (body.status === BookingStatus.CHECKED_OUT) {
+      if (status === BookingStatus.CHECKED_OUT) {
         await tx.room.updateMany({
           where: { id: { in: roomIds } },
           data: { status: RoomStatus.CLEANING },
@@ -221,44 +297,78 @@ export async function PATCH(
             data: missing.map((item) => ({ bookingRoomId: item.id })),
           });
       }
-      if (body.status === BookingStatus.CANCELLED)
+      if (status === BookingStatus.CANCELLED)
         await tx.room.updateMany({
           where: { id: { in: roomIds } },
           data: { status: RoomStatus.AVAILABLE },
         });
-      return tx.booking.update({
+      const updatedBooking = await tx.booking.update({
         where: { id: bookingId },
-        data: { status: body.status },
+        data: { status },
         select: { id: true, status: true },
       });
+
+      let cancelledUnfinishedOrders = 0;
+      if (status === BookingStatus.CHECKED_OUT) {
+        const cancelled = await cancelUnfinishedOrdersForBooking(tx, bookingId);
+        cancelledUnfinishedOrders = cancelled.count;
+      }
+
+      return {
+        updatedBooking,
+        previousStatus,
+        cancelledUnfinishedOrders,
+      };
+    });
+    await recordAuditLog({
+      actor: {
+        employeeId: currentUser?.employee?.id,
+        authUserId: currentUser?.user.id,
+      },
+      action: "BOOKING_STATUS_CHANGED",
+      entityType: "BOOKING",
+      entityId: updated.updatedBooking.id,
+      metadata: {
+        bookingId,
+        previousStatus: updated.previousStatus,
+        status: updated.updatedBooking.status,
+        cancelledUnfinishedOrders: updated.cancelledUnfinishedOrders,
+      },
     });
     return NextResponse.json({
-      ...updated,
-      statusLabel: labels[updated.status],
+      ...updated.updatedBooking,
+      statusLabel: labels[updated.updatedBooking.status],
+      cancelledUnfinishedOrders: updated.cancelledUnfinishedOrders,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (message === "NOT_FOUND")
-      return NextResponse.json({ message: "ไม่พบรายการจอง" }, { status: 404 });
+      return apiErrorResponse("ไม่พบรายการจอง", 404, "NOT_FOUND");
     if (message === "INVALID_TRANSITION")
-      return NextResponse.json(
-        { message: "ไม่สามารถเปลี่ยนไปยังสถานะนี้ได้" },
-        { status: 409 },
+      return apiErrorResponse(
+        "ไม่สามารถเปลี่ยนไปยังสถานะนี้ได้",
+        409,
+        "INVALID_TRANSITION",
       );
     if (message === "NOT_CHECKED_OUT")
-      return NextResponse.json(
-        { message: "ต้องเช็กเอาต์ก่อนปิดงาน" },
-        { status: 409 },
+      return apiErrorResponse(
+        "ต้องเช็กเอาต์ก่อนปิดงาน",
+        409,
+        "NOT_CHECKED_OUT",
       );
     if (message === "INSPECTION_PENDING")
-      return NextResponse.json(
-        { message: "ต้องตรวจสอบให้ครบทุกห้องก่อนปิดงาน" },
-        { status: 409 },
+      return apiErrorResponse(
+        "ต้องตรวจสอบให้ครบทุกห้องก่อนปิดงาน",
+        409,
+        "INSPECTION_PENDING",
+      );
+    if (message === "PAYMENT_OUTSTANDING")
+      return apiErrorResponse(
+        "กรุณาชำระเงินให้ครบก่อนปิดงาน",
+        409,
+        "PAYMENT_OUTSTANDING",
       );
     console.error("PATCH booking failed", error);
-    return NextResponse.json(
-      { message: "ไม่สามารถเปลี่ยนสถานะได้" },
-      { status: 500 },
-    );
+    return apiErrorResponse("ไม่สามารถเปลี่ยนสถานะได้", 500, "INTERNAL_ERROR");
   }
 }

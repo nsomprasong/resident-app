@@ -4,11 +4,19 @@ import {
   InspectionStatus,
   RoomStatus,
 } from "@/generated/prisma/client";
+import {
+  apiErrorResponse,
+  readJsonObject,
+  validationErrorResponse,
+  type ValidationIssue,
+} from "@/lib/api/validation";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { recordAuditLog } from "@/lib/audit/audit-log";
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 
-interface Item {
-  catalogId?: string;
+type InspectionItemInput = {
+  catalogId: string;
   type: InspectionItemType;
   description: string;
   quantity: number;
@@ -20,19 +28,112 @@ export async function PATCH(
 ) {
   try {
     const { inspectionId } = await params;
-    const body = (await request.json()) as {
-      notes?: string;
-      items?: Item[];
-      complete?: boolean;
-    };
-    const items = (body.items ?? []).filter(
-      (item) =>
-        item.description?.trim() &&
-        item.quantity > 0 &&
-        item.unitPrice >= 0 &&
-        Object.values(InspectionItemType).includes(item.type),
-    );
-    await prisma.$transaction(async (tx) => {
+    const currentUser = await getCurrentUser();
+    const parsed = await readJsonObject(request);
+    if (!parsed.ok) return parsed.response;
+
+    const issues: ValidationIssue[] = [];
+    const notes =
+      parsed.body.notes === undefined
+        ? undefined
+        : typeof parsed.body.notes === "string"
+          ? parsed.body.notes.trim()
+          : null;
+    const complete = parsed.body.complete;
+    const itemsValue = parsed.body.items;
+    const items: InspectionItemInput[] = [];
+
+    if (notes === null) {
+      issues.push({ path: "notes", message: "Inspection notes must be a string" });
+    }
+    if (complete !== undefined && typeof complete !== "boolean") {
+      issues.push({ path: "complete", message: "Complete flag must be boolean" });
+    }
+    if (itemsValue !== undefined && !Array.isArray(itemsValue)) {
+      issues.push({ path: "items", message: "Inspection items must be an array" });
+    }
+    if (Array.isArray(itemsValue)) {
+      itemsValue.forEach((item, index) => {
+        if (typeof item !== "object" || item === null || Array.isArray(item)) {
+          issues.push({
+            path: `items.${index}`,
+            message: "Inspection item must be an object",
+          });
+          return;
+        }
+
+        const itemRecord = item as Record<string, unknown>;
+        const catalogId =
+          typeof itemRecord.catalogId === "string" ? itemRecord.catalogId.trim() : "";
+        const description =
+          typeof itemRecord.description === "string"
+            ? itemRecord.description.trim()
+            : "";
+        const quantity = Number(itemRecord.quantity);
+        const unitPrice = Number(itemRecord.unitPrice);
+        const type = itemRecord.type;
+
+        if (!catalogId) {
+          issues.push({
+            path: `items.${index}.catalogId`,
+            message: "Inspection catalog id is required",
+          });
+        }
+        if (!description) {
+          issues.push({
+            path: `items.${index}.description`,
+            message: "Inspection item description is required",
+          });
+        }
+        if (!Number.isFinite(quantity) || quantity <= 0) {
+          issues.push({
+            path: `items.${index}.quantity`,
+            message: "Inspection item quantity must be greater than 0",
+          });
+        }
+        if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+          issues.push({
+            path: `items.${index}.unitPrice`,
+            message: "Inspection item unit price must be 0 or greater",
+          });
+        }
+        if (
+          typeof type !== "string" ||
+          !Object.values(InspectionItemType).includes(type as InspectionItemType)
+        ) {
+          issues.push({
+            path: `items.${index}.type`,
+            message: "Inspection item type is invalid",
+          });
+        }
+
+        if (
+          catalogId &&
+          description &&
+          Number.isFinite(quantity) &&
+          quantity > 0 &&
+          Number.isFinite(unitPrice) &&
+          unitPrice >= 0 &&
+          typeof type === "string" &&
+          Object.values(InspectionItemType).includes(type as InspectionItemType)
+        ) {
+          items.push({
+            catalogId,
+            description,
+            quantity,
+            unitPrice,
+            type: type as InspectionItemType,
+          });
+        }
+      });
+    }
+    if (issues.length)
+      return validationErrorResponse(
+        "พบรายการที่ไม่มีในราคากลาง กรุณาเลือกใหม่",
+        issues,
+      );
+
+    const result = await prisma.$transaction(async (tx) => {
       const catalogs = await tx.inspectionCatalog.findMany({
         where: {
           id: {
@@ -92,16 +193,17 @@ export async function PATCH(
           })),
         });
       const completed =
-        body.complete || current.status === InspectionStatus.COMPLETED;
-      await tx.roomInspection.update({
+        complete || current.status === InspectionStatus.COMPLETED;
+      const updatedInspection = await tx.roomInspection.update({
         where: { id: inspectionId },
         data: {
-          notes: body.notes?.trim() || null,
+          notes: notes || null,
           status: completed
             ? InspectionStatus.COMPLETED
             : InspectionStatus.IN_PROGRESS,
           completedAt: completed ? (current.completedAt ?? new Date()) : null,
         },
+        select: { id: true, status: true },
       });
       if (completed)
         await tx.room.update({
@@ -129,24 +231,41 @@ export async function PATCH(
         });
       else if (current.charge)
         await tx.charge.delete({ where: { id: current.charge.id } });
+      return {
+        inspectionId: updatedInspection.id,
+        bookingId: booking.id,
+        status: updatedInspection.status,
+        itemCount: pricedItems.length,
+        chargeAmount: amount,
+      };
+    });
+    await recordAuditLog({
+      actor: {
+        employeeId: currentUser?.employee?.id,
+        authUserId: currentUser?.user.id,
+      },
+      action: "HOUSEKEEPING_INSPECTION_UPDATED",
+      entityType: "ROOM_INSPECTION",
+      entityId: result.inspectionId,
+      metadata: {
+        bookingId: result.bookingId,
+        status: result.status,
+        itemCount: result.itemCount,
+        chargeAmount: result.chargeAmount,
+      },
     });
     return NextResponse.json({ success: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (message === "NOT_FOUND")
-      return NextResponse.json(
-        { message: "ไม่พบรายการตรวจห้อง" },
-        { status: 404 },
-      );
+      return apiErrorResponse("ไม่พบรายการตรวจห้อง", 404, "NOT_FOUND");
     if (message === "INVALID_CATALOG")
-      return NextResponse.json(
-        { message: "พบรายการที่ไม่มีในราคากลาง กรุณาเลือกใหม่" },
-        { status: 400 },
+      return apiErrorResponse(
+        "พบรายการที่ไม่มีในราคากลาง กรุณาเลือกใหม่",
+        400,
+        "INVALID_CATALOG",
       );
     console.error("PATCH inspection failed", error);
-    return NextResponse.json(
-      { message: "ไม่สามารถบันทึกผลตรวจได้" },
-      { status: 500 },
-    );
+    return apiErrorResponse("ไม่สามารถบันทึกผลตรวจได้", 500, "INTERNAL_ERROR");
   }
 }

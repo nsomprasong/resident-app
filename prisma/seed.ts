@@ -4,7 +4,6 @@ import {
   InspectionItemType,
   PaymentMethod,
   PrismaClient,
-  ProductType,
 } from "../generated/prisma/client";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -25,74 +24,99 @@ const prisma = new PrismaClient({
   }),
 });
 
-const products = [
+const productSeeds: Array<{
+  name: string;
+  price: number;
+  typeName: string;
+  isMinibar: boolean;
+  imageUrl: string;
+  categoryName?: string;
+}> = [
   {
     name: "ไก่ทอด",
     price: 80,
-    type: ProductType.FOOD,
+    typeName: "อาหาร",
+    isMinibar: false,
     imageUrl: "/images/food/frychicken.jpg",
+    categoryName: "อาหารจานเดียว",
   },
   {
     name: "ปลาทอด",
     price: 120,
-    type: ProductType.FOOD,
+    typeName: "อาหาร",
+    isMinibar: false,
     imageUrl: "/images/food/fryfish.jpg",
+    categoryName: "อาหารจานเดียว",
   },
   {
     name: "หมูทอด",
     price: 90,
-    type: ProductType.FOOD,
+    typeName: "อาหาร",
+    isMinibar: false,
     imageUrl: "/images/food/mootod.jpg",
+    categoryName: "อาหารจานเดียว",
   },
   {
     name: "โรตี",
     price: 40,
-    type: ProductType.FOOD,
+    typeName: "อาหาร",
+    isMinibar: false,
     imageUrl: "/images/food/roti.jpg",
+    categoryName: "อาหารจานเดียว",
   },
   {
     name: "ส้มตำ",
     price: 70,
-    type: ProductType.FOOD,
+    typeName: "อาหาร",
+    isMinibar: false,
     imageUrl: "/images/food/somtum.jpg",
+    categoryName: "ยำ",
   },
   {
     name: "ต้มยำกุ้ง",
     price: 150,
-    type: ProductType.FOOD,
+    typeName: "อาหาร",
+    isMinibar: false,
     imageUrl: "/images/food/toomyum.jpg",
+    categoryName: "ต้ม",
   },
   {
     name: "เบียร์ช้าง",
     price: 70,
-    type: ProductType.MINIBAR,
+    typeName: "เครื่องดื่ม",
+    isMinibar: true,
     imageUrl: "/images/minibar/beer.jpg",
   },
   {
     name: "ช็อกโกแลต",
     price: 35,
-    type: ProductType.MINIBAR,
+    typeName: "ของใช้",
+    isMinibar: true,
     imageUrl: "/images/minibar/chocolate.jpg",
   },
   {
     name: "เลย์",
     price: 25,
-    type: ProductType.MINIBAR,
+    typeName: "ของใช้",
+    isMinibar: true,
     imageUrl: "/images/minibar/lay.jpg",
   },
   {
     name: "ไอศกรีม",
     price: 45,
-    type: ProductType.MINIBAR,
+    typeName: "ของใช้",
+    isMinibar: true,
     imageUrl: "/images/minibar/icecream.jpg",
   },
   {
     name: "นม",
     price: 25,
-    type: ProductType.MINIBAR,
+    typeName: "เครื่องดื่ม",
+    isMinibar: true,
     imageUrl: "/images/minibar/milk.jpg",
   },
 ];
+
 const inspectionCatalogs = [
   { name: "น้ำดื่ม", type: InspectionItemType.MINIBAR, unitPrice: 20 },
   { name: "น้ำอัดลม", type: InspectionItemType.MINIBAR, unitPrice: 30 },
@@ -123,6 +147,22 @@ const paymentChannels = [
   { name: "พร้อมเพย์", method: PaymentMethod.PROMPTPAY },
   { name: "บัตร", method: PaymentMethod.CARD },
 ];
+
+async function ensureProductType(name: string, requiresFoodCategory: boolean) {
+  return prisma.productType.upsert({
+    where: { name },
+    update: { isActive: true, requiresFoodCategory },
+    create: { name, requiresFoodCategory, isActive: true },
+  });
+}
+
+async function ensureFoodCategory(name: string) {
+  return prisma.foodCategory.upsert({
+    where: { name },
+    update: { isActive: true },
+    create: { name, isActive: true },
+  });
+}
 
 async function main() {
   const mainZone = await prisma.zone.upsert({
@@ -216,9 +256,31 @@ async function main() {
     });
   }
 
-  for (const product of products) {
+  for (const name of ["อาหาร", "เครื่องดื่ม", "เสื้อผ้า", "ของใช้"]) {
+    await ensureProductType(name, name === "อาหาร");
+  }
+  for (const name of [
+    "ต้ม",
+    "ผัดเผ็ด",
+    "ยำ",
+    "อาหารจานเดียว",
+    "อาหารสำหรับกรุ๊ปทัวร์",
+  ]) {
+    await ensureFoodCategory(name);
+  }
+
+  for (const product of productSeeds) {
+    const type = await prisma.productType.findUniqueOrThrow({
+      where: { name: product.typeName },
+    });
+    const category = product.categoryName
+      ? await prisma.foodCategory.findUniqueOrThrow({
+          where: { name: product.categoryName },
+        })
+      : null;
+
     const existing = await prisma.product.findFirst({
-      where: { name: product.name, type: product.type },
+      where: { name: product.name },
     });
     if (existing) {
       await prisma.product.update({
@@ -226,13 +288,27 @@ async function main() {
         data: {
           price: product.price,
           imageUrl: product.imageUrl,
+          typeId: type.id,
+          categoryId: category?.id ?? null,
+          isMinibar: product.isMinibar,
           isActive: true,
         },
       });
     } else {
-      await prisma.product.create({ data: product });
+      await prisma.product.create({
+        data: {
+          name: product.name,
+          price: product.price,
+          imageUrl: product.imageUrl,
+          typeId: type.id,
+          categoryId: category?.id ?? null,
+          isMinibar: product.isMinibar,
+          isActive: true,
+        },
+      });
     }
   }
+
   for (const item of inspectionCatalogs)
     await prisma.inspectionCatalog.upsert({
       where: { name: item.name },
