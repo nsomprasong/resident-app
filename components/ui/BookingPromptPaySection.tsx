@@ -1,7 +1,7 @@
 "use client";
 
-import { Download, QrCode, Upload } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { Camera, Download, Eye, ImagePlus, QrCode, Upload } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import Modal from "@/components/ui/Modal";
 import { useConfirmDialog } from "@/hooks/useConfirmDialog";
@@ -77,7 +77,15 @@ export function BookingPromptPaySection({
   const [saving, setSaving] = useState(false);
   const [qr, setQr] = useState<QrPayload | null>(null);
   const [activePaymentId, setActivePaymentId] = useState<string | null>(null);
+  const [activePaymentStatus, setActivePaymentStatus] = useState<string | null>(
+    null,
+  );
   const [slipFile, setSlipFile] = useState<File | null>(null);
+  const [slipPreviewUrl, setSlipPreviewUrl] = useState<string | null>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const canSubmitActive =
+    activePaymentStatus === "AWAITING_PAYMENT" && Boolean(activePaymentId);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -119,6 +127,20 @@ export function BookingPromptPaySection({
     setAmount(outstanding);
   }, [outstanding]);
 
+  useEffect(() => {
+    if (!slipFile || !slipFile.type.startsWith("image/")) {
+      setSlipPreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(slipFile);
+    setSlipPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [slipFile]);
+
+  const pickSlipFile = (file: File | null | undefined) => {
+    setSlipFile(file ?? null);
+  };
+
   const createPayment = async () => {
     setSaving(true);
     setError("");
@@ -142,6 +164,8 @@ export function BookingPromptPaySection({
       };
       if (!response.ok) throw new Error(body.message ?? "สร้างรายการไม่สำเร็จ");
       setActivePaymentId(body.payment?.id ?? null);
+      setActivePaymentStatus(body.payment?.status ?? "AWAITING_PAYMENT");
+      setSlipFile(null);
       setQr(body.qr ?? null);
       setCreateOpen(false);
       await load();
@@ -153,25 +177,50 @@ export function BookingPromptPaySection({
     }
   };
 
-  const submitSlip = async () => {
-    if (!activePaymentId || !slipFile) return;
+  const submitForVerification = async () => {
+    if (!activePaymentId) return;
     setSaving(true);
+    setError("");
     try {
       const form = new FormData();
-      form.set("file", slipFile);
+      if (slipFile) form.set("file", slipFile);
       const response = await fetch(
         `/api/bookings/${bookingId}/promptpay-payments/${activePaymentId}/submit`,
         { method: "POST", body: form },
       );
       const body = (await response.json()) as { message?: string };
-      if (!response.ok) throw new Error(body.message ?? "ส่งสลิปไม่สำเร็จ");
+      if (!response.ok) throw new Error(body.message ?? "ส่งตรวจสอบไม่สำเร็จ");
       setSlipFile(null);
       setQr(null);
       setActivePaymentId(null);
+      setActivePaymentStatus(null);
       await load();
       onChanged();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "ส่งสลิปไม่สำเร็จ");
+      setError(reason instanceof Error ? reason.message : "ส่งตรวจสอบไม่สำเร็จ");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openSlip = async (paymentId: string) => {
+    setSaving(true);
+    setError("");
+    try {
+      const response = await fetch(
+        `/api/bookings/${bookingId}/promptpay-payments/${paymentId}/slip`,
+        { cache: "no-store" },
+      );
+      const body = (await response.json()) as {
+        signedUrl?: string;
+        message?: string;
+      };
+      if (!response.ok || !body.signedUrl) {
+        throw new Error(body.message ?? "เปิดสลิปไม่สำเร็จ");
+      }
+      window.open(body.signedUrl, "_blank", "noopener,noreferrer");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "เปิดสลิปไม่สำเร็จ");
     } finally {
       setSaving(false);
     }
@@ -232,7 +281,10 @@ export function BookingPromptPaySection({
       );
       const body = (await response.json()) as QrPayload & { message?: string };
       if (!response.ok) throw new Error(body.message ?? "โหลด QR ไม่สำเร็จ");
+      const current = payments.find((item) => item.id === paymentId);
       setActivePaymentId(paymentId);
+      setActivePaymentStatus(current?.status ?? null);
+      setSlipFile(null);
       setQr(body);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "โหลด QR ไม่สำเร็จ");
@@ -337,6 +389,16 @@ export function BookingPromptPaySection({
                       onClick={() => void openQr(payment.id)}
                     >
                       ดู QR
+                    </button>
+                  ) : null}
+                  {payment.hasSlip ? (
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs"
+                      onClick={() => void openSlip(payment.id)}
+                    >
+                      <Eye size={12} />
+                      ดูสลิป
                     </button>
                   ) : null}
                   {payment.status === "PENDING_VERIFICATION" ? (
@@ -449,6 +511,8 @@ export function BookingPromptPaySection({
         onClose={() => {
           setQr(null);
           setActivePaymentId(null);
+          setActivePaymentStatus(null);
+          setSlipFile(null);
         }}
         title="ชำระค่าที่พัก"
       >
@@ -486,24 +550,95 @@ export function BookingPromptPaySection({
                 พิมพ์
               </button>
             </div>
-            <label className="block text-left text-sm">
-              อัปโหลดสลิป
-              <input
-                type="file"
-                accept="image/*,application/pdf"
-                className="mt-1 block w-full text-sm"
-                onChange={(e) => setSlipFile(e.target.files?.[0] ?? null)}
-              />
-            </label>
-            <button
-              type="button"
-              disabled={!slipFile || saving || !activePaymentId}
-              onClick={() => void submitSlip()}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-success px-4 py-3 text-sm font-medium text-primary-foreground disabled:opacity-50"
-            >
-              <Upload size={16} />
-              ส่งตรวจสอบ
-            </button>
+
+            {canSubmitActive ? (
+              <>
+                <input
+                  ref={galleryInputRef}
+                  type="file"
+                  accept="image/*,application/pdf"
+                  className="hidden"
+                  onChange={(e) => {
+                    pickSlipFile(e.target.files?.[0]);
+                    e.target.value = "";
+                  }}
+                />
+                <input
+                  ref={cameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={(e) => {
+                    pickSlipFile(e.target.files?.[0]);
+                    e.target.value = "";
+                  }}
+                />
+
+                <div className="rounded-xl border border-border bg-background p-3 text-left">
+                  <p className="text-sm font-medium text-foreground">สลิปการโอน</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    แนบสลิปได้ถ้ามี หรือกดส่งตรวจสอบได้เลยโดยไม่ต้องแนบ
+                  </p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => galleryInputRef.current?.click()}
+                      className="inline-flex items-center justify-center gap-1 rounded-xl border border-border px-3 py-2 text-sm"
+                    >
+                      <ImagePlus size={16} />
+                      แนบสลิป
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => cameraInputRef.current?.click()}
+                      className="inline-flex items-center justify-center gap-1 rounded-xl border border-border px-3 py-2 text-sm"
+                    >
+                      <Camera size={16} />
+                      ถ่ายรูป
+                    </button>
+                  </div>
+                  {slipFile ? (
+                    <div className="mt-3 space-y-2">
+                      {slipPreviewUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={slipPreviewUrl}
+                          alt="ตัวอย่างสลิป"
+                          className="max-h-40 w-full rounded-lg border border-border object-contain bg-white"
+                        />
+                      ) : null}
+                      <div className="flex items-center justify-between gap-2 text-xs">
+                        <span className="truncate text-muted-foreground">
+                          {slipFile.name}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setSlipFile(null)}
+                          className="shrink-0 text-destructive"
+                        >
+                          ลบ
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+
+                <button
+                  type="button"
+                  disabled={saving || !activePaymentId}
+                  onClick={() => void submitForVerification()}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-success px-4 py-3 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                >
+                  <Upload size={16} />
+                  ส่งตรวจสอบ
+                </button>
+              </>
+            ) : activePaymentStatus === "PENDING_VERIFICATION" ? (
+              <p className="rounded-xl bg-muted px-3 py-2 text-sm text-muted-foreground">
+                ส่งตรวจสอบแล้ว — รอเจ้าหน้าที่ยืนยัน
+              </p>
+            ) : null}
           </div>
         ) : null}
       </Modal>

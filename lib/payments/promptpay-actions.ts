@@ -59,27 +59,56 @@ export async function submitPromptPayPayment(
 ) {
   try {
     const currentUser = await getCurrentUser();
-    const form = await request.formData();
-    const file = form.get("file");
+    let form: FormData;
+    try {
+      form = await request.formData();
+    } catch {
+      form = new FormData();
+    }
+    const fileValue = form.get("file");
     const noteRaw = form.get("note");
     const note = typeof noteRaw === "string" ? noteRaw.trim() : "";
+    const file =
+      fileValue instanceof File && fileValue.size > 0 ? fileValue : null;
 
-    if (!(file instanceof File)) {
-      return apiErrorResponse("กรุณาแนบไฟล์สลิป", 400, "SLIP_REQUIRED");
-    }
-    if (
-      !PAYMENT_SLIP_ALLOWED_TYPES.includes(
-        file.type as (typeof PAYMENT_SLIP_ALLOWED_TYPES)[number],
-      )
-    ) {
-      return apiErrorResponse("ชนิดไฟล์ไม่รองรับ", 400, "INVALID_FILE_TYPE");
-    }
-    if (file.size <= 0 || file.size > PAYMENT_SLIP_MAX_BYTES) {
-      return apiErrorResponse("ขนาดไฟล์ไม่ถูกต้อง", 400, "INVALID_FILE_SIZE");
-    }
+    let objectPath: string | null = null;
+    let slipMeta:
+      | {
+          slipStorageBucket: string;
+          slipStoragePath: string;
+          slipFileName: string;
+          slipContentType: string;
+          slipSizeBytes: number;
+        }
+      | undefined;
 
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const objectPath = `${ids.bookingId}/${ids.paymentId}/${Date.now()}-${file.name.replace(/[^\w.\-]+/g, "_")}`;
+    if (file) {
+      if (
+        !PAYMENT_SLIP_ALLOWED_TYPES.includes(
+          file.type as (typeof PAYMENT_SLIP_ALLOWED_TYPES)[number],
+        )
+      ) {
+        return apiErrorResponse("ชนิดไฟล์ไม่รองรับ", 400, "INVALID_FILE_TYPE");
+      }
+      if (file.size > PAYMENT_SLIP_MAX_BYTES) {
+        return apiErrorResponse("ขนาดไฟล์ไม่ถูกต้อง", 400, "INVALID_FILE_SIZE");
+      }
+
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      objectPath = `${ids.bookingId}/${ids.paymentId}/${Date.now()}-${file.name.replace(/[^\w.\-]+/g, "_")}`;
+      await uploadPaymentSlipObject({
+        objectPath,
+        bytes,
+        contentType: file.type,
+      });
+      slipMeta = {
+        slipStorageBucket: PAYMENT_SLIPS_BUCKET,
+        slipStoragePath: objectPath,
+        slipFileName: file.name,
+        slipContentType: file.type,
+        slipSizeBytes: file.size,
+      };
+    }
 
     const payment = await prisma.$transaction(async (tx) => {
       await acquireBookingFinancialLock(tx, ids.bookingId);
@@ -87,29 +116,21 @@ export async function submitPromptPayPayment(
         where: { id: ids.paymentId, bookingId: ids.bookingId },
       });
       if (!existing) throw new Error("NOT_FOUND");
+      if (existing.status === PaymentStatus.PENDING_VERIFICATION) {
+        throw new Error("ALREADY_SUBMITTED");
+      }
       assertPaymentTransition(
         existing.status,
         PaymentStatus.PENDING_VERIFICATION,
       );
-      if (existing.slipStoragePath) throw new Error("ALREADY_SUBMITTED");
-
-      await uploadPaymentSlipObject({
-        objectPath,
-        bytes,
-        contentType: file.type,
-      });
 
       const updated = await tx.payment.update({
         where: { id: existing.id },
         data: {
           status: PaymentStatus.PENDING_VERIFICATION,
           submittedAt: new Date(),
-          slipStorageBucket: PAYMENT_SLIPS_BUCKET,
-          slipStoragePath: objectPath,
-          slipFileName: file.name,
-          slipContentType: file.type,
-          slipSizeBytes: file.size,
           note: note || existing.note,
+          ...slipMeta,
         },
         select: paymentSelect,
       });
@@ -133,7 +154,11 @@ export async function submitPromptPayPayment(
       action: "PROMPTPAY_PAYMENT_SUBMITTED",
       entityType: "PAYMENT",
       entityId: payment.id,
-      metadata: { bookingId: ids.bookingId, slipPath: objectPath },
+      metadata: {
+        bookingId: ids.bookingId,
+        slipPath: objectPath,
+        hasSlip: Boolean(objectPath),
+      },
     });
 
     return NextResponse.json({ payment: serializePaymentListItem(payment) });
@@ -143,14 +168,14 @@ export async function submitPromptPayPayment(
         return apiErrorResponse("ไม่พบรายการชำระเงิน", 404, "NOT_FOUND");
       }
       if (error.message === "INVALID_STATUS_TRANSITION") {
-        return apiErrorResponse("สถานะไม่อนุญาตให้ส่งสลิป", 409, "INVALID_TRANSITION");
+        return apiErrorResponse("สถานะไม่อนุญาตให้ส่งตรวจสอบ", 409, "INVALID_TRANSITION");
       }
       if (error.message === "ALREADY_SUBMITTED") {
-        return apiErrorResponse("ส่งสลิปแล้ว", 409, "ALREADY_SUBMITTED");
+        return apiErrorResponse("ส่งตรวจสอบแล้ว", 409, "ALREADY_SUBMITTED");
       }
     }
     console.error("submitPromptPayPayment failed", error);
-    return apiErrorResponse("ส่งหลักฐานไม่สำเร็จ", 500, "INTERNAL_ERROR");
+    return apiErrorResponse("ส่งตรวจสอบไม่สำเร็จ", 500, "INTERNAL_ERROR");
   }
 }
 
