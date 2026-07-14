@@ -59,6 +59,24 @@ export function createTemporaryPassword() {
   return `${encoded}Aa1!`;
 }
 
+/** Best-effort Auth user removal after an employee row is wiped. */
+export async function deleteAuthUserById(
+  authUserId: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  try {
+    const admin = createAdminClient();
+    const { error } = await admin.auth.admin.deleteUser(authUserId);
+    if (error) {
+      return { ok: false, message: error.message };
+    }
+    return { ok: true };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "ลบ Auth user ไม่สำเร็จ";
+    return { ok: false, message };
+  }
+}
+
 export type ResolveAuthUserResult =
   | { ok: true; authUserId: string; created: boolean }
   | { ok: false; message: string };

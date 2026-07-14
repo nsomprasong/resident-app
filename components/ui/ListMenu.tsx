@@ -8,7 +8,6 @@ interface MenuItem {
   text: string;
   icon: LucideIcon;
   path: string;
-  tooltip?: string;
 }
 
 export default function ListMenu({
@@ -28,7 +27,7 @@ export default function ListMenu({
         {title}
       </p>
       <ul className="space-y-1">
-        {menuItems.map(({ text, icon: Icon, path, tooltip }) => {
+        {menuItems.map(({ text, icon: Icon, path }) => {
           const active =
             pathname === path ||
             (path !== "/hr" && pathname.startsWith(`${path}/`));
@@ -37,7 +36,6 @@ export default function ListMenu({
               <Link
                 onClick={onClose}
                 href={path}
-                data-tooltip={tooltip ?? `ไปที่${text}`}
                 className={`group flex items-center gap-3 rounded-2xl px-2.5 py-2 text-sm transition ${
                   active
                     ? "bg-primary text-primary-foreground shadow-sm"

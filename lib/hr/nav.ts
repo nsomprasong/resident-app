@@ -66,7 +66,7 @@ export type SelfNavItem = {
 /** Employee self-service menu — visible to anyone with attendance.self. */
 export const selfNavItems: readonly SelfNavItem[] = [
   {
-    text: "งานของฉัน",
+    text: "บันทึกเวลาทำงาน,ลางาน",
     description: "กะวันนี้ ลงเวลาเข้า–ออก แจ้งลา และประวัติของตนเอง",
     path: "/my-work",
     icon: Clock3,

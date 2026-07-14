@@ -19,6 +19,7 @@ const protectedPages = [
   "/report",
   "/settings",
   "/system/data-reset",
+  "/system/audit-logs",
   "/hr",
   "/hr/employees",
   "/hr/schedules",

@@ -8,6 +8,7 @@ import {
   CookingPot,
   Eraser,
   House,
+  ScrollText,
   Settings,
   ShoppingCart,
   Utensils,
@@ -27,49 +28,41 @@ const dailyMenuItems = [
     text: "ภาพรวมวันนี้",
     icon: CalendarCheck2,
     path: "/today",
-    tooltip: "ดูงานวันนี้ เช็กอิน/เช็กเอาต์ และสถานะห้อง",
   },
   {
     text: "รายการจอง",
     icon: BedDouble,
     path: "/booking",
-    tooltip: "จัดการการจอง เช็กอิน เช็กเอาต์ และรับชำระ",
   },
   {
     text: "สั่งอาหาร",
     icon: Utensils,
     path: "/foodOrder",
-    tooltip: "สั่งอาหารเข้าห้องพักหรือลูกค้าหน้าร้าน",
   },
   {
     text: "ครัว",
     icon: CookingPot,
     path: "/kitchen",
-    tooltip: "ดูออเดอร์ครัวและอัปเดตสถานะทำอาหาร",
   },
   {
     text: "แม่บ้านและตรวจสอบห้องพัก",
     icon: House,
     path: "/houseKeeperMinibar",
-    tooltip: "ตรวจห้องหลังเช็กเอาต์และมินิบาร์",
   },
   {
     text: "ซูเปอร์มาร์เก็ต",
     icon: ShoppingCart,
     path: "/pos",
-    tooltip: "ขายหน้าร้าน จัดการสินค้า สต๊อก และกะขาย",
   },
   {
     text: "บัญชีและแดชบอร์ด",
     icon: BarChart3,
     path: "/dashboard",
-    tooltip: "ดูยอดขาย สรุปบัญชี และตัวชี้วัด",
   },
   {
     text: "รายงานรวม",
     icon: ClipboardList,
     path: "/report",
-    tooltip: "ดูและส่งออกรายงานสรุปของระบบ",
   },
 ];
 
@@ -78,13 +71,16 @@ const systemMenuItems = [
     text: "ตั้งค่าข้อมูลหลัก",
     icon: Settings,
     path: "/settings",
-    tooltip: "จัดการห้อง แพ สินค้า พนักงาน บทบาท และช่องทางชำระ",
   },
   {
     text: "ล้างข้อมูลเริ่มต้นใหม่",
     icon: Eraser,
     path: "/system/data-reset",
-    tooltip: "ล้างข้อมูลทดสอบเพื่อเริ่มต้นระบบใหม่",
+  },
+  {
+    text: "บันทึกตรวจสอบระบบ",
+    icon: ScrollText,
+    path: "/system/audit-logs",
   },
 ];
 
@@ -104,7 +100,6 @@ export default function Sidebar({
             text: item.text,
             icon: item.icon,
             path: item.path,
-            tooltip: item.description,
           }))
         : [],
     [employee],
@@ -136,7 +131,6 @@ export default function Sidebar({
             text: item.text,
             icon: item.icon,
             path: item.path,
-            tooltip: item.description,
           }))
         : [],
     [employee],
@@ -180,7 +174,7 @@ export default function Sidebar({
             </div>
             <button
               aria-label="ปิดเมนู"
-              data-tooltip="ปิดเมนูด้านข้าง"
+              data-tooltip-off
               onClick={onClose}
               className="rounded-xl p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground md:hidden"
             >

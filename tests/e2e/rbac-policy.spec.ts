@@ -41,6 +41,7 @@ test("every protected page resolves to an explicit permission", () => {
     ["/dashboard", "report.read"],
     ["/settings", "settings.manage"],
     ["/system/data-reset", "data.reset"],
+    ["/system/audit-logs", "audit.read"],
     ["/wage", "hr.compensation.view"],
     ["/report", "report.read"],
     ["/hr", "hr.employee.view"],
@@ -128,6 +129,7 @@ test("every current business API method resolves to an explicit permission", () 
     ["POST", `/api/employees/${id}/reset-password`, "employee.manage"],
     ["GET", "/api/system/data-reset", "data.reset"],
     ["POST", "/api/system/data-reset", "data.reset"],
+    ["GET", "/api/system/audit-logs", "audit.read"],
     ["GET", "/api/hr/employees", "hr.employee.view"],
     ["POST", "/api/hr/employees", "hr.employee.create"],
     ["GET", `/api/hr/employees/${id}`, "hr.employee.view"],
@@ -189,14 +191,18 @@ test("permission policy follows approved financial and administration rules", ()
   expect(hasPermission("MANAGER", "settings.manage")).toBe(true);
   expect(hasPermission("MANAGER", "authorization.manage")).toBe(false);
   expect(hasPermission("MANAGER", "data.reset")).toBe(false);
+  expect(hasPermission("MANAGER", "audit.read")).toBe(false);
   expect(hasPermission("MANAGER", "hr.employee.view")).toBe(true);
   expect(hasPermission("MANAGER", "hr.payroll.approve")).toBe(false);
   expect(hasPermission("ACCOUNTING", "hr.compensation.view")).toBe(true);
   expect(hasPermission("ADMIN", "authorization.manage")).toBe(true);
   expect(hasPermission("ADMIN", "data.reset")).toBe(true);
+  expect(hasPermission("ADMIN", "audit.read")).toBe(true);
   expect(hasPermission("ADMIN", "hr.settings.manage")).toBe(true);
   expect(canAccessPage("ADMIN", "/system/data-reset")).toBe(true);
   expect(canAccessPage("MANAGER", "/system/data-reset")).toBe(false);
+  expect(canAccessPage("ADMIN", "/system/audit-logs")).toBe(true);
+  expect(canAccessPage("MANAGER", "/system/audit-logs")).toBe(false);
   expect(canAccessPage("ADMIN", "/hr")).toBe(true);
   expect(canAccessPage("MANAGER", "/hr/schedules")).toBe(true);
   expect(canAccessPage("RECEPTION", "/hr")).toBe(false);

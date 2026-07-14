@@ -376,7 +376,7 @@ export default function DataResetManager() {
 
       <CategoryPanel
         title="1. ข้อมูลการเข้ารับบริการ"
-        description="ลบประวัติการจอง ลูกค้า กรุ๊ป ออเดอร์/ชำระเงิน และงานที่เกี่ยวข้อง เพื่อเริ่มรอบบริการใหม่"
+        description="ลบประวัติการจอง ลูกค้า กรุ๊ป ข้อมูลการทำงาน HR (ลงเวลา/ลา/สาย) หรือพนักงาน — คง support/ผู้ทำรายการ และไม่แตะหมุดหรือประเภทลา"
         category="service"
         items={serviceItems}
         counts={payload?.counts ?? emptyCounts}

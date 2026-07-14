@@ -8,6 +8,7 @@ import {
   Eraser,
   House,
   LayoutDashboard,
+  ScrollText,
   Settings,
   ShoppingCart,
   UsersRound,
@@ -31,7 +32,7 @@ type MenuCard = {
 
 const dailyCards: MenuCard[] = [
   {
-    title: "งานของฉัน",
+    title: "บันทึกเวลาทำงาน,ลางาน",
     description: "กะวันนี้ ลงเวลาเข้า–ออก แจ้งลา และประวัติของตนเอง",
     href: "/my-work",
     icon: Clock3,
@@ -100,6 +101,12 @@ const systemCards: MenuCard[] = [
     icon: Eraser,
     tone: "danger",
   },
+  {
+    title: "บันทึกตรวจสอบระบบ",
+    description: "ดูร่องรอยการกระทำในระบบเพื่อสอบทาน",
+    href: "/system/audit-logs",
+    icon: ScrollText,
+  },
 ];
 
 function MenuSection({
@@ -126,7 +133,6 @@ function MenuSection({
           <Link
             key={href}
             href={href}
-            data-tooltip={itemDescription}
             className={`group flex items-start gap-4 rounded-2xl border bg-surface p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
               tone === "danger"
                 ? "border-destructive/25 hover:border-destructive/40"

@@ -99,6 +99,12 @@ export const permissionMenuGroups: readonly PermissionMenuGroup[] = [
     permissions: ["data.reset"],
   },
   {
+    id: "audit-logs",
+    sectionTitle: "งานประจำวัน",
+    title: "บันทึกตรวจสอบระบบ",
+    permissions: ["audit.read"],
+  },
+  {
     id: "hr-overview",
     sectionTitle: "บริหารพนักงาน",
     title: "ภาพรวมบุคลากร · พนักงาน",
@@ -148,7 +154,7 @@ export const permissionMenuGroups: readonly PermissionMenuGroup[] = [
   {
     id: "my-work",
     sectionTitle: "งานประจำวัน",
-    title: "งานของฉัน",
+    title: "บันทึกเวลาทำงาน,ลางาน",
     permissions: ["hr.attendance.self", "hr.leave.self"],
   },
   {

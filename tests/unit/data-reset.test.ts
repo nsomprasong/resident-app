@@ -43,8 +43,13 @@ describe("data-reset target resolution", () => {
 
   it("orders deletes to satisfy foreign keys", () => {
     assert.deepEqual(
-      orderDataResetTargets("service", ["tourGroups", "bookings", "guests"]),
-      ["bookings", "guests", "tourGroups"],
+      orderDataResetTargets("service", [
+        "tourGroups",
+        "employees",
+        "bookings",
+        "guests",
+      ]),
+      ["bookings", "guests", "tourGroups", "employees"],
     );
     assert.deepEqual(
       orderDataResetTargets("master", ["zones", "rooms", "products"]),
@@ -64,10 +69,21 @@ describe("data-reset target resolution", () => {
     assert.equal(DATA_RESET_CONFIRM_PHRASE, "ล้างข้อมูล");
   });
 
-  it("places audit log wipe after booking-related targets", () => {
+  it("places hr work data before employee wipe and before audit logs", () => {
     assert.deepEqual(
-      orderDataResetTargets("service", ["auditLogs", "bookings", "guests"]),
-      ["bookings", "guests", "auditLogs"],
+      orderDataResetTargets("service", [
+        "auditLogs",
+        "employees",
+        "hrWorkData",
+        "workShifts",
+        "bookings",
+      ]),
+      ["bookings", "workShifts", "hrWorkData", "employees", "auditLogs"],
     );
+  });
+
+  it("includes hr work data and employees among service targets", () => {
+    assert.ok(serviceResetTargets.includes("hrWorkData"));
+    assert.ok(serviceResetTargets.includes("employees"));
   });
 });

@@ -7,8 +7,11 @@ import {
 import { recordAuditLog } from "@/lib/audit/audit-log";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/prisma";
+import { deleteAuthUserById } from "@/lib/supabase/admin";
 import {
   DATA_RESET_CONFIRM_PHRASE,
+  DataResetDependencyError,
+  DataResetSafetyError,
   countDataResetTargets,
   executeDataReset,
   masterResetTargetLabels,
@@ -112,10 +115,30 @@ export async function POST(request: NextRequest) {
       return apiErrorResponse(resolved.message, 400, "INVALID_TARGETS");
     }
 
+    const preserveEmployeeIds = currentUser?.employee?.id
+      ? [currentUser.employee.id]
+      : [];
+
     const result = await prisma.$transaction(
-      async (tx) => executeDataReset(tx, category, resolved.targets),
+      async (tx) =>
+        executeDataReset(tx, category, resolved.targets, {
+          preserveEmployeeIds,
+        }),
       { timeout: 60_000 },
     );
+
+    const authCleanup: Array<{ authUserId: string; ok: boolean }> = [];
+    for (const authUserId of result.orphanAuthUserIds) {
+      const deleted = await deleteAuthUserById(authUserId);
+      authCleanup.push({ authUserId, ok: deleted.ok });
+      if (!deleted.ok) {
+        console.error(
+          "Auth cleanup after employee reset failed",
+          authUserId,
+          deleted.message,
+        );
+      }
+    }
 
     await recordAuditLog({
       actor: {
@@ -129,6 +152,7 @@ export async function POST(request: NextRequest) {
         category,
         targets: result.targets,
         deleted: result.deleted,
+        authCleanup,
       },
     });
 
@@ -140,6 +164,13 @@ export async function POST(request: NextRequest) {
       catalog: serializeCatalog(),
     });
   } catch (error) {
+    if (error instanceof DataResetDependencyError) {
+      return apiErrorResponse(error.message, 409, error.code);
+    }
+    if (error instanceof DataResetSafetyError) {
+      return apiErrorResponse(error.message, 409, error.code);
+    }
+
     const prismaCode =
       typeof error === "object" &&
       error !== null &&

@@ -39,6 +39,7 @@ export const permissionThaiLabels = {
   "settings.manage": "จัดการข้อมูลหลัก",
   "authorization.manage": "แก้ไขชุดสิทธิ์ของบทบาท",
   "data.reset": "ล้างข้อมูลเริ่มต้นใหม่",
+  "audit.read": "ดูบันทึกตรวจสอบระบบ",
   "hr.employee.view": "ดูข้อมูลพนักงาน",
   "hr.employee.create": "เพิ่มพนักงาน",
   "hr.employee.update": "แก้ไขข้อมูลพนักงาน",

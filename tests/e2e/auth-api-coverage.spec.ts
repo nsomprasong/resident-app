@@ -64,6 +64,7 @@ const protectedHandlers = [
   { method: "POST", path: "/api/employees/" + id + "/reset-password" },
   { method: "GET", path: "/api/system/data-reset" },
   { method: "POST", path: "/api/system/data-reset" },
+  { method: "GET", path: "/api/system/audit-logs" },
   { method: "GET", path: "/api/hr/employees" },
   { method: "POST", path: "/api/hr/employees" },
   { method: "GET", path: "/api/hr/employees/" + id },
