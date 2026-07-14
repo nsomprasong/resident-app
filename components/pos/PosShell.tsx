@@ -3,8 +3,9 @@
 import { BarChart3, Boxes, Calculator, PackageSearch, Settings, ShoppingCart } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 
+import { useEmployeePermissions } from "@/components/auth/EmployeePermissionsProvider";
 import { PageHeader } from "@/components/ui/PageHeader";
 
 const tabs = [
@@ -24,6 +25,12 @@ type PosShellProps = {
 
 export function PosShell({ title, description, children }: PosShellProps) {
   const pathname = usePathname();
+  const { loaded, canAccessPath } = useEmployeePermissions();
+
+  const visibleTabs = useMemo(
+    () => (loaded ? tabs.filter((tab) => canAccessPath(tab.href)) : []),
+    [loaded, canAccessPath],
+  );
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 sm:p-8">
@@ -33,23 +40,28 @@ export function PosShell({ title, description, children }: PosShellProps) {
         title={title}
         description={description}
         toolbar={
-          <nav className="flex gap-2 overflow-x-auto pb-1" aria-label="เมนูซูเปอร์มาร์เก็ต">
-            {tabs.map(({ href, label, icon: Icon }) => {
-              const active = href === "/pos" ? pathname === href : pathname.startsWith(href);
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition ${
-                    active ? "bg-primary text-primary-foreground" : "border border-border bg-background hover:bg-muted"
-                  }`}
-                >
-                  <Icon size={16} />
-                  {label}
-                </Link>
-              );
-            })}
-          </nav>
+          visibleTabs.length > 0 ? (
+            <nav className="flex gap-2 overflow-x-auto pb-1" aria-label="เมนูซูเปอร์มาร์เก็ต">
+              {visibleTabs.map(({ href, label, icon: Icon }) => {
+                const active =
+                  href === "/pos" ? pathname === href : pathname.startsWith(href);
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition ${
+                      active
+                        ? "bg-primary text-primary-foreground"
+                        : "border border-border bg-background hover:bg-muted"
+                    }`}
+                  >
+                    <Icon size={16} />
+                    {label}
+                  </Link>
+                );
+              })}
+            </nav>
+          ) : null
         }
       />
       {children}

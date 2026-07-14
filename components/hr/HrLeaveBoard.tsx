@@ -3,6 +3,8 @@
 import { Check, Plus, Umbrella, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { useEmployeePermissions } from "@/components/auth/EmployeePermissionsProvider";
+
 type LeaveType = {
   id: string;
   code: string;
@@ -64,14 +66,15 @@ function todayKey() {
 }
 
 export function HrLeaveBoard() {
+  const { can } = useEmployeePermissions();
+  const canApprove = can("hr.leave.approve");
+  const canSettings = can("hr.settings.manage");
   const year = new Date().getUTCFullYear();
   const [types, setTypes] = useState<LeaveType[]>([]);
   const [balances, setBalances] = useState<LeaveBalance[]>([]);
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
-  const [canApprove, setCanApprove] = useState(false);
-  const [canSettings, setCanSettings] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -97,8 +100,7 @@ export function HrLeaveBoard() {
     setLoading(true);
     setError("");
     try {
-      const [meRes, typesRes, balRes, reqRes, holRes, empRes] = await Promise.all([
-        fetch("/api/auth/me", { cache: "no-store" }),
+      const [typesRes, balRes, reqRes, holRes, empRes] = await Promise.all([
         fetch("/api/hr/leave-types", { cache: "no-store" }),
         fetch(`/api/hr/leave-balances?year=${year}`, { cache: "no-store" }),
         fetch("/api/hr/leave-requests?status=PENDING", { cache: "no-store" }),
@@ -109,14 +111,6 @@ export function HrLeaveBoard() {
         fetch("/api/hr/employees?pageSize=100", { cache: "no-store" }),
       ]);
 
-      if (meRes.ok) {
-        const me = (await meRes.json()) as {
-          employee: { id?: string; permissions: string[] };
-        };
-        setCanApprove(me.employee.permissions.includes("hr.leave.approve"));
-        setCanSettings(me.employee.permissions.includes("hr.settings.manage"));
-        if (me.employee.id) setEmployeeId((prev) => prev || me.employee.id!);
-      }
       if (!typesRes.ok || !balRes.ok || !reqRes.ok || !holRes.ok) {
         throw new Error("โหลดข้อมูลวันลาไม่สำเร็จ");
       }

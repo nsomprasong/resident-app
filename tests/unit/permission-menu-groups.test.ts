@@ -26,7 +26,8 @@ describe("permissionMenuGroups", () => {
     assert.ok(titles.includes("บัญชีและแดชบอร์ด"));
     assert.ok(titles.includes("รายงานรวม"));
     assert.ok(
-      titles.indexOf("รายงานรวม") > titles.indexOf("ล้างข้อมูลเริ่มต้นใหม่"),
+      titles.indexOf("รายงานรวม") ===
+        titles.indexOf("บัญชีและแดชบอร์ด") + 1,
     );
     assert.ok(titles.includes("ตั้งค่าข้อมูลหลัก"));
     assert.ok(titles.includes("ตารางงาน"));

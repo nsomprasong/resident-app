@@ -3,6 +3,8 @@
 import { Camera, Download, Eye, ImagePlus, QrCode, Upload } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { PermissionGate } from "@/components/auth/PermissionGate";
+import { useEmployeePermissions } from "@/components/auth/EmployeePermissionsProvider";
 import Modal from "@/components/ui/Modal";
 import { useConfirmDialog } from "@/hooks/useConfirmDialog";
 import type { PromptPayAccountRecord } from "@/lib/settings/promptpay-account-shared";
@@ -64,6 +66,9 @@ export function BookingPromptPaySection({
   outstanding: number;
   onChanged: () => void;
 }) {
+  const { can, canAny } = useEmployeePermissions();
+  const canVerify = can("payment.verify");
+  const canCancelPayment = canAny(["payment.cancel", "payment.collect"]);
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const [summary, setSummary] = useState<Summary | null>(null);
   const [payments, setPayments] = useState<PaymentListItem[]>([]);
@@ -330,19 +335,21 @@ export function BookingPromptPaySection({
             สร้าง QR ตามยอดคงเหลือ — นับเป็นชำระแล้วเมื่อยืนยันเท่านั้น
           </p>
         </div>
-        <button
-          type="button"
-          disabled={outstanding <= 0}
-          onClick={() => {
-            setAmount(outstanding);
-            setPurpose(outstanding > 0 ? "PARTIAL" : "FULL");
-            setCreateOpen(true);
-          }}
-          className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
-        >
-          <QrCode size={16} />
-          รับชำระเงิน
-        </button>
+        <PermissionGate anyOf={["payment.create", "payment.collect"]}>
+          <button
+            type="button"
+            disabled={outstanding <= 0}
+            onClick={() => {
+              setAmount(outstanding);
+              setPurpose(outstanding > 0 ? "PARTIAL" : "FULL");
+              setCreateOpen(true);
+            }}
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
+          >
+            <QrCode size={16} />
+            รับชำระเงิน
+          </button>
+        </PermissionGate>
       </div>
 
       {summary ? (
@@ -401,7 +408,7 @@ export function BookingPromptPaySection({
                       ดูสลิป
                     </button>
                   ) : null}
-                  {payment.status === "PENDING_VERIFICATION" ? (
+                  {payment.status === "PENDING_VERIFICATION" && canVerify ? (
                     <>
                       <button
                         type="button"
@@ -421,7 +428,7 @@ export function BookingPromptPaySection({
                   ) : null}
                   {["AWAITING_PAYMENT", "PENDING_VERIFICATION"].includes(
                     payment.status,
-                  ) ? (
+                  ) && canCancelPayment ? (
                     <button
                       type="button"
                       className="rounded-lg border border-border px-2 py-1 text-xs"

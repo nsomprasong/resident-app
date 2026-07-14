@@ -3,6 +3,7 @@
 import { Archive, Pencil, Plus, Search } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
+import { useEmployeePermissions } from "@/components/auth/EmployeePermissionsProvider";
 import { useConfirmDialog } from "@/hooks/useConfirmDialog";
 import {
   employeeHrStatuses,
@@ -44,7 +45,7 @@ const emptyForm: FormState = {
 
 export function HrEmployeesManager() {
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
-  const [permissions, setPermissions] = useState<string[]>([]);
+  const { permissions } = useEmployeePermissions();
   const [items, setItems] = useState<HrEmployeeRecord[]>([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -94,26 +95,6 @@ export function HrEmployeesManager() {
       setLoading(false);
     }
   }, [page, q, employmentType, hrStatus]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void (async () => {
-      try {
-        const response = await fetch("/api/auth/me", {
-          signal: controller.signal,
-          cache: "no-store",
-        });
-        if (!response.ok) return;
-        const data = (await response.json()) as {
-          employee: { permissions: string[] };
-        };
-        setPermissions(data.employee.permissions);
-      } catch {
-        // ignore
-      }
-    })();
-    return () => controller.abort();
-  }, []);
 
   useEffect(() => {
     void load();

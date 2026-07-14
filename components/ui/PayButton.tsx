@@ -1,6 +1,8 @@
 "use client";
 import { Banknote, CircleCheck, Plus, Save, Undo2 } from "lucide-react";
 import { useEffect, useState } from "react";
+
+import { useEmployeePermissions } from "@/components/auth/EmployeePermissionsProvider";
 import Modal from "./Modal";
 type Method = "CASH" | "TRANSFER" | "PROMPTPAY" | "CARD";
 interface Channel {
@@ -21,7 +23,9 @@ export default function PayButton({
   ) => Promise<void>;
   mode?: "payment" | "refund";
 }) {
+  const { loaded, can } = useEmployeePermissions();
   const refund = mode === "refund";
+  const allowed = refund ? can("payment.refund") : can("payment.collect");
   const [open, setOpen] = useState(false);
   const [paidAmount, setPaidAmount] = useState(amount);
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -76,6 +80,8 @@ export default function PayButton({
       setSaving(false);
     }
   };
+  if (!loaded || !allowed) return null;
+
   return (
     <>
       <button

@@ -1,9 +1,27 @@
-import { PosAccountingEntryType, PosShiftStatus } from "@/generated/prisma/client";
-import { calculateExpectedCash } from "@/lib/pos/calculations";
+import {
+  PosAccountingEntryType,
+  PosSaleStatus,
+  PosShiftStatus,
+} from "@/generated/prisma/client";
+import {
+  summarizeShiftCash,
+} from "@/lib/pos/calculations";
 import { money, type MoneyInput } from "@/lib/pos/money";
 import { prisma } from "@/lib/prisma";
 
-export { calculateExpectedCash } from "@/lib/pos/calculations";
+export {
+  calculateExpectedCash,
+  summarizeShiftCash,
+  summarizeShiftPayments,
+  POS_PAYMENT_METHODS,
+} from "@/lib/pos/calculations";
+
+const shiftSalesInclude = {
+  sales: {
+    where: { status: { not: PosSaleStatus.CANCELLED } },
+    include: { payments: true, refunds: true },
+  },
+} as const;
 
 export async function openShift(employeeId: string, openingFloat: MoneyInput, note?: string) {
   return prisma.$transaction(async (tx) => {
@@ -15,11 +33,12 @@ export async function openShift(employeeId: string, openingFloat: MoneyInput, no
 
 export async function closeShift(shiftId: string, employeeId: string, counted: MoneyInput, note?: string) {
   return prisma.$transaction(async (tx) => {
-    const shift = await tx.posShift.findFirst({ where: { id: shiftId, status: PosShiftStatus.OPEN }, include: { cashMovements: true, sales: { include: { payments: true, refunds: true } } } });
+    const shift = await tx.posShift.findFirst({
+      where: { id: shiftId, status: PosShiftStatus.OPEN },
+      include: { cashMovements: true, ...shiftSalesInclude },
+    });
     if (!shift) throw new Error("SHIFT_NOT_OPEN");
-    const cashSales = shift.sales.flatMap((sale) => sale.payments.filter((payment) => payment.method === "CASH").map((payment) => payment.amount));
-    const cashRefunds = shift.sales.flatMap((sale) => sale.refunds.filter((refund) => refund.refundMethod === "CASH").map((refund) => refund.refundTotal));
-    const expected = calculateExpectedCash({ openingFloat: shift.openingFloat, cashSales, cashIns: shift.cashMovements.filter((movement) => movement.type === "IN").map((movement) => movement.amount), cashOuts: shift.cashMovements.filter((movement) => movement.type === "OUT").map((movement) => movement.amount), cashRefunds });
+    const expected = summarizeShiftCash(shift);
     const countedMoney = money(counted);
     const variance = countedMoney.minus(expected);
     const updated = await tx.posShift.update({ where: { id: shiftId }, data: { status: PosShiftStatus.CLOSED, closedById: employeeId, closedAt: new Date(), closingCashCounted: countedMoney, expectedCash: expected, cashVariance: variance, note: note ?? shift.note } });

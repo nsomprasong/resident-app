@@ -441,9 +441,11 @@ const apiPermissionRules: readonly ApiPermissionRule[] = [
   { method: "GET", pattern: /^\/api\/pos\/categories$/, permission: "pos.product.view" },
   { method: "POST", pattern: /^\/api\/pos\/categories$/, permission: "pos.product.manage" },
   { method: "PATCH", pattern: /^\/api\/pos\/categories\/[^/]+$/, permission: "pos.product.manage" },
+  { method: "DELETE", pattern: /^\/api\/pos\/categories\/[^/]+$/, permission: "pos.product.manage" },
   { method: "GET", pattern: /^\/api\/pos\/products$/, permission: "pos.product.view" },
   { method: "POST", pattern: /^\/api\/pos\/products$/, permission: "pos.product.manage" },
   { method: "PATCH", pattern: /^\/api\/pos\/products\/[^/]+$/, permission: "pos.product.manage" },
+  { method: "DELETE", pattern: /^\/api\/pos\/products\/[^/]+$/, permission: "pos.product.manage" },
   { method: "POST", pattern: /^\/api\/pos\/images$/, permission: "pos.product.manage" },
   { method: "GET", pattern: /^\/api\/pos\/stock\/ledger$/, permission: "pos.stock.view" },
   { method: "POST", pattern: /^\/api\/pos\/stock\/receive$/, permission: "pos.stock.receive" },
@@ -469,6 +471,8 @@ const apiPermissionRules: readonly ApiPermissionRule[] = [
   { method: "GET", pattern: /^\/api\/pos\/reports$/, permission: "pos.report.view" },
   { method: "GET", pattern: /^\/api\/pos\/accounting$/, permission: "pos.accounting.post" },
   { method: "GET", pattern: /^\/api\/pos\/bookings\/search$/, permission: "pos.sell" },
+  { method: "GET", pattern: /^\/api\/pos\/promptpay-accounts$/, permission: "pos.sell" },
+  { method: "POST", pattern: /^\/api\/pos\/promptpay-qr$/, permission: "pos.sell" },
 ];
 
 /**

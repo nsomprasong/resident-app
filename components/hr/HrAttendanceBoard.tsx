@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { useEmployeePermissions } from "@/components/auth/EmployeePermissionsProvider";
+
 type AttendanceRow = {
   id: string;
   employeeName: string;
@@ -67,10 +69,11 @@ function formatTime(value: string | null) {
 }
 
 export function HrAttendanceBoard() {
+  const { can } = useEmployeePermissions();
+  const canApprove = can("hr.attendance.approve");
   const [workDate, setWorkDate] = useState(todayKey);
   const [records, setRecords] = useState<AttendanceRow[]>([]);
   const [pending, setPending] = useState<PendingApproval[]>([]);
-  const [canApprove, setCanApprove] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -82,20 +85,10 @@ export function HrAttendanceBoard() {
     setLoading(true);
     setError("");
     try {
-      const [meRes, dataRes] = await Promise.all([
-        fetch("/api/auth/me", { cache: "no-store" }),
-        fetch(`/api/hr/attendance?from=${workDate}&to=${workDate}`, {
-          cache: "no-store",
-        }),
-      ]);
-      if (meRes.ok) {
-        const me = (await meRes.json()) as {
-          employee: { permissions: string[] };
-        };
-        setCanApprove(
-          me.employee.permissions.includes("hr.attendance.approve"),
-        );
-      }
+      const dataRes = await fetch(
+        `/api/hr/attendance?from=${workDate}&to=${workDate}`,
+        { cache: "no-store" },
+      );
       if (!dataRes.ok) {
         const body = (await dataRes.json().catch(() => null)) as {
           message?: string;

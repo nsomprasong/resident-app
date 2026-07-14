@@ -16,6 +16,8 @@ import {
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import { PermissionGate } from "@/components/auth/PermissionGate";
+import { useEmployeePermissions } from "@/components/auth/EmployeePermissionsProvider";
 import AddBookingFoodDialog from "@/components/ui/AddBookingFoodDialog";
 import BackButton from "@/components/ui/BackButton";
 import BillItem from "@/components/ui/BillItem";
@@ -88,6 +90,8 @@ const actionIcons: Record<string, typeof LogIn> = {
 
 export default function BookingDetailPage() {
   const { bookingId } = useParams<{ bookingId: string }>();
+  const { can } = useEmployeePermissions();
+  const canLifecycle = can("booking.lifecycle");
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const [data, setData] = useState<Detail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -550,40 +554,48 @@ export default function BookingDetailPage() {
               <div className="flex flex-wrap gap-2">
                 {canManageItems ? (
                   <>
-                    <button
-                      type="button"
-                      onClick={() => setOpenManageResources(true)}
-                      className="inline-flex items-center gap-2 rounded-xl border border-secondary/30 px-4 py-2 text-sm text-secondary"
-                    >
-                      <Pencil size={17} />
-                      จัดการห้องและแพ
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setOpenManageFood(true)}
-                      className="inline-flex items-center gap-2 rounded-xl border border-secondary/30 px-4 py-2 text-sm text-secondary"
-                    >
-                      <Utensils size={17} />
-                      จัดการรายการอาหาร
-                    </button>
+                    <PermissionGate permission="resource.manage">
+                      <button
+                        type="button"
+                        onClick={() => setOpenManageResources(true)}
+                        className="inline-flex items-center gap-2 rounded-xl border border-secondary/30 px-4 py-2 text-sm text-secondary"
+                      >
+                        <Pencil size={17} />
+                        จัดการห้องและแพ
+                      </button>
+                    </PermissionGate>
+                    <PermissionGate permission="order.write">
+                      <button
+                        type="button"
+                        onClick={() => setOpenManageFood(true)}
+                        className="inline-flex items-center gap-2 rounded-xl border border-secondary/30 px-4 py-2 text-sm text-secondary"
+                      >
+                        <Utensils size={17} />
+                        จัดการรายการอาหาร
+                      </button>
+                    </PermissionGate>
                   </>
                 ) : null}
-                {primaryStatuses.map((status) => {
-                  const Icon = actionIcons[status];
-                  return (
-                    <button
-                      key={status}
-                      type="button"
-                      disabled={updating}
-                      onClick={() => updateStatus(status)}
-                      className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm text-primary-foreground"
-                    >
-                      {Icon ? <Icon size={17} /> : null}
-                      {actionLabels[status] ?? status}
-                    </button>
-                  );
-                })}
-                {data.status === "CHECKED_OUT" && !data.jobClosed ? (
+                {canLifecycle
+                  ? primaryStatuses.map((status) => {
+                      const Icon = actionIcons[status];
+                      return (
+                        <button
+                          key={status}
+                          type="button"
+                          disabled={updating}
+                          onClick={() => updateStatus(status)}
+                          className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm text-primary-foreground"
+                        >
+                          {Icon ? <Icon size={17} /> : null}
+                          {actionLabels[status] ?? status}
+                        </button>
+                      );
+                    })
+                  : null}
+                {canLifecycle &&
+                data.status === "CHECKED_OUT" &&
+                !data.jobClosed ? (
                   <button
                     type="button"
                     disabled={updating || !data.housekeepingReady}
@@ -602,7 +614,7 @@ export default function BookingDetailPage() {
                 ) : null}
               </div>
 
-              {canCancel ? (
+              {canCancel && canLifecycle ? (
                 <button
                   type="button"
                   disabled={updating}

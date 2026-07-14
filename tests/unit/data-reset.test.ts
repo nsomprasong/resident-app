@@ -7,10 +7,11 @@ import {
   orderDataResetTargets,
   resolveDataResetTargets,
   serviceResetTargets,
-} from "@/lib/system/data-reset";
+  supermarketResetTargets,
+} from "../../lib/system/data-reset";
 
 describe("data-reset target resolution", () => {
-  it("expands all service and master targets", () => {
+  it("expands all service, master, and supermarket targets", () => {
     assert.deepEqual(
       resolveDataResetTargets("service", "all"),
       { ok: true, targets: [...serviceResetTargets] },
@@ -18,6 +19,10 @@ describe("data-reset target resolution", () => {
     assert.deepEqual(
       resolveDataResetTargets("master", "all"),
       { ok: true, targets: [...masterResetTargets] },
+    );
+    assert.deepEqual(
+      resolveDataResetTargets("supermarket", "all"),
+      { ok: true, targets: [...supermarketResetTargets] },
     );
   });
 
@@ -28,6 +33,11 @@ describe("data-reset target resolution", () => {
     });
     assert.equal(resolveDataResetTargets("service", ["rooms"]).ok, false);
     assert.equal(resolveDataResetTargets("master", ["bookings"]).ok, false);
+    assert.equal(resolveDataResetTargets("supermarket", ["products"]).ok, false);
+    assert.equal(
+      resolveDataResetTargets("supermarket", ["posSales", "posProducts"]).ok,
+      true,
+    );
     assert.equal(resolveDataResetTargets("service", []).ok, false);
   });
 
@@ -39,6 +49,14 @@ describe("data-reset target resolution", () => {
     assert.deepEqual(
       orderDataResetTargets("master", ["zones", "rooms", "products"]),
       ["products", "rooms", "zones"],
+    );
+    assert.deepEqual(
+      orderDataResetTargets("supermarket", [
+        "posCategories",
+        "posSales",
+        "posProducts",
+      ]),
+      ["posSales", "posProducts", "posCategories"],
     );
   });
 

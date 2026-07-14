@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
+import { useEmployeePermissions } from "@/components/auth/EmployeePermissionsProvider";
+
 type Period = {
   id: string;
   name: string;
@@ -67,13 +69,17 @@ function money(value: number) {
 }
 
 export function HrPayrollBoard() {
+  const { can } = useEmployeePermissions();
+  const canCalculate = can("hr.payroll.calculate");
+  const canApprove = can("hr.payroll.approve");
+  const canMarkPaid = can("hr.payroll.mark_paid");
+  const canSettings = can("hr.settings.manage");
   const [periods, setPeriods] = useState<Period[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [compensations, setCompensations] = useState<Compensation[]>([]);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [settings, setSettings] = useState<Setting[]>([]);
-  const [perms, setPerms] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -94,28 +100,16 @@ export function HrPayrollBoard() {
   const [adjAmount, setAdjAmount] = useState("0");
   const [adjReason, setAdjReason] = useState("");
 
-  const canCalculate = perms.includes("hr.payroll.calculate");
-  const canApprove = perms.includes("hr.payroll.approve");
-  const canMarkPaid = perms.includes("hr.payroll.mark_paid");
-  const canSettings = perms.includes("hr.settings.manage");
-
   const loadList = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const [meRes, periodRes, compRes, empRes, setRes] = await Promise.all([
-        fetch("/api/auth/me", { cache: "no-store" }),
+      const [periodRes, compRes, empRes, setRes] = await Promise.all([
         fetch("/api/hr/payroll/periods", { cache: "no-store" }),
         fetch("/api/hr/compensations", { cache: "no-store" }),
         fetch("/api/hr/employees?pageSize=100", { cache: "no-store" }),
         fetch("/api/hr/payroll/settings", { cache: "no-store" }),
       ]);
-      if (meRes.ok) {
-        const me = (await meRes.json()) as {
-          employee: { permissions: string[] };
-        };
-        setPerms(me.employee.permissions);
-      }
       if (!periodRes.ok || !compRes.ok) {
         throw new Error("โหลดข้อมูลค่าจ้างไม่สำเร็จ");
       }

@@ -11,15 +11,19 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   DATA_RESET_CONFIRM_PHRASE,
+  dataResetCategoryLabel,
   masterResetTargetLabels,
   masterResetTargets,
   serviceResetTargetLabels,
   serviceResetTargets,
+  supermarketResetTargetLabels,
+  supermarketResetTargets,
   type DataResetCategory,
   type DataResetCounts,
   type DataResetTarget,
   type MasterResetTarget,
   type ServiceResetTarget,
+  type SupermarketResetTarget,
 } from "@/lib/system/data-reset";
 
 type CatalogItem = { id: string; label: string };
@@ -28,6 +32,7 @@ type ResetPayload = {
   confirmPhrase: string;
   service: CatalogItem[];
   master: CatalogItem[];
+  supermarket: CatalogItem[];
   counts: DataResetCounts;
 };
 
@@ -160,7 +165,7 @@ function CategoryPanel({
           </button>
         </div>
         <p className="text-xs text-muted-foreground">
-          หมวด {category === "service" ? "บริการ" : "ข้อมูลหลัก"} · การลบไม่สามารถย้อนกลับได้
+          หมวด {dataResetCategoryLabel(category)} · การลบไม่สามารถย้อนกลับได้
         </p>
       </div>
     </section>
@@ -179,8 +184,12 @@ export default function DataResetManager() {
     new Set(),
   );
   const [masterSelected, setMasterSelected] = useState<Set<string>>(new Set());
+  const [supermarketSelected, setSupermarketSelected] = useState<Set<string>>(
+    new Set(),
+  );
   const [serviceConfirm, setServiceConfirm] = useState("");
   const [masterConfirm, setMasterConfirm] = useState("");
+  const [supermarketConfirm, setSupermarketConfirm] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -228,23 +237,61 @@ export default function DataResetManager() {
       })),
     [payload],
   );
+  const supermarketItems = useMemo(
+    () =>
+      payload?.supermarket ??
+      supermarketResetTargets.map((id) => ({
+        id,
+        label: supermarketResetTargetLabels[id as SupermarketResetTarget],
+      })),
+    [payload],
+  );
 
   const emptyCounts = useMemo(() => {
     const counts = {} as DataResetCounts;
-    for (const id of [...serviceResetTargets, ...masterResetTargets]) {
+    for (const id of [
+      ...serviceResetTargets,
+      ...masterResetTargets,
+      ...supermarketResetTargets,
+    ]) {
       counts[id] = 0;
     }
     return counts;
   }, []);
 
+  function selectedFor(category: DataResetCategory) {
+    if (category === "service") return serviceSelected;
+    if (category === "master") return masterSelected;
+    return supermarketSelected;
+  }
+
+  function confirmFor(category: DataResetCategory) {
+    if (category === "service") return serviceConfirm;
+    if (category === "master") return masterConfirm;
+    return supermarketConfirm;
+  }
+
+  function clearSelection(category: DataResetCategory) {
+    if (category === "service") {
+      setServiceSelected(new Set());
+      setServiceConfirm("");
+      return;
+    }
+    if (category === "master") {
+      setMasterSelected(new Set());
+      setMasterConfirm("");
+      return;
+    }
+    setSupermarketSelected(new Set());
+    setSupermarketConfirm("");
+  }
+
   async function runReset(
     category: DataResetCategory,
     mode: "selected" | "all",
   ) {
-    const selected =
-      category === "service" ? serviceSelected : masterSelected;
-    const confirm =
-      category === "service" ? serviceConfirm : masterConfirm;
+    const selected = selectedFor(category);
+    const confirm = confirmFor(category);
     setBusyCategory(category);
     setError(null);
     setMessage(null);
@@ -271,21 +318,13 @@ export default function DataResetManager() {
       } else {
         await load();
       }
-      if (category === "service") {
-        setServiceSelected(new Set());
-        setServiceConfirm("");
-      } else {
-        setMasterSelected(new Set());
-        setMasterConfirm("");
-      }
+      clearSelection(category);
       const deletedTotal = Object.values(body?.deleted ?? {}).reduce(
         (sum: number, value) => sum + (value ?? 0),
         0,
       );
       setMessage(
-        `ลบสำเร็จ ${formatCount(deletedTotal)} รายการในหมวด${
-          category === "service" ? "การเข้ารับบริการ" : "ข้อมูลหลัก"
-        }`,
+        `ลบสำเร็จ ${formatCount(deletedTotal)} รายการในหมวด${dataResetCategoryLabel(category)}`,
       );
     } catch (submitError) {
       setError(
@@ -298,12 +337,13 @@ export default function DataResetManager() {
     }
   }
 
-  function toggle(
-    category: DataResetCategory,
-    id: string,
-  ) {
+  function toggle(category: DataResetCategory, id: string) {
     const setter =
-      category === "service" ? setServiceSelected : setMasterSelected;
+      category === "service"
+        ? setServiceSelected
+        : category === "master"
+          ? setMasterSelected
+          : setSupermarketSelected;
     setter((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -368,6 +408,26 @@ export default function DataResetManager() {
         busy={busyCategory === "master"}
         confirm={masterConfirm}
         onConfirmChange={setMasterConfirm}
+      />
+
+      <CategoryPanel
+        title="3. ซูเปอร์มาร์เก็ต"
+        description="ลบข้อมูลขาย สินค้า และหมวดหมู่ของ POS — ลบข้อมูลขายก่อน หากจะลบสินค้าหรือหมวดหมู่"
+        category="supermarket"
+        items={supermarketItems}
+        counts={payload?.counts ?? emptyCounts}
+        selected={supermarketSelected}
+        onToggle={(id) => toggle("supermarket", id)}
+        onSelectAll={() =>
+          setSupermarketSelected(
+            new Set(supermarketItems.map((item) => item.id)),
+          )
+        }
+        onClear={() => setSupermarketSelected(new Set())}
+        onSubmit={(mode) => void runReset("supermarket", mode)}
+        busy={busyCategory === "supermarket"}
+        confirm={supermarketConfirm}
+        onConfirmChange={setSupermarketConfirm}
       />
     </div>
   );

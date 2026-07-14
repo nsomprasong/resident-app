@@ -1,45 +1,46 @@
 import { apiErrorResponse } from "@/lib/api/validation";
 import { recordAuditLog } from "@/lib/audit/audit-log";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import {
+  extensionForImageMime,
+  asUploadFile,
+  resolveImageMime,
+} from "@/lib/media/image-mime";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { NextRequest, NextResponse } from "next/server";
 
 const BUCKET = "pos-product-images";
-const MAX_BYTES = 3 * 1024 * 1024;
-const ALLOWED_TYPES = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/gif",
-]);
-
-function extensionForMime(mime: string): string {
-  switch (mime) {
-    case "image/jpeg":
-      return "jpg";
-    case "image/png":
-      return "png";
-    case "image/webp":
-      return "webp";
-    case "image/gif":
-      return "gif";
-    default:
-      return "bin";
-  }
-}
+const MAX_BYTES = 8 * 1024 * 1024;
 
 async function ensurePublicBucket() {
   const admin = createAdminClient();
   const { data: buckets, error: listError } = await admin.storage.listBuckets();
   if (listError) throw new Error(listError.message);
-  const exists = buckets?.some((bucket) => bucket.name === BUCKET);
-  if (!exists) {
+  const existing = buckets?.find((bucket) => bucket.name === BUCKET);
+  if (!existing) {
     const { error: createError } = await admin.storage.createBucket(BUCKET, {
       public: true,
       fileSizeLimit: MAX_BYTES,
-      allowedMimeTypes: [...ALLOWED_TYPES],
+      allowedMimeTypes: [
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "image/gif",
+      ],
     });
     if (createError) throw new Error(createError.message);
+  } else if (!existing.public) {
+    const { error: updateError } = await admin.storage.updateBucket(BUCKET, {
+      public: true,
+      fileSizeLimit: MAX_BYTES,
+      allowedMimeTypes: [
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "image/gif",
+      ],
+    });
+    if (updateError) throw new Error(updateError.message);
   }
   return admin;
 }
@@ -54,34 +55,44 @@ export async function POST(request: NextRequest) {
     }
 
     const formData = await request.formData();
-    const fileValue = formData.get("file");
-    if (!(fileValue instanceof File)) {
+    const fileValue = asUploadFile(formData.get("file"));
+    if (!fileValue || fileValue.size <= 0) {
       return apiErrorResponse("กรุณาเลือกรูปภาพ", 400, "VALIDATION_ERROR");
     }
-    if (!ALLOWED_TYPES.has(fileValue.type)) {
+    if (fileValue.size > MAX_BYTES) {
+      return apiErrorResponse("ขนาดรูปต้องไม่เกิน 8 MB", 400, "VALIDATION_ERROR");
+    }
+
+    const bytes = new Uint8Array(await fileValue.arrayBuffer());
+    const contentType = resolveImageMime({
+      type: fileValue.type,
+      name: fileValue.name || "capture.jpg",
+      bytes,
+    });
+    if (!contentType) {
       return apiErrorResponse(
         "รองรับเฉพาะไฟล์ JPG, PNG, WEBP หรือ GIF",
         400,
         "VALIDATION_ERROR",
       );
     }
-    if (fileValue.size <= 0 || fileValue.size > MAX_BYTES) {
-      return apiErrorResponse("ขนาดรูปต้องไม่เกิน 3 MB", 400, "VALIDATION_ERROR");
-    }
 
     const admin = await ensurePublicBucket();
-    const ext = extensionForMime(fileValue.type);
+    const ext = extensionForImageMime(contentType);
     const objectPath = `${Date.now()}-${crypto.randomUUID()}.${ext}`;
-    const bytes = new Uint8Array(await fileValue.arrayBuffer());
     const { error: uploadError } = await admin.storage
       .from(BUCKET)
       .upload(objectPath, bytes, {
-        contentType: fileValue.type,
+        contentType,
         upsert: false,
       });
     if (uploadError) {
       console.error("POS product image upload failed", uploadError);
-      return apiErrorResponse("อัปโหลดรูปไม่สำเร็จ", 500, "INTERNAL_ERROR");
+      return apiErrorResponse(
+        `อัปโหลดรูปไม่สำเร็จ: ${uploadError.message}`,
+        500,
+        "INTERNAL_ERROR",
+      );
     }
 
     const { data: publicData } = admin.storage
@@ -99,7 +110,7 @@ export async function POST(request: NextRequest) {
       entityId: objectPath,
       metadata: {
         bucket: BUCKET,
-        contentType: fileValue.type,
+        contentType,
         size: fileValue.size,
       },
     });
@@ -111,7 +122,9 @@ export async function POST(request: NextRequest) {
       error instanceof Error &&
       error.message.includes("SUPABASE_SERVICE_ROLE_KEY")
         ? "ยังไม่ได้ตั้งค่าอัปโหลดรูปบนเซิร์ฟเวอร์"
-        : "อัปโหลดรูปไม่สำเร็จ";
+        : error instanceof Error
+          ? error.message
+          : "อัปโหลดรูปไม่สำเร็จ";
     return apiErrorResponse(message, 500, "INTERNAL_ERROR");
   }
 }

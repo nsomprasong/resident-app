@@ -71,6 +71,12 @@ export const permissionMenuGroups: readonly PermissionMenuGroup[] = [
     permissions: ["report.read"],
   },
   {
+    id: "report",
+    sectionTitle: "งานประจำวัน",
+    title: "รายงานรวม",
+    permissions: ["report.read", "payment.report.view"],
+  },
+  {
     id: "settings",
     sectionTitle: "งานประจำวัน",
     title: "ตั้งค่าข้อมูลหลัก",
@@ -91,12 +97,6 @@ export const permissionMenuGroups: readonly PermissionMenuGroup[] = [
     sectionTitle: "งานประจำวัน",
     title: "ล้างข้อมูลเริ่มต้นใหม่",
     permissions: ["data.reset"],
-  },
-  {
-    id: "report",
-    sectionTitle: "งานประจำวัน",
-    title: "รายงานรวม",
-    permissions: ["report.read", "payment.report.view"],
   },
   {
     id: "hr-overview",

@@ -16,6 +16,8 @@ import {
   resolveDataResetTargets,
   serviceResetTargetLabels,
   serviceResetTargets,
+  supermarketResetTargetLabels,
+  supermarketResetTargets,
   type DataResetCategory,
 } from "@/lib/system/data-reset";
 import { NextRequest, NextResponse } from "next/server";
@@ -31,7 +33,15 @@ function serializeCatalog() {
       id,
       label: masterResetTargetLabels[id],
     })),
+    supermarket: supermarketResetTargets.map((id) => ({
+      id,
+      label: supermarketResetTargetLabels[id],
+    })),
   };
+}
+
+function isDataResetCategory(value: unknown): value is DataResetCategory {
+  return value === "service" || value === "master" || value === "supermarket";
 }
 
 export async function GET() {
@@ -62,8 +72,11 @@ export async function POST(request: NextRequest) {
     const targetsValue = parsed.body.targets;
     const confirmValue = parsed.body.confirm;
 
-    if (categoryValue !== "service" && categoryValue !== "master") {
-      issues.push({ path: "category", message: "Category must be service or master" });
+    if (!isDataResetCategory(categoryValue)) {
+      issues.push({
+        path: "category",
+        message: "Category must be service, master, or supermarket",
+      });
     }
     if (confirmValue !== DATA_RESET_CONFIRM_PHRASE) {
       issues.push({
@@ -137,7 +150,7 @@ export async function POST(request: NextRequest) {
 
     if (prismaCode === "P2003") {
       return apiErrorResponse(
-        "ไม่สามารถลบได้ เพราะยังมีข้อมูลที่อ้างอิงอยู่ — ลบข้อมูลการเข้ารับบริการที่เกี่ยวข้องก่อน",
+        "ไม่สามารถลบได้ เพราะยังมีข้อมูลที่อ้างอิงอยู่ — ลบข้อมูลขายซูเปอร์มาร์เก็ตหรือข้อมูลบริการที่เกี่ยวข้องก่อน",
         409,
         "DEPENDENCY_BLOCKED",
       );

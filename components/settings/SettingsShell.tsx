@@ -17,8 +17,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 
+import { useEmployeePermissions } from "@/components/auth/EmployeePermissionsProvider";
 import { EmployeesManager } from "@/components/settings/EmployeesManager";
 import { InspectionCatalogManager } from "@/components/settings/InspectionCatalogManager";
 import { PaymentChannelsManager } from "@/components/settings/PaymentChannelsManager";
@@ -227,45 +228,20 @@ function canViewSection(
 export function SettingsShell({ summary }: { summary: SettingsSummary }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [permissions, setPermissions] = useState<string[] | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    async function loadPermissions() {
-      try {
-        const response = await fetch("/api/auth/me", {
-          signal: controller.signal,
-          cache: "no-store",
-        });
-        if (!response.ok) {
-          setPermissions([]);
-          return;
-        }
-        const data = (await response.json()) as {
-          employee?: { permissions?: string[] };
-        };
-        setPermissions(data.employee?.permissions ?? []);
-      } catch {
-        if (!controller.signal.aborted) {
-          setPermissions([]);
-        }
-      }
-    }
-    void loadPermissions();
-    return () => controller.abort();
-  }, []);
+  const { permissions, loaded } = useEmployeePermissions();
+  const permissionsReady = loaded ? permissions : null;
 
   const visibleGroups = useMemo(() => {
-    if (!permissions) return groups;
+    if (!permissionsReady) return groups;
     return groups
       .map((group) => ({
         ...group,
         sections: group.sections.filter((section) =>
-          canViewSection(section, permissions),
+          canViewSection(section, permissionsReady),
         ),
       }))
       .filter((group) => group.sections.length > 0);
-  }, [permissions]);
+  }, [permissionsReady]);
 
   const visibleSections = useMemo(
     () => visibleGroups.flatMap((group) => group.sections),
@@ -275,17 +251,17 @@ export function SettingsShell({ summary }: { summary: SettingsSummary }) {
   const activeId = searchParams.get("section");
   const activeSection = useMemo(() => {
     if (!isSectionId(activeId)) return undefined;
-    if (permissions && !canViewSection(
+    if (permissionsReady && !canViewSection(
       allSections.find((s) => s.id === activeId)!,
-      permissions,
+      permissionsReady,
     )) {
       return undefined;
     }
     return visibleSections.find((s) => s.id === activeId)
-      ?? (permissions === null && isSectionId(activeId)
+      ?? (permissionsReady === null && isSectionId(activeId)
         ? allSections.find((s) => s.id === activeId)
         : undefined);
-  }, [activeId, permissions, visibleSections]);
+  }, [activeId, permissionsReady, visibleSections]);
 
   const activeGroup = useMemo(
     () =>
@@ -308,7 +284,7 @@ export function SettingsShell({ summary }: { summary: SettingsSummary }) {
     router.push("/settings");
   }
 
-  if (activeId && permissions && !activeSection) {
+  if (activeId && permissionsReady && !activeSection) {
     return (
       <div className="min-h-screen bg-muted p-4 sm:p-8">
         <div className="mx-auto max-w-6xl space-y-4">
@@ -406,7 +382,7 @@ export function SettingsShell({ summary }: { summary: SettingsSummary }) {
           description="ตรวจสอบและจัดการข้อมูลหลักที่ใช้ในการจอง ทรัพยากร สินค้า การรับเงิน และพนักงาน โดยเลือกหัวข้อทีละส่วน"
         />
 
-        {permissions === null ? (
+        {permissionsReady === null ? (
           <p className="text-sm text-muted-foreground">กำลังโหลดเมนูตามสิทธิ์...</p>
         ) : null}
 

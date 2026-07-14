@@ -1,9 +1,11 @@
 /**
- * Destructive data wipe for operational / master datasets.
+ * Destructive data wipe for operational / master / supermarket datasets.
  * Employee / role / permission / auth accounts are intentionally never included —
  * support accounts must survive any reset from this module.
  */
 import type { Prisma } from "@/generated/prisma/client";
+
+import { POS_SKU_PREFIX } from "@/lib/pos/sequences";
 
 export const DATA_RESET_CONFIRM_PHRASE = "ล้างข้อมูล";
 
@@ -27,10 +29,20 @@ export const masterResetTargets = [
   "rafts",
 ] as const;
 
+export const supermarketResetTargets = [
+  "posSales",
+  "posProducts",
+  "posCategories",
+] as const;
+
 export type ServiceResetTarget = (typeof serviceResetTargets)[number];
 export type MasterResetTarget = (typeof masterResetTargets)[number];
-export type DataResetCategory = "service" | "master";
-export type DataResetTarget = ServiceResetTarget | MasterResetTarget;
+export type SupermarketResetTarget = (typeof supermarketResetTargets)[number];
+export type DataResetCategory = "service" | "master" | "supermarket";
+export type DataResetTarget =
+  | ServiceResetTarget
+  | MasterResetTarget
+  | SupermarketResetTarget;
 
 export const serviceResetTargetLabels: Record<ServiceResetTarget, string> = {
   bookings: "การจอง / การรับบริการ (รวมชำระเงิน ออเดอร์ ตรวจห้อง)",
@@ -52,6 +64,15 @@ export const masterResetTargetLabels: Record<MasterResetTarget, string> = {
   rafts: "แพ",
 };
 
+export const supermarketResetTargetLabels: Record<
+  SupermarketResetTarget,
+  string
+> = {
+  posSales: "ข้อมูลขาย (บิลขาย กะ พักบิล บัญชี POS)",
+  posProducts: "ข้อมูลสินค้า (รวมสต๊อก)",
+  posCategories: "หมวดหมู่สินค้า",
+};
+
 export type DataResetCounts = Record<DataResetTarget, number>;
 
 export type DataResetResult = {
@@ -68,12 +89,21 @@ function isMasterTarget(value: string): value is MasterResetTarget {
   return (masterResetTargets as readonly string[]).includes(value);
 }
 
+function isSupermarketTarget(value: string): value is SupermarketResetTarget {
+  return (supermarketResetTargets as readonly string[]).includes(value);
+}
+
+function allowedTargetsForCategory(category: DataResetCategory) {
+  if (category === "service") return serviceResetTargets;
+  if (category === "master") return masterResetTargets;
+  return supermarketResetTargets;
+}
+
 export function resolveDataResetTargets(
   category: DataResetCategory,
   targets: "all" | string[],
 ): { ok: true; targets: DataResetTarget[] } | { ok: false; message: string } {
-  const allowed =
-    category === "service" ? serviceResetTargets : masterResetTargets;
+  const allowed = allowedTargetsForCategory(category);
 
   if (targets === "all") {
     return { ok: true, targets: [...allowed] };
@@ -89,6 +119,9 @@ export function resolveDataResetTargets(
       return { ok: false, message: `รายการไม่ถูกต้อง: ${target}` };
     }
     if (category === "master" && !isMasterTarget(target)) {
+      return { ok: false, message: `รายการไม่ถูกต้อง: ${target}` };
+    }
+    if (category === "supermarket" && !isSupermarketTarget(target)) {
       return { ok: false, message: `รายการไม่ถูกต้อง: ${target}` };
     }
   }
@@ -114,6 +147,9 @@ export async function countDataResetTargets(
     roomTypes,
     zones,
     rafts,
+    posSales,
+    posProducts,
+    posCategories,
   ] = await Promise.all([
     tx.booking.count(),
     tx.guest.count(),
@@ -129,6 +165,9 @@ export async function countDataResetTargets(
     tx.roomType.count(),
     tx.zone.count(),
     tx.raft.count(),
+    tx.posSale.count(),
+    tx.posProduct.count(),
+    tx.posCategory.count(),
   ]);
 
   return {
@@ -146,6 +185,9 @@ export async function countDataResetTargets(
     roomTypes,
     zones,
     rafts,
+    posSales,
+    posProducts,
+    posCategories,
   };
 }
 
@@ -202,6 +244,43 @@ async function deleteMasterTarget(
   }
 }
 
+async function deleteSupermarketTarget(
+  tx: Prisma.TransactionClient,
+  target: SupermarketResetTarget,
+): Promise<number> {
+  switch (target) {
+    case "posSales": {
+      await tx.charge.deleteMany({ where: { sourceType: "POS_SALE" } });
+      await tx.posRefundItem.deleteMany({});
+      await tx.posRefund.deleteMany({});
+      await tx.posAccountingEntry.deleteMany({});
+      await tx.posPayment.deleteMany({});
+      await tx.posSaleItem.deleteMany({});
+      const sales = await tx.posSale.deleteMany({});
+      await tx.posHoldItem.deleteMany({});
+      await tx.posHold.deleteMany({});
+      await tx.posCashMovement.deleteMany({});
+      await tx.posShift.deleteMany({});
+      await tx.posReceiptSequence.deleteMany({
+        where: { prefix: { not: POS_SKU_PREFIX } },
+      });
+      return sales.count;
+    }
+    case "posProducts": {
+      await tx.posStockCountItem.deleteMany({});
+      await tx.posStockCount.deleteMany({});
+      await tx.posStockMovement.deleteMany({});
+      const products = await tx.posProduct.deleteMany({});
+      await tx.posReceiptSequence.deleteMany({
+        where: { prefix: POS_SKU_PREFIX },
+      });
+      return products.count;
+    }
+    case "posCategories":
+      return (await tx.posCategory.deleteMany({})).count;
+  }
+}
+
 /** Dependency-safe order within each category */
 const serviceDeleteOrder: ServiceResetTarget[] = [
   "bookings",
@@ -223,12 +302,22 @@ const masterDeleteOrder: MasterResetTarget[] = [
   "rafts",
 ];
 
+const supermarketDeleteOrder: SupermarketResetTarget[] = [
+  "posSales",
+  "posProducts",
+  "posCategories",
+];
+
 export function orderDataResetTargets(
   category: DataResetCategory,
   targets: DataResetTarget[],
 ): DataResetTarget[] {
   const order =
-    category === "service" ? serviceDeleteOrder : masterDeleteOrder;
+    category === "service"
+      ? serviceDeleteOrder
+      : category === "master"
+        ? masterDeleteOrder
+        : supermarketDeleteOrder;
   const selected = new Set(targets);
   return order.filter((target) => selected.has(target));
 }
@@ -242,11 +331,29 @@ export async function executeDataReset(
   const deleted: Partial<Record<DataResetTarget, number>> = {};
 
   for (const target of ordered) {
-    deleted[target] =
-      category === "service"
-        ? await deleteServiceTarget(tx, target as ServiceResetTarget)
-        : await deleteMasterTarget(tx, target as MasterResetTarget);
+    if (category === "service") {
+      deleted[target] = await deleteServiceTarget(
+        tx,
+        target as ServiceResetTarget,
+      );
+    } else if (category === "master") {
+      deleted[target] = await deleteMasterTarget(
+        tx,
+        target as MasterResetTarget,
+      );
+    } else {
+      deleted[target] = await deleteSupermarketTarget(
+        tx,
+        target as SupermarketResetTarget,
+      );
+    }
   }
 
   return { category, targets: ordered, deleted };
+}
+
+export function dataResetCategoryLabel(category: DataResetCategory): string {
+  if (category === "service") return "การเข้ารับบริการ";
+  if (category === "master") return "ข้อมูลหลัก";
+  return "ซูเปอร์มาร์เก็ต";
 }

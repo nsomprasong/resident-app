@@ -3,6 +3,7 @@
 import { KeyRound, Pencil, Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
+import { useEmployeePermissions } from "@/components/auth/EmployeePermissionsProvider";
 import { useConfirmDialog } from "@/hooks/useConfirmDialog";
 import type { EmployeeRecord } from "@/lib/settings/employees-shared";
 import type { RoleRecord } from "@/lib/settings/roles-shared";
@@ -26,14 +27,10 @@ type ApiErrorBody = {
   issues?: Array<{ path: string; message: string }>;
 };
 
-type CurrentEmployee = {
-  permissions: string[];
-};
-
 export function EmployeesManager() {
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
-  const [canManage, setCanManage] = useState(false);
-  const [identityLoaded, setIdentityLoaded] = useState(false);
+  const { loaded: identityLoaded, can } = useEmployeePermissions();
+  const canManage = can("employee.manage");
   const [items, setItems] = useState<EmployeeRecord[]>([]);
   const [roles, setRoles] = useState<RoleRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -43,34 +40,6 @@ export function EmployeesManager() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    async function loadIdentity() {
-      try {
-        const response = await fetch("/api/auth/me", {
-          signal: controller.signal,
-          cache: "no-store",
-        });
-        if (!response.ok) {
-          setCanManage(false);
-          return;
-        }
-        const data = (await response.json()) as { employee: CurrentEmployee };
-        setCanManage(data.employee.permissions.includes("employee.manage"));
-      } catch {
-        setCanManage(false);
-      } finally {
-        if (!controller.signal.aborted) {
-          setIdentityLoaded(true);
-        }
-      }
-    }
-
-    void loadIdentity();
-    return () => controller.abort();
-  }, []);
 
   const loadItems = useCallback(async () => {
     if (!canManage) return;

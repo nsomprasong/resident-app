@@ -3,15 +3,25 @@ import { apiErrorResponse, isRecord, readJsonObject } from "@/lib/api/validation
 import { recordAuditLog } from "@/lib/audit/audit-log";
 import { employeeHasApiPermission, resolveApiPermission } from "@/lib/auth/authorization";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { buildPromptPayQrDataUrl } from "@/lib/payments/promptpay-qr";
 import { money } from "@/lib/pos/money";
 import { getPosSalesReport } from "@/lib/pos/reports";
 import { refundSale } from "@/lib/pos/refunds";
 import { cancelSale, createSale } from "@/lib/pos/sales";
 import { getPosSettings } from "@/lib/pos/settings";
+import {
+  summarizeShiftCash,
+  summarizeShiftPayments,
+} from "@/lib/pos/calculations";
 import { closeShift, openShift, approveShift } from "@/lib/pos/shifts";
-import { nextHoldNumber, nextStockDocumentNumber } from "@/lib/pos/sequences";
+import {
+  nextHoldNumber,
+  nextSkuNumber,
+  nextStockDocumentNumber,
+} from "@/lib/pos/sequences";
 import { applyStockChange } from "@/lib/pos/stock";
 import { prisma } from "@/lib/prisma";
+import { maskPromptPayIdentifier } from "@/lib/settings/promptpay-accounts";
 import { NextRequest, NextResponse } from "next/server";
 
 type Context = { params: Promise<{ path: string[] }> };
@@ -37,7 +47,11 @@ function text(body: Record<string, unknown>, name: string, required = true): str
 }
 function numberValue(body: Record<string, unknown>, name: string, fallback?: number) {
   const value = body[name];
-  if (typeof value === "number" || typeof value === "string") return money(value);
+  if (typeof value === "number") return money(value);
+  if (typeof value === "string") {
+    if (value.trim() === "" && fallback !== undefined) return money(fallback);
+    return money(value);
+  }
   if (fallback !== undefined) return money(fallback);
   throw new Error(`INVALID_${name.toUpperCase()}`);
 }
@@ -71,18 +85,53 @@ export async function GET(request: NextRequest, context: Context) {
       if (!productId) return apiErrorResponse("กรุณาระบุสินค้า", 400, "INVALID_PRODUCT_ID");
       return NextResponse.json(await prisma.posStockMovement.findMany({ where: { productId }, orderBy: { occurredAt: "desc" } }));
     }
-    if (path === "shifts") return NextResponse.json(await prisma.posShift.findMany({ include: { openedBy: { select: { name: true } }, closedBy: { select: { name: true } } }, orderBy: { openedAt: "desc" } }));
-    if (path === "shifts/current") {
-      return NextResponse.json(
-        await prisma.posShift.findFirst({
-          where: { openedById: actor.employeeId, status: "OPEN" },
-          include: {
-            cashMovements: true,
-            openedBy: { select: { name: true } },
-            closedBy: { select: { name: true } },
+    if (path === "shifts") {
+      const shifts = await prisma.posShift.findMany({
+        include: {
+          openedBy: { select: { name: true } },
+          closedBy: { select: { name: true } },
+          sales: {
+            where: { status: { not: "CANCELLED" } },
+            include: { payments: true, refunds: true },
           },
+        },
+        orderBy: { openedAt: "desc" },
+      });
+      return NextResponse.json(
+        shifts.map(({ sales, ...shift }) => {
+          const paymentSummary = summarizeShiftPayments(sales);
+          return {
+            ...shift,
+            billCount: paymentSummary.billCount,
+            netSales: paymentSummary.netSales,
+            paymentTotals: paymentSummary.paymentTotals,
+          };
         }),
       );
+    }
+    if (path === "shifts/current") {
+      const shift = await prisma.posShift.findFirst({
+        where: { openedById: actor.employeeId, status: "OPEN" },
+        include: {
+          cashMovements: true,
+          openedBy: { select: { name: true } },
+          closedBy: { select: { name: true } },
+          sales: {
+            where: { status: { not: "CANCELLED" } },
+            include: { payments: true, refunds: true },
+          },
+        },
+      });
+      if (!shift) return NextResponse.json(null);
+      const { sales, ...rest } = shift;
+      const paymentSummary = summarizeShiftPayments(sales);
+      return NextResponse.json({
+        ...rest,
+        billCount: paymentSummary.billCount,
+        netSales: paymentSummary.netSales,
+        paymentTotals: paymentSummary.paymentTotals,
+        expectedCashPreview: summarizeShiftCash({ ...shift, sales }),
+      });
     }
     if (path === "sales") return NextResponse.json(await prisma.posSale.findMany({ include: { items: true, payments: true, refunds: true }, orderBy: { soldAt: "desc" }, take: 100 }));
     if (path.startsWith("sales/")) return NextResponse.json(await prisma.posSale.findUnique({ where: { id: path.split("/")[1] }, include: { items: { include: { product: true } }, payments: true, refunds: { include: { items: true } } } }));
@@ -96,6 +145,21 @@ export async function GET(request: NextRequest, context: Context) {
     }
     if (path === "accounting") return NextResponse.json(await prisma.posAccountingEntry.findMany({ orderBy: { occurredAt: "desc" }, take: 200 }));
     if (path === "bookings/search") return NextResponse.json(await prisma.booking.findMany({ where: { status: "CHECKED_IN" }, include: { guest: { select: { firstName: true, lastName: true } }, rooms: { include: { room: { select: { number: true } } } }, tourGroup: { select: { name: true } } }, take: 50 }));
+    if (path === "promptpay-accounts") {
+      const accounts = await prisma.promptPayAccount.findMany({
+        where: { isActive: true },
+        orderBy: [{ isPrimary: "desc" }, { displayName: "asc" }],
+      });
+      return NextResponse.json(
+        accounts.map((account) => ({
+          id: account.id,
+          displayName: account.displayName,
+          identifierMasked: maskPromptPayIdentifier(account.identifier, account.idType),
+          accountName: account.accountName,
+          isPrimary: account.isPrimary,
+        })),
+      );
+    }
     return apiErrorResponse("ไม่พบ API", 404, "NOT_FOUND");
   } catch (error) { console.error("POS GET failed", error); return apiErrorResponse("ไม่สามารถโหลดข้อมูล POS ได้", 500, "INTERNAL_ERROR"); }
 }
@@ -107,7 +171,43 @@ export async function POST(request: NextRequest, context: Context) {
   const parsed = await body(request); if (!parsed.ok) return parsed.response;
   try {
     if (path === "categories") return NextResponse.json(await prisma.posCategory.create({ data: { name: text(parsed.body, "name"), sortOrder: Number(parsed.body.sortOrder ?? 0) } }), { status: 201 });
-    if (path === "products") return NextResponse.json(await prisma.posProduct.create({ data: { sku: text(parsed.body, "sku"), barcode: text(parsed.body, "barcode", false) ?? null, name: text(parsed.body, "name"), categoryId: text(parsed.body, "categoryId"), unit: text(parsed.body, "unit", false) ?? "ชิ้น", costPrice: numberValue(parsed.body, "costPrice"), sellPrice: numberValue(parsed.body, "sellPrice"), lowStockThreshold: numberValue(parsed.body, "lowStockThreshold", 5), imageUrl: text(parsed.body, "imageUrl", false) ?? null } }), { status: 201 });
+    if (path === "products") {
+      const created = await prisma.$transaction(async (tx) => {
+        const sku = await nextSkuNumber(tx);
+        const product = await tx.posProduct.create({
+          data: {
+            sku,
+            barcode: text(parsed.body, "barcode", false) ?? null,
+            name: text(parsed.body, "name"),
+            categoryId: text(parsed.body, "categoryId"),
+            unit: text(parsed.body, "unit", false) ?? "ชิ้น",
+            costPrice: numberValue(parsed.body, "costPrice"),
+            sellPrice: numberValue(parsed.body, "sellPrice"),
+            lowStockThreshold: numberValue(parsed.body, "lowStockThreshold", 5),
+            imageUrl: text(parsed.body, "imageUrl", false) ?? null,
+          },
+        });
+        const initialStock = numberValue(parsed.body, "quantityOnHand", 0);
+        if (initialStock.lt(0)) throw new Error("INVALID_QUANTITY_ON_HAND");
+        if (initialStock.gt(0)) {
+          await applyStockChange(tx, {
+            productId: product.id,
+            delta: initialStock,
+            type: PosStockMovementType.RECEIVE,
+            actorEmployeeId: actor.employeeId,
+            allowNegativeStock: false,
+            reason: "สต๊อกเริ่มต้นตอนเพิ่มสินค้า",
+            referenceType: "POS_PRODUCT",
+            referenceId: product.id,
+          });
+        }
+        return tx.posProduct.findUniqueOrThrow({
+          where: { id: product.id },
+          include: { category: true },
+        });
+      });
+      return NextResponse.json(created, { status: 201 });
+    }
     if (path === "stock/receive" || path === "stock/adjust") {
       const delta = numberValue(parsed.body, "quantity");
       const type = path.endsWith("receive") ? PosStockMovementType.RECEIVE : (delta.gte(0) ? PosStockMovementType.ADJUST_IN : PosStockMovementType.ADJUST_OUT);
@@ -166,6 +266,33 @@ export async function POST(request: NextRequest, context: Context) {
       );
       return NextResponse.json(hold, { status: 201 });
     }
+    if (path === "promptpay-qr") {
+      const amount = numberValue(parsed.body, "amount");
+      if (amount.lte(0)) return apiErrorResponse("ยอดชำระต้องมากกว่า 0", 400, "INVALID_AMOUNT");
+      const accountId = text(parsed.body, "accountId", false);
+      const account = accountId
+        ? await prisma.promptPayAccount.findFirst({ where: { id: accountId, isActive: true } })
+        : await prisma.promptPayAccount.findFirst({
+            where: { isActive: true },
+            orderBy: [{ isPrimary: "desc" }, { displayName: "asc" }],
+          });
+      if (!account) {
+        return apiErrorResponse("ยังไม่มีบัญชีพร้อมเพย์ที่ใช้งานได้", 404, "PROMPTPAY_ACCOUNT_NOT_FOUND");
+      }
+      const qr = await buildPromptPayQrDataUrl({
+        identifier: account.identifier,
+        idType: account.idType,
+        amount: Number(amount.toFixed(2)),
+      });
+      return NextResponse.json({
+        accountId: account.id,
+        accountName: account.accountName,
+        displayName: account.displayName,
+        identifierMasked: maskPromptPayIdentifier(account.identifier, account.idType),
+        amount: Number(amount.toFixed(2)),
+        dataUrl: qr.dataUrl,
+      });
+    }
     return apiErrorResponse("ไม่พบ API", 404, "NOT_FOUND");
   } catch (error) { console.error("POS POST failed", error); const code = error instanceof Error ? error.message : "INTERNAL_ERROR"; return apiErrorResponse("บันทึกข้อมูล POS ไม่สำเร็จ", code.startsWith("INVALID") ? 400 : 409, code); }
 }
@@ -183,12 +310,26 @@ export async function PATCH(request: NextRequest, context: Context) {
             ...(typeof parsed.body.name === "string"
               ? { name: parsed.body.name.trim() }
               : {}),
+            ...(typeof parsed.body.categoryId === "string" && parsed.body.categoryId.trim()
+              ? { categoryId: parsed.body.categoryId.trim() }
+              : {}),
+            ...(typeof parsed.body.unit === "string"
+              ? { unit: parsed.body.unit.trim() || "ชิ้น" }
+              : {}),
             ...(typeof parsed.body.isActive === "boolean"
               ? { isActive: parsed.body.isActive }
+              : {}),
+            ...(typeof parsed.body.costPrice === "string" ||
+            typeof parsed.body.costPrice === "number"
+              ? { costPrice: money(parsed.body.costPrice) }
               : {}),
             ...(typeof parsed.body.sellPrice === "string" ||
             typeof parsed.body.sellPrice === "number"
               ? { sellPrice: money(parsed.body.sellPrice) }
+              : {}),
+            ...(typeof parsed.body.lowStockThreshold === "string" ||
+            typeof parsed.body.lowStockThreshold === "number"
+              ? { lowStockThreshold: money(parsed.body.lowStockThreshold) }
               : {}),
             ...(typeof parsed.body.barcode === "string"
               ? { barcode: parsed.body.barcode.trim() || null }
@@ -198,6 +339,7 @@ export async function PATCH(request: NextRequest, context: Context) {
               : {}),
             ...(parsed.body.imageUrl === null ? { imageUrl: null } : {}),
           },
+          include: { category: true },
         }),
       );
     }
@@ -205,4 +347,83 @@ export async function PATCH(request: NextRequest, context: Context) {
     if (path === "settings") { const allowed = ["allowNegativeStock", "receiptPrefix", "maxRefundDays", "defaultLowStock", "storeName"]; const results = await Promise.all(allowed.filter((key) => key in parsed.body).map((key) => prisma.posSetting.upsert({ where: { key }, create: { key, value: asJson(parsed.body[key]) }, update: { value: asJson(parsed.body[key]) } }))); return NextResponse.json(results); }
     return apiErrorResponse("ไม่พบ API", 404, "NOT_FOUND");
   } catch (error) { console.error("POS PATCH failed", error); return apiErrorResponse("แก้ไขข้อมูล POS ไม่สำเร็จ", 400, "UPDATE_FAILED"); }
+}
+
+export async function DELETE(request: NextRequest, context: Context) {
+  const actor = await authorized(request);
+  if (!actor) return apiErrorResponse("ไม่มีสิทธิ์เข้าถึง", 403, "FORBIDDEN");
+  const path = (await context.params).path.join("/");
+  try {
+    if (path.startsWith("categories/")) {
+      const categoryId = path.split("/")[1];
+      const productCount = await prisma.posProduct.count({
+        where: { categoryId },
+      });
+      if (productCount > 0) {
+        return apiErrorResponse(
+          `ลบไม่ได้ มีสินค้าในหมวดนี้อยู่ ${productCount} รายการ — ย้ายหรือปิดใช้งานสินค้าก่อน`,
+          409,
+          "CATEGORY_IN_USE",
+        );
+      }
+      await prisma.posCategory.delete({ where: { id: categoryId } });
+      await recordAuditLog({
+        actor: {
+          employeeId: actor.employeeId,
+          authUserId: actor.authUserId,
+        },
+        action: "POS_CATEGORY_DELETED",
+        entityType: "POS_CATEGORY",
+        entityId: categoryId,
+      });
+      return NextResponse.json({ ok: true });
+    }
+    if (path.startsWith("products/")) {
+      const productId = path.split("/")[1];
+      const product = await prisma.posProduct.findUnique({
+        where: { id: productId },
+        include: {
+          _count: {
+            select: {
+              saleItems: true,
+              holdItems: true,
+              refundItems: true,
+              stockMovements: true,
+              stockCountItems: true,
+            },
+          },
+        },
+      });
+      if (!product) return apiErrorResponse("ไม่พบสินค้า", 404, "NOT_FOUND");
+      const usage =
+        product._count.saleItems +
+        product._count.holdItems +
+        product._count.refundItems +
+        product._count.stockMovements +
+        product._count.stockCountItems;
+      if (usage > 0) {
+        return apiErrorResponse(
+          "ลบไม่ได้เพราะมีประวัติขาย/สต๊อก — ใช้ปุ่มปิดขายแทน",
+          409,
+          "PRODUCT_IN_USE",
+        );
+      }
+      await prisma.posProduct.delete({ where: { id: productId } });
+      await recordAuditLog({
+        actor: {
+          employeeId: actor.employeeId,
+          authUserId: actor.authUserId,
+        },
+        action: "POS_PRODUCT_DELETED",
+        entityType: "POS_PRODUCT",
+        entityId: productId,
+        metadata: { sku: product.sku, name: product.name },
+      });
+      return NextResponse.json({ ok: true });
+    }
+    return apiErrorResponse("ไม่พบ API", 404, "NOT_FOUND");
+  } catch (error) {
+    console.error("POS DELETE failed", error);
+    return apiErrorResponse("ลบข้อมูล POS ไม่สำเร็จ", 400, "DELETE_FAILED");
+  }
 }

@@ -21,7 +21,7 @@ export const productionSecurityHeaders = [
   },
   {
     key: "Permissions-Policy",
-    value: "camera=(), microphone=(), geolocation=()",
+    value: "camera=(self), microphone=(), geolocation=()",
   },
 ] as const;
 

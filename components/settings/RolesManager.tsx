@@ -3,6 +3,7 @@
 import { KeyRound, Pencil, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { useEmployeePermissions } from "@/components/auth/EmployeePermissionsProvider";
 import { useConfirmDialog } from "@/hooks/useConfirmDialog";
 import { groupPermissionsByMenu } from "@/lib/auth/permission-menu-groups";
 import { resolvePermissionThaiLabel } from "@/lib/auth/permission-labels";
@@ -27,14 +28,10 @@ type ApiErrorBody = {
   issues?: Array<{ path: string; message: string }>;
 };
 
-type CurrentEmployee = {
-  permissions: string[];
-};
-
 export function RolesManager() {
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
-  const [canManage, setCanManage] = useState(false);
-  const [identityLoaded, setIdentityLoaded] = useState(false);
+  const { loaded: identityLoaded, can } = useEmployeePermissions();
+  const canManage = can("authorization.manage");
   const [items, setItems] = useState<RoleRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -53,36 +50,6 @@ export function RolesManager() {
     () => groupPermissionsByMenu(catalog),
     [catalog],
   );
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    async function loadIdentity() {
-      try {
-        const response = await fetch("/api/auth/me", {
-          signal: controller.signal,
-          cache: "no-store",
-        });
-        if (!response.ok) {
-          setCanManage(false);
-          return;
-        }
-        const data = (await response.json()) as { employee: CurrentEmployee };
-        setCanManage(
-          data.employee.permissions.includes("authorization.manage"),
-        );
-      } catch {
-        setCanManage(false);
-      } finally {
-        if (!controller.signal.aborted) {
-          setIdentityLoaded(true);
-        }
-      }
-    }
-
-    void loadIdentity();
-    return () => controller.abort();
-  }, []);
 
   const loadItems = useCallback(async () => {
     if (!canManage) return;
