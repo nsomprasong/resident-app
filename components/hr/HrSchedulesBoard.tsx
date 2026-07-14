@@ -12,13 +12,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useConfirmDialog } from "@/hooks/useConfirmDialog";
 import DateSelector from "@/components/ui/DateSelector";
-import { formatThaiDate } from "@/lib/format/date";
-import type { ShiftTemplateRecord } from "@/lib/hr/shift-templates";
+import { formatThaiDate, formatThaiTime } from "@/lib/format/date";
+import { displayEmployeeName } from "@/lib/hr/employees";
 import {
   addDaysToDateKey,
   monthRangeContaining,
   weekRangeContaining,
 } from "@/lib/hr/schedules";
+import type { ShiftTemplateRecord } from "@/lib/hr/shift-templates";
 
 type ViewMode = "day" | "week" | "month";
 
@@ -78,15 +79,7 @@ function todayKey() {
 }
 
 function formatTimeRange(startsAt: string, endsAt: string) {
-  const start = new Date(startsAt);
-  const end = new Date(endsAt);
-  const fmt = new Intl.DateTimeFormat("th-TH", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: "UTC",
-  });
-  return `${fmt.format(start)}–${fmt.format(end)}`;
+  return `${formatThaiTime(startsAt, { timeZone: "UTC" })}–${formatThaiTime(endsAt, { timeZone: "UTC" })}`;
 }
 
 export function HrSchedulesBoard() {
@@ -167,6 +160,10 @@ export function HrSchedulesBoard() {
           items: Array<{
             id: string;
             name: string;
+            firstName?: string | null;
+            lastName?: string | null;
+            nickname?: string | null;
+            email?: string | null;
             employeeCode: string | null;
             hrStatus: string;
           }>;
@@ -178,7 +175,7 @@ export function HrSchedulesBoard() {
             )
             .map((item) => ({
               id: item.id,
-              name: item.name,
+              name: displayEmployeeName(item),
               employeeCode: item.employeeCode,
             })),
         );

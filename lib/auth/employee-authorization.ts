@@ -1,3 +1,4 @@
+import { displayEmployeeName } from "@/lib/hr/employees";
 import { prisma } from "@/lib/prisma";
 
 export async function findEmployeeAuthorization(authUserId: string) {
@@ -6,6 +7,11 @@ export async function findEmployeeAuthorization(authUserId: string) {
     select: {
       id: true,
       name: true,
+      firstName: true,
+      lastName: true,
+      nickname: true,
+      email: true,
+      employeeCode: true,
       isActive: true,
       mustResetPassword: true,
       roleRecord: {
@@ -25,7 +31,7 @@ export async function findEmployeeAuthorization(authUserId: string) {
 
   return {
     id: employee.id,
-    name: employee.name,
+    name: displayEmployeeName(employee),
     isActive: employee.isActive,
     mustResetPassword: employee.mustResetPassword,
     role: employee.roleRecord

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { useEmployeePermissions } from "@/components/auth/EmployeePermissionsProvider";
+import { formatThaiDateTime } from "@/lib/format/date";
 
 type Product = {
   id: string;
@@ -230,7 +231,7 @@ export function PosStockBoard() {
               {ledger.map((item) => (
                 <tr key={item.id} className="border-t border-border">
                   <td className="py-3">
-                    {new Date(item.occurredAt).toLocaleString("th-TH")}
+                    {formatThaiDateTime(item.occurredAt)}
                   </td>
                   <td>{item.type}</td>
                   <td>{item.quantityDelta}</td>

@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { formatThaiDateTime } from "@/lib/format/date";
+
 const paymentLabels: Record<string, string> = {
   CASH: "เงินสด",
   PROMPTPAY: "PromptPay",
@@ -101,9 +103,7 @@ export function PosReportsBoard() {
       [],
       ["กะที่ปิด", "ผู้เปิด", "ควรมี", "นับจริง", "ขาด/เกิน", "สถานะ"],
       ...report.cashVariances.map((item) => [
-        item.closedAt
-          ? new Date(item.closedAt).toLocaleString("th-TH")
-          : item.shiftId,
+        item.closedAt ? formatThaiDateTime(item.closedAt) : item.shiftId,
         item.openedByName ?? "-",
         String(item.expectedCash),
         String(item.closingCashCounted),
@@ -258,7 +258,7 @@ export function PosReportsBoard() {
                       <tr key={item.shiftId} className="border-t border-border">
                         <td className="py-3">
                           {item.closedAt
-                            ? new Date(item.closedAt).toLocaleString("th-TH")
+                            ? formatThaiDateTime(item.closedAt)
                             : "-"}
                         </td>
                         <td>{item.openedByName ?? "-"}</td>

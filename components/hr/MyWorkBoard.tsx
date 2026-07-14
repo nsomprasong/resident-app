@@ -12,6 +12,11 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
+import {
+  formatThaiDate,
+  formatThaiDateRange,
+  formatThaiTime,
+} from "@/lib/format/date";
 import { describeGeolocationFailure } from "@/lib/hr/geo";
 
 type TodayInfo = {
@@ -66,21 +71,11 @@ type LeaveType = { id: string; code: string; name: string; isActive: boolean };
 
 function formatTime(value: string | null) {
   if (!value) return "-";
-  return new Intl.DateTimeFormat("th-TH", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: "Asia/Bangkok",
-  }).format(new Date(value));
+  return formatThaiTime(value);
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("th-TH", {
-    day: "2-digit",
-    month: "short",
-    weekday: "short",
-    timeZone: "Asia/Bangkok",
-  }).format(new Date(`${value}T00:00:00.000Z`));
+  return formatThaiDate(value);
 }
 
 function formatMinutesAsHours(value: number) {
@@ -421,7 +416,7 @@ export function MyWorkBoard() {
                     {request.leaveTypeName} · {request.daysRequested} วัน
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {request.startDate} – {request.endDate}
+                    {formatThaiDateRange(request.startDate, request.endDate)}
                   </p>
                 </div>
                 <span

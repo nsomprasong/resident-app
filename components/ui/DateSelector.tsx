@@ -294,4 +294,5 @@ export {
   formatThaiDate,
   formatThaiDateRange,
   formatThaiDateTime,
+  formatThaiTime,
 } from "@/lib/format/date";

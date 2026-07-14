@@ -12,6 +12,8 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useEmployeePermissions } from "@/components/auth/EmployeePermissionsProvider";
+import DateSelector from "@/components/ui/DateSelector";
+import { formatThaiDate, formatThaiTime } from "@/lib/format/date";
 
 type AttendanceRow = {
   id: string;
@@ -60,12 +62,7 @@ function formatMinutes(value: number) {
 
 function formatTime(value: string | null) {
   if (!value) return "-";
-  return new Intl.DateTimeFormat("th-TH", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: "Asia/Bangkok",
-  }).format(new Date(value));
+  return formatThaiTime(value);
 }
 
 export function HrAttendanceBoard() {
@@ -151,11 +148,10 @@ export function HrAttendanceBoard() {
       <div className="flex flex-col gap-3 rounded-3xl border border-border bg-surface p-4 shadow-sm sm:flex-row sm:items-end sm:justify-between">
         <label className="text-sm">
           <span className="mb-1 block text-muted-foreground">วันที่</span>
-          <input
-            type="date"
-            value={workDate}
-            onChange={(event) => setWorkDate(event.target.value)}
-            className="rounded-xl border border-border bg-background px-3 py-2"
+          <DateSelector
+            date={workDate}
+            setDate={setWorkDate}
+            className="min-w-[12rem]"
           />
         </label>
         <div className="flex flex-wrap gap-2">
@@ -227,7 +223,8 @@ export function HrAttendanceBoard() {
               >
                 <div className="text-sm">
                   <p className="font-medium">
-                    {item.employeeName} · {item.workDate} · {item.type}
+                    {item.employeeName} · {formatThaiDate(item.workDate)} ·{" "}
+                    {item.type}
                   </p>
                   <p className="text-muted-foreground">{item.reason}</p>
                   {item.proposedOtMinutes !== null ? (

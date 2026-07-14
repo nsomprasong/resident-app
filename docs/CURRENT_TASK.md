@@ -2,7 +2,7 @@
 
 ## Task
 
-Audit log viewer page + permission
+แสดงวันที่ทั้งโปรเจกต์เป็น format วว/ดด/ปปปป
 
 ## Status
 
@@ -10,14 +10,13 @@ COMPLETED
 
 ## Objective
 
-เพิ่มหน้าดูบันทึกตรวจสอบระบบ และสิทธิ์ `audit.read` (ADMIN โดยค่าเริ่มต้น)
+วันที่ใน UI ใช้ `DD/MM/YYYY` แบบไทย (พ.ศ.) ผ่าน helper กลาง + DateSelector สำหรับช่องเลือกวันที่
 
 ## Evidence
 
-- Permission `audit.read` + migration `20260714223000_add_audit_read_permission`
-- Page `/system/audit-logs`, API `GET /api/system/audit-logs`, Sidebar/home card
-- Labels/menu groups/RBAC page+API rules updated
-- Unit: permission labels/menu groups + audit-log-query filters
+- `lib/format/date.ts` — format วว/ดด/ปปปป
+- เมนูเวลาและค่าจ้าง: เปลี่ยน `input type=date` → `DateSelector` ใน Attendance / Leave / OT / สรุปค่าแรง
+- API ยังใช้ `YYYY-MM-DD`
 
 ## Next Task
 

@@ -20,6 +20,7 @@ import { useEmployeePermissions } from "@/components/auth/EmployeePermissionsPro
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { BarcodeScanner } from "@/components/pos/BarcodeScanner";
 import Modal from "@/components/ui/Modal";
+import { formatThaiDateTime } from "@/lib/format/date";
 
 type Category = { id: string; name: string; isActive: boolean };
 type Product = {
@@ -355,7 +356,7 @@ export function PosTerminal() {
     const popup = window.open("", "_blank", "width=360,height=600");
     if (!popup) return;
     popup.document.write(
-      `<title>ใบเสร็จ ${sale.receiptNumber}</title><main style="font-family:sans-serif;padding:24px"><h2>Resident Supermarket</h2><p>ใบเสร็จ: ${sale.receiptNumber}</p><p>ยอดสุทธิ: ${baht(amount(sale.netTotal))}</p><p>${new Date().toLocaleString("th-TH")}</p></main>`,
+      `<title>ใบเสร็จ ${sale.receiptNumber}</title><main style="font-family:sans-serif;padding:24px"><h2>Resident Supermarket</h2><p>ใบเสร็จ: ${sale.receiptNumber}</p><p>ยอดสุทธิ: ${baht(amount(sale.netTotal))}</p><p>${formatThaiDateTime(new Date())}</p></main>`,
     );
     popup.document.close();
     popup.print();
@@ -562,7 +563,7 @@ export function PosTerminal() {
             กะเปิดอยู่
           </span>
           <p className="truncate text-sm text-muted-foreground">
-            เปิดเมื่อ {new Date(shift.openedAt).toLocaleString("th-TH")} · เงินทอน{" "}
+            เปิดเมื่อ {formatThaiDateTime(shift.openedAt)} · เงินทอน{" "}
             {baht(amount(shift.openingFloat))}
           </p>
         </div>

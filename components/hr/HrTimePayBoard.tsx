@@ -7,7 +7,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useEmployeePermissions } from "@/components/auth/EmployeePermissionsProvider";
 import { HrAttendanceBoard } from "@/components/hr/HrAttendanceBoard";
 import { HrLeaveBoard } from "@/components/hr/HrLeaveBoard";
+import DateSelector from "@/components/ui/DateSelector";
 import { describeGeolocationFailure } from "@/lib/hr/geo";
+import { formatThaiDate } from "@/lib/format/date";
 
 const tabs = [
   { id: "attendance", label: "ลงเวลา" },
@@ -178,20 +180,20 @@ function OtApprovalPanel({ canApprove }: { canApprove: boolean }) {
         <div className="flex flex-wrap gap-3 text-sm">
           <label>
             <span className="mb-1 block text-muted-foreground">จากวันที่</span>
-            <input
-              type="date"
-              value={from}
-              onChange={(event) => setFrom(event.target.value)}
-              className="rounded-xl border border-border bg-background px-3 py-2"
+            <DateSelector
+              date={from}
+              setDate={setFrom}
+              max={to}
+              className="min-w-[12rem]"
             />
           </label>
           <label>
             <span className="mb-1 block text-muted-foreground">ถึงวันที่</span>
-            <input
-              type="date"
-              value={to}
-              onChange={(event) => setTo(event.target.value)}
-              className="rounded-xl border border-border bg-background px-3 py-2"
+            <DateSelector
+              date={to}
+              setDate={setTo}
+              min={from}
+              className="min-w-[12rem]"
             />
           </label>
         </div>
@@ -223,7 +225,7 @@ function OtApprovalPanel({ canApprove }: { canApprove: boolean }) {
               >
                 <div className="text-sm">
                   <p className="font-medium">
-                    {item.employeeName} · {item.workDate}
+                    {item.employeeName} · {formatThaiDate(item.workDate)}
                   </p>
                   <p className="text-muted-foreground">{item.reason}</p>
                   {item.proposedOtMinutes !== null ? (
@@ -342,20 +344,20 @@ function PaySummaryPanel() {
         <div className="flex flex-wrap gap-3 text-sm">
           <label>
             <span className="mb-1 block text-muted-foreground">จากวันที่</span>
-            <input
-              type="date"
-              value={from}
-              onChange={(event) => setFrom(event.target.value)}
-              className="rounded-xl border border-border bg-background px-3 py-2"
+            <DateSelector
+              date={from}
+              setDate={setFrom}
+              max={to}
+              className="min-w-[12rem]"
             />
           </label>
           <label>
             <span className="mb-1 block text-muted-foreground">ถึงวันที่</span>
-            <input
-              type="date"
-              value={to}
-              onChange={(event) => setTo(event.target.value)}
-              className="rounded-xl border border-border bg-background px-3 py-2"
+            <DateSelector
+              date={to}
+              setDate={setTo}
+              min={from}
+              className="min-w-[12rem]"
             />
           </label>
         </div>

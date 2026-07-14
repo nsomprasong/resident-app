@@ -4,6 +4,9 @@ import { Check, Plus, Umbrella, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useEmployeePermissions } from "@/components/auth/EmployeePermissionsProvider";
+import DateSelector from "@/components/ui/DateSelector";
+import { displayEmployeeName } from "@/lib/hr/employees";
+import { formatThaiDate, formatThaiDateRange } from "@/lib/format/date";
 
 type LeaveType = {
   id: string;
@@ -124,10 +127,21 @@ export function HrLeaveBoard() {
       setHolidays(holData);
       if (empRes.ok) {
         const empData = (await empRes.json()) as {
-          items: Array<{ id: string; name: string }>;
+          items: Array<{
+            id: string;
+            name: string;
+            firstName?: string | null;
+            lastName?: string | null;
+            nickname?: string | null;
+            email?: string | null;
+            employeeCode?: string | null;
+          }>;
         };
         setEmployees(
-          empData.items.map((item) => ({ id: item.id, name: item.name })),
+          empData.items.map((item) => ({
+            id: item.id,
+            name: displayEmployeeName(item),
+          })),
         );
         setEmployeeId((prev) => prev || empData.items[0]?.id || "");
       }
@@ -244,24 +258,21 @@ export function HrLeaveBoard() {
           </label>
           <label className="text-sm">
             <span className="mb-1 block text-muted-foreground">วันเริ่ม</span>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(event) => {
-                setStartDate(event.target.value);
-                if (duration !== "FULL_DAY") setEndDate(event.target.value);
+            <DateSelector
+              date={startDate}
+              setDate={(next) => {
+                setStartDate(next);
+                if (duration !== "FULL_DAY") setEndDate(next);
               }}
-              className="w-full rounded-xl border border-border bg-background px-3 py-2"
             />
           </label>
           <label className="text-sm">
             <span className="mb-1 block text-muted-foreground">วันสิ้นสุด</span>
-            <input
-              type="date"
-              value={endDate}
+            <DateSelector
+              date={endDate}
+              setDate={setEndDate}
+              min={startDate}
               disabled={duration !== "FULL_DAY"}
-              onChange={(event) => setEndDate(event.target.value)}
-              className="w-full rounded-xl border border-border bg-background px-3 py-2 disabled:opacity-60"
             />
           </label>
           <label className="text-sm sm:col-span-2 lg:col-span-1">
@@ -324,8 +335,7 @@ export function HrLeaveBoard() {
                     {item.daysRequested} วัน
                   </p>
                   <p className="text-muted-foreground">
-                    {item.startDate}
-                    {item.endDate !== item.startDate ? ` → ${item.endDate}` : ""}{" "}
+                    {formatThaiDateRange(item.startDate, item.endDate)}{" "}
                     · {item.durationLabel}
                   </p>
                   {item.reason ? (
@@ -433,11 +443,10 @@ export function HrLeaveBoard() {
             placeholder="ชื่อวันหยุด"
             className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
           />
-          <input
-            type="date"
-            value={holidayDate}
-            onChange={(event) => setHolidayDate(event.target.value)}
-            className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
+          <DateSelector
+            date={holidayDate}
+            setDate={setHolidayDate}
+            className="min-w-[12rem]"
           />
           <button
             type="button"
@@ -463,7 +472,7 @@ export function HrLeaveBoard() {
                 className="flex items-center justify-between rounded-xl border border-border px-3 py-2"
               >
                 <span>
-                  {item.holidayDate} · {item.name}
+                  {formatThaiDate(item.holidayDate)} · {item.name}
                 </span>
                 <button
                   type="button"

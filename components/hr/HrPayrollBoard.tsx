@@ -4,14 +4,21 @@ import {
   Check,
   Download,
   Lock,
+  Pencil,
   Play,
   Plus,
+  Trash2,
   Unlock,
   Wallet,
+  X,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
+import { formatThaiDate } from "@/lib/format/date";
+
 import { useEmployeePermissions } from "@/components/auth/EmployeePermissionsProvider";
+import { useConfirmDialog } from "@/hooks/useConfirmDialog";
+import { displayEmployeeName } from "@/lib/hr/employees";
 
 type Period = {
   id: string;
@@ -70,6 +77,7 @@ function money(value: number) {
 
 export function HrPayrollBoard() {
   const { can } = useEmployeePermissions();
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const canCalculate = can("hr.payroll.calculate");
   const canApprove = can("hr.payroll.approve");
   const canMarkPaid = can("hr.payroll.mark_paid");
@@ -84,6 +92,7 @@ export function HrPayrollBoard() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
+  const [editingPeriodId, setEditingPeriodId] = useState<string | null>(null);
   const [periodName, setPeriodName] = useState("รอบจ่าย");
   const [periodType, setPeriodType] = useState("MONTHLY");
   const [periodStart, setPeriodStart] = useState(todayKey().slice(0, 8) + "01");
@@ -119,10 +128,21 @@ export function HrPayrollBoard() {
       setCompensations(compData.items);
       if (empRes.ok) {
         const empData = (await empRes.json()) as {
-          items: Array<{ id: string; name: string }>;
+          items: Array<{
+            id: string;
+            name: string;
+            firstName?: string | null;
+            lastName?: string | null;
+            nickname?: string | null;
+            email?: string | null;
+            employeeCode?: string | null;
+          }>;
         };
         setEmployees(
-          empData.items.map((item) => ({ id: item.id, name: item.name })),
+          empData.items.map((item) => ({
+            id: item.id,
+            name: displayEmployeeName(item),
+          })),
         );
         setCompEmployeeId((prev) => prev || empData.items[0]?.id || "");
         setAdjEmployeeId((prev) => prev || empData.items[0]?.id || "");
@@ -191,10 +211,89 @@ export function HrPayrollBoard() {
     return true;
   }
 
+  function resetPeriodForm() {
+    setEditingPeriodId(null);
+    setPeriodName("รอบจ่าย");
+    setPeriodType("MONTHLY");
+    setPeriodStart(todayKey().slice(0, 8) + "01");
+    setPeriodEnd(todayKey());
+  }
+
+  function startEditPeriod(item: Period) {
+    setEditingPeriodId(item.id);
+    setSelectedId(item.id);
+    setPeriodName(item.name);
+    setPeriodType(item.periodType);
+    setPeriodStart(item.periodStart);
+    setPeriodEnd(item.periodEnd);
+    setError("");
+    setMessage("");
+  }
+
+  function periodIsLocked(status: string) {
+    return status === "APPROVED" || status === "PAID";
+  }
+
+  async function savePeriod() {
+    const ok = await postMode(
+      editingPeriodId
+        ? {
+            mode: "update",
+            periodId: editingPeriodId,
+            name: periodName,
+            periodType,
+            periodStart,
+            periodEnd,
+          }
+        : {
+            mode: "create",
+            name: periodName,
+            periodType,
+            periodStart,
+            periodEnd,
+          },
+    );
+    if (ok) {
+      if (editingPeriodId) {
+        setSelectedId(editingPeriodId);
+        await loadPeriod(editingPeriodId);
+      }
+      resetPeriodForm();
+    }
+  }
+
+  async function deletePeriod(item: Period) {
+    if (periodIsLocked(item.status)) {
+      setError("รอบถูกล็อกแล้ว — ปลดล็อกก่อนลบ");
+      return;
+    }
+    if (
+      !(await confirm({
+        title: `ลบรอบจ่าย ${item.name}?`,
+        description:
+          "จะลบรายการคำนวณ ค่าปรับ และสลิปในรอบนี้ทั้งหมด และกู้คืนไม่ได้",
+        confirmLabel: "ลบรอบ",
+        tone: "danger",
+      }))
+    ) {
+      return;
+    }
+    const ok = await postMode({ mode: "delete", periodId: item.id });
+    if (!ok) return;
+    if (selectedId === item.id) {
+      setSelectedId(null);
+      setEntries([]);
+    }
+    if (editingPeriodId === item.id) {
+      resetPeriodForm();
+    }
+  }
+
   const selected = periods.find((item) => item.id === selectedId) ?? null;
 
   return (
     <div className="space-y-4">
+      {confirmDialog}
       {error ? (
         <p className="rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {error}
@@ -208,7 +307,21 @@ export function HrPayrollBoard() {
 
       {canCalculate ? (
         <section className="rounded-3xl border border-border bg-surface p-4 shadow-sm">
-          <h2 className="font-semibold">สร้างรอบจ่าย</h2>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="font-semibold">
+              {editingPeriodId ? "แก้ไขรอบจ่าย" : "สร้างรอบจ่าย"}
+            </h2>
+            {editingPeriodId ? (
+              <button
+                type="button"
+                onClick={resetPeriodForm}
+                className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-muted-foreground hover:bg-muted"
+              >
+                <X size={14} />
+                ยกเลิกแก้ไข
+              </button>
+            ) : null}
+          </div>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <input
               value={periodName}
@@ -242,19 +355,20 @@ export function HrPayrollBoard() {
           </div>
           <button
             type="button"
-            onClick={() =>
-              void postMode({
-                mode: "create",
-                name: periodName,
-                periodType,
-                periodStart,
-                periodEnd,
-              })
-            }
+            onClick={() => void savePeriod()}
             className="mt-3 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground"
           >
-            <Plus size={16} />
-            สร้างรอบ
+            {editingPeriodId ? (
+              <>
+                <Check size={16} />
+                บันทึกการแก้ไข
+              </>
+            ) : (
+              <>
+                <Plus size={16} />
+                สร้างรอบ
+              </>
+            )}
           </button>
         </section>
       ) : null}
@@ -270,20 +384,47 @@ export function HrPayrollBoard() {
             ) : (
               periods.map((item) => (
                 <li key={item.id}>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedId(item.id)}
-                    className={`w-full rounded-xl px-3 py-2 text-left text-sm ${
-                      selectedId === item.id
-                        ? "bg-primary/10 text-foreground"
-                        : "hover:bg-muted"
+                  <div
+                    className={`flex items-start gap-1 rounded-xl ${
+                      selectedId === item.id ? "bg-primary/10" : ""
                     }`}
                   >
-                    <p className="font-medium">{item.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {item.periodStart} → {item.periodEnd} · {item.status}
-                    </p>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedId(item.id)}
+                      className={`min-w-0 flex-1 rounded-xl px-3 py-2 text-left text-sm ${
+                        selectedId === item.id
+                          ? "text-foreground"
+                          : "hover:bg-muted"
+                      }`}
+                    >
+                      <p className="font-medium">{item.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatThaiDate(item.periodStart)} →{" "}
+                        {formatThaiDate(item.periodEnd)} · {item.status}
+                      </p>
+                    </button>
+                    {canCalculate && !periodIsLocked(item.status) ? (
+                      <div className="flex shrink-0 gap-0.5 py-1 pr-1">
+                        <button
+                          type="button"
+                          onClick={() => startEditPeriod(item)}
+                          className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                          aria-label={`แก้ไข ${item.name}`}
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void deletePeriod(item)}
+                          className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                          aria-label={`ลบ ${item.name}`}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
                 </li>
               ))
             )}
@@ -297,7 +438,8 @@ export function HrPayrollBoard() {
                 <div className="mr-auto">
                   <p className="font-semibold">{selected.name}</p>
                   <p className="text-sm text-muted-foreground">
-                    {selected.periodStart} → {selected.periodEnd} ·{" "}
+                    {formatThaiDate(selected.periodStart)} →{" "}
+                    {formatThaiDate(selected.periodEnd)} ·{" "}
                     {selected.status}
                   </p>
                 </div>
@@ -366,6 +508,26 @@ export function HrPayrollBoard() {
                     <Unlock size={14} />
                     ปลดล็อก
                   </button>
+                ) : null}
+                {canCalculate && !periodIsLocked(selected.status) ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => startEditPeriod(selected)}
+                      className="inline-flex items-center gap-1 rounded-xl border border-border px-3 py-2 text-sm hover:bg-muted"
+                    >
+                      <Pencil size={14} />
+                      แก้ไข
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void deletePeriod(selected)}
+                      className="inline-flex items-center gap-1 rounded-xl border border-destructive/30 px-3 py-2 text-sm text-destructive hover:bg-destructive/10"
+                    >
+                      <Trash2 size={14} />
+                      ลบ
+                    </button>
+                  </>
                 ) : null}
                 <a
                   href={`/api/hr/payroll/periods/${selected.id}/export?format=csv`}

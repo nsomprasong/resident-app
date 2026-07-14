@@ -91,16 +91,50 @@ function dateOnly(value: Date | null | undefined): string | null {
   return value.toISOString().slice(0, 10);
 }
 
+export function looksLikeEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
 export function displayEmployeeName(input: {
-  name: string;
+  name?: string | null;
   firstName?: string | null;
   lastName?: string | null;
+  nickname?: string | null;
+  email?: string | null;
+  employeeCode?: string | null;
 }) {
-  const combined = [input.firstName, input.lastName]
-    .filter((part) => Boolean(part && part.trim()))
+  const firstName = input.firstName?.trim() ?? "";
+  const lastName = input.lastName?.trim() ?? "";
+  const hasCorruptNamePart =
+    (Boolean(firstName) && looksLikeEmail(firstName)) ||
+    (Boolean(lastName) && looksLikeEmail(lastName));
+
+  const name = input.name?.trim() ?? "";
+  const email = input.email?.trim().toLowerCase() ?? "";
+  const nameIsClean =
+    Boolean(name) && !looksLikeEmail(name) && name.toLowerCase() !== email;
+
+  // If first/last was polluted with an email, prefer the stored display name.
+  if (hasCorruptNamePart && nameIsClean) {
+    return name;
+  }
+
+  const fromParts = [firstName, lastName]
+    .filter((part) => Boolean(part) && !looksLikeEmail(part))
     .join(" ")
     .trim();
-  return combined || input.name;
+  if (fromParts) return fromParts;
+
+  const nickname = input.nickname?.trim() ?? "";
+  if (nickname && !looksLikeEmail(nickname)) return nickname;
+
+  if (nameIsClean) return name;
+
+  const code = input.employeeCode?.trim() ?? "";
+  if (code) return code;
+
+  if (nickname) return nickname;
+  return "พนักงาน";
 }
 
 export function isLoginEligibleStatus(status: EmployeeHrStatus) {
@@ -240,6 +274,8 @@ export function parseHrEmployeeInput(
       issues.push({ path: "firstName", message: "กรุณาระบุชื่อ" });
     } else if (firstName.length > 80) {
       issues.push({ path: "firstName", message: "ชื่อยาวเกินไป" });
+    } else if (looksLikeEmail(firstName)) {
+      issues.push({ path: "firstName", message: "ชื่อต้องไม่ใช่อีเมล" });
     } else {
       data.firstName = firstName;
     }
@@ -252,6 +288,8 @@ export function parseHrEmployeeInput(
       else if (lastName !== undefined) data.lastName = "";
     } else if (lastName.length > 80) {
       issues.push({ path: "lastName", message: "นามสกุลยาวเกินไป" });
+    } else if (looksLikeEmail(lastName)) {
+      issues.push({ path: "lastName", message: "นามสกุลต้องไม่ใช่อีเมล" });
     } else {
       data.lastName = lastName;
     }

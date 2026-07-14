@@ -1,6 +1,7 @@
 import type { Employee, Role } from "@/generated/prisma/client";
 
 import type { ValidationIssue } from "@/lib/api/validation";
+import { displayEmployeeName } from "@/lib/hr/employees";
 import type { EmployeeRecord } from "@/lib/settings/employees-shared";
 
 export type { EmployeeRecord } from "@/lib/settings/employees-shared";
@@ -12,7 +13,7 @@ type EmployeeWithRole = Employee & {
 export function serializeEmployee(employee: EmployeeWithRole): EmployeeRecord {
   return {
     id: employee.id,
-    name: employee.name,
+    name: displayEmployeeName(employee),
     email: employee.email,
     phone: employee.phone,
     authUserId: employee.authUserId,

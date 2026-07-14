@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { useEmployeePermissions } from "@/components/auth/EmployeePermissionsProvider";
+import { formatThaiDateTime } from "@/lib/format/date";
 
 const paymentMethodLabels = [
   ["CASH", "เงินสด"],
@@ -248,7 +249,7 @@ export function PosShiftsBoard() {
             <h2 className="font-semibold">กะที่กำลังเปิด</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               เปิดโดย {current.openedBy?.name ?? "-"} ·{" "}
-              {new Date(current.openedAt).toLocaleString("th-TH")}
+              {formatThaiDateTime(current.openedAt)}
             </p>
           </div>
 
@@ -357,7 +358,7 @@ export function PosShiftsBoard() {
                       </span>{" "}
                       {item.reason}
                       <span className="ml-2 text-xs text-muted-foreground">
-                        {new Date(item.createdAt).toLocaleString("th-TH")}
+                        {formatThaiDateTime(item.createdAt)}
                       </span>
                     </span>
                     <span className="font-medium">{baht(item.amount)}</span>
@@ -434,7 +435,7 @@ export function PosShiftsBoard() {
                 <Fragment key={item.id}>
                   <tr className="border-t border-border">
                     <td className="py-3">
-                      {new Date(item.openedAt).toLocaleString("th-TH")}
+                      {formatThaiDateTime(item.openedAt)}
                     </td>
                     <td>{item.openedBy?.name ?? "-"}</td>
                     <td>{item.status}</td>

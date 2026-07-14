@@ -290,18 +290,18 @@ export function EmployeesManager() {
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <span className="font-medium text-foreground">{employee.name}</span>
-                <span className="ml-2 text-muted-foreground">
-                  {employee.roleDisplayName ?? "ยังไม่มี role"}
-                </span>
-                {employee.email ? (
-                  <span className="ml-2 text-muted-foreground">{employee.email}</span>
-                ) : null}
-                {employee.phone ? (
-                  <span className="ml-2 text-muted-foreground">{employee.phone}</span>
-                ) : null}
+                <p className="font-medium text-foreground">{employee.name}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {[
+                    employee.roleDisplayName ?? "ยังไม่มี role",
+                    employee.phone || null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                 <span
-                  className={`ml-2 rounded-full px-2 py-0.5 text-xs ${
+                  className={`rounded-full px-2 py-0.5 text-xs ${
                     employee.authUserId
                       ? "bg-success/15 text-success"
                       : "bg-warning/15 text-warning"
@@ -310,15 +310,16 @@ export function EmployeesManager() {
                   {employee.authUserId ? "มี Auth" : "ยังไม่ผูก Auth"}
                 </span>
                 {!employee.isActive ? (
-                  <span className="ml-2 rounded-full bg-border px-2 py-0.5 text-xs text-muted-foreground">
+                  <span className="rounded-full bg-border px-2 py-0.5 text-xs text-muted-foreground">
                     รอเปิดใช้งาน / ปิดใช้งาน
                   </span>
                 ) : null}
                 {employee.mustResetPassword ? (
-                  <span className="ml-2 rounded-full bg-warning/15 px-2 py-0.5 text-xs text-warning">
+                  <span className="rounded-full bg-warning/15 px-2 py-0.5 text-xs text-warning">
                     รอตั้งรหัสผ่านใหม่
                   </span>
                 ) : null}
+                </div>
               </div>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">

@@ -1,5 +1,6 @@
 import type { Prisma } from "@/generated/prisma/client";
 
+import { displayEmployeeName } from "@/lib/hr/employees";
 import { prisma } from "@/lib/prisma";
 import {
   buildAuditLogWhere,
@@ -48,7 +49,7 @@ export async function listAuditLogs(
       take: pageSize,
       include: {
         actorEmployee: {
-          select: { id: true, name: true },
+          select: { id: true, name: true, firstName: true, lastName: true, nickname: true, email: true, employeeCode: true },
         },
       },
     }),
@@ -64,7 +65,9 @@ export async function listAuditLogs(
       createdAt: row.createdAt.toISOString(),
       actor: {
         employeeId: row.actorEmployeeId,
-        employeeName: row.actorEmployee?.name ?? null,
+        employeeName: row.actorEmployee
+          ? displayEmployeeName(row.actorEmployee)
+          : null,
         authUserId: row.actorAuthUserId,
       },
     })),

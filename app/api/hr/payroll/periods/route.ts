@@ -665,6 +665,169 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (mode === "update") {
+      if (!permissions.includes("hr.payroll.calculate")) {
+        return apiErrorResponse("ไม่มีสิทธิ์แก้ไขรอบจ่าย", 403, "FORBIDDEN");
+      }
+
+      const periodId =
+        typeof parsed.body.periodId === "string"
+          ? parsed.body.periodId.trim()
+          : "";
+      const issues: ValidationIssue[] = [];
+      const name =
+        typeof parsed.body.name === "string" ? parsed.body.name.trim() : "";
+      const periodType =
+        typeof parsed.body.periodType === "string"
+          ? parsed.body.periodType.trim()
+          : "";
+      const startRaw =
+        typeof parsed.body.periodStart === "string"
+          ? parsed.body.periodStart.trim()
+          : "";
+      const endRaw =
+        typeof parsed.body.periodEnd === "string"
+          ? parsed.body.periodEnd.trim()
+          : "";
+      const start = parseDateKey(startRaw);
+      const end = parseDateKey(endRaw);
+
+      if (!isUuid(periodId)) {
+        issues.push({ path: "periodId", message: "รหัสรอบไม่ถูกต้อง" });
+      }
+      if (!name) issues.push({ path: "name", message: "กรุณาระบุชื่อรอบ" });
+      if (
+        !["DAILY", "WEEKLY", "SEMI_MONTHLY", "MONTHLY", "CUSTOM"].includes(
+          periodType,
+        )
+      ) {
+        issues.push({ path: "periodType", message: "ประเภทช่วงไม่ถูกต้อง" });
+      }
+      if (!start || !end || start > end) {
+        issues.push({ path: "periodStart", message: "ช่วงวันที่ไม่ถูกต้อง" });
+      }
+      if (issues.length || !start || !end) {
+        return validationErrorResponse("กรุณาตรวจสอบรอบจ่าย", issues);
+      }
+
+      const existing = await prisma.payrollPeriod.findUnique({
+        where: { id: periodId },
+      });
+      if (!existing) {
+        return apiErrorResponse("ไม่พบรอบจ่าย", 404, "NOT_FOUND");
+      }
+      if (existing.status === "APPROVED" || existing.status === "PAID") {
+        return apiErrorResponse(
+          "รอบถูกล็อกแล้ว — ปลดล็อกก่อนแก้ไข หรือสร้างรอบใหม่",
+          409,
+          "LOCKED",
+        );
+      }
+
+      const datesChanged =
+        dateKeyUtc(existing.periodStart) !== startRaw ||
+        dateKeyUtc(existing.periodEnd) !== endRaw;
+      const mustRecalculate =
+        datesChanged &&
+        (existing.status === "CALCULATED" || existing.status === "REVIEWED");
+
+      const updated = await prisma.$transaction(async (tx) => {
+        if (mustRecalculate) {
+          await tx.payrollPayslip.deleteMany({ where: { periodId } });
+          await tx.payrollAdjustment.deleteMany({ where: { periodId } });
+          await tx.payrollEntry.deleteMany({ where: { periodId } });
+        }
+
+        return tx.payrollPeriod.update({
+          where: { id: periodId },
+          data: {
+            name,
+            periodType: periodType as PayrollPeriodType,
+            periodStart: start,
+            periodEnd: end,
+            notes:
+              typeof parsed.body.notes === "string"
+                ? parsed.body.notes.trim() || null
+                : existing.notes,
+            ...(mustRecalculate
+              ? {
+                  status: "DRAFT" as const,
+                  calculatedAt: null,
+                  calculatedById: null,
+                  reviewedAt: null,
+                  reviewedById: null,
+                }
+              : {}),
+          },
+        });
+      });
+
+      await recordAuditLog({
+        actor: {
+          employeeId: actorEmployeeId,
+          authUserId: currentUser.user.id,
+        },
+        action: "HR_PAYROLL_PERIOD_UPDATED",
+        entityType: "PAYROLL_PERIOD",
+        entityId: updated.id,
+        metadata: {
+          name,
+          periodType,
+          periodStart: startRaw,
+          periodEnd: endRaw,
+          clearedCalculation: mustRecalculate,
+        },
+      });
+
+      return NextResponse.json(serializePeriod(updated));
+    }
+
+    if (mode === "delete") {
+      if (!permissions.includes("hr.payroll.calculate")) {
+        return apiErrorResponse("ไม่มีสิทธิ์ลบรอบจ่าย", 403, "FORBIDDEN");
+      }
+
+      const periodId =
+        typeof parsed.body.periodId === "string"
+          ? parsed.body.periodId.trim()
+          : "";
+      if (!isUuid(periodId)) {
+        return validationErrorResponse("รหัสรอบไม่ถูกต้อง", [
+          { path: "periodId", message: "UUID ไม่ถูกต้อง" },
+        ]);
+      }
+
+      const existing = await prisma.payrollPeriod.findUnique({
+        where: { id: periodId },
+        select: { id: true, name: true, status: true },
+      });
+      if (!existing) {
+        return apiErrorResponse("ไม่พบรอบจ่าย", 404, "NOT_FOUND");
+      }
+      if (existing.status === "APPROVED" || existing.status === "PAID") {
+        return apiErrorResponse(
+          "รอบถูกล็อกแล้ว — ปลดล็อกก่อนลบ",
+          409,
+          "LOCKED",
+        );
+      }
+
+      await prisma.payrollPeriod.delete({ where: { id: periodId } });
+
+      await recordAuditLog({
+        actor: {
+          employeeId: actorEmployeeId,
+          authUserId: currentUser.user.id,
+        },
+        action: "HR_PAYROLL_PERIOD_DELETED",
+        entityType: "PAYROLL_PERIOD",
+        entityId: periodId,
+        metadata: { name: existing.name, status: existing.status },
+      });
+
+      return NextResponse.json({ ok: true, id: periodId });
+    }
+
     return apiErrorResponse("mode ไม่รองรับ", 400, "INVALID_MODE");
   } catch (error) {
     console.error("POST /api/hr/payroll/periods failed", error);

@@ -12,6 +12,7 @@ import {
   resolveOpsDateKey,
   summarizeTodayOps,
 } from "@/lib/dashboard/today-ops";
+import { formatThaiDate } from "@/lib/format/date";
 import { prisma } from "@/lib/prisma";
 import { CalendarCheck2 } from "lucide-react";
 
@@ -19,17 +20,6 @@ export const dynamic = "force-dynamic";
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat("th-TH").format(value);
-}
-
-function formatThaiDate(dateKey: string) {
-  const date = new Date(`${dateKey}T12:00:00+07:00`);
-  return new Intl.DateTimeFormat("th-TH", {
-    timeZone: "Asia/Bangkok",
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  }).format(date);
 }
 
 function customerName(booking: {

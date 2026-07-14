@@ -15,6 +15,8 @@ import {
   EMPLOYEE_DOCUMENT_TYPE_LABELS,
   EMPLOYEE_DOCUMENT_TYPES,
 } from "@/lib/hr/documents";
+import { displayEmployeeName } from "@/lib/hr/employees";
+import { formatThaiDate } from "@/lib/format/date";
 
 type DocumentItem = {
   id: string;
@@ -88,10 +90,21 @@ export function HrDocumentsBoard() {
       setAlerts(docsData.alerts);
       if (empRes.ok) {
         const empData = (await empRes.json()) as {
-          items: Array<{ id: string; name: string }>;
+          items: Array<{
+            id: string;
+            name: string;
+            firstName?: string | null;
+            lastName?: string | null;
+            nickname?: string | null;
+            email?: string | null;
+            employeeCode?: string | null;
+          }>;
         };
         setEmployees(
-          empData.items.map((item) => ({ id: item.id, name: item.name })),
+          empData.items.map((item) => ({
+            id: item.id,
+            name: displayEmployeeName(item),
+          })),
         );
         setEmployeeId((prev) => prev || empData.items[0]?.id || "");
       }
@@ -214,7 +227,8 @@ export function HrDocumentsBoard() {
             {alerts.slice(0, 6).map((item) => (
               <li key={item.id}>
                 {item.employeeName} · {item.title} · หมดอายุ{" "}
-                {item.expiresAt ?? "-"} ({item.expiryStatus})
+                {item.expiresAt ? formatThaiDate(item.expiresAt) : "-"} (
+                {item.expiryStatus})
               </li>
             ))}
           </ul>
@@ -387,7 +401,11 @@ export function HrDocumentsBoard() {
                       </p>
                     </td>
                     <td className="px-4 py-3">
-                      <p>{item.expiresAt ?? "-"}</p>
+                      <p>
+                        {item.expiresAt
+                          ? formatThaiDate(item.expiresAt)
+                          : "-"}
+                      </p>
                       <p
                         className={`text-xs ${
                           item.expiryStatus === "EXPIRED"

@@ -3,6 +3,7 @@
 import { LoaderCircle, RefreshCw, Search } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
+import { formatThaiDateTime } from "@/lib/format/date";
 import type { AuditLogListItem } from "@/lib/system/audit-logs";
 
 type ListResponse = {
@@ -18,11 +19,7 @@ type ListResponse = {
 };
 
 function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat("th-TH", {
-    dateStyle: "medium",
-    timeStyle: "medium",
-    timeZone: "Asia/Bangkok",
-  }).format(new Date(value));
+  return formatThaiDateTime(value);
 }
 
 function formatMetadata(value: AuditLogListItem["metadata"]) {
