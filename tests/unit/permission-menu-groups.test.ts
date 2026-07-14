@@ -30,7 +30,10 @@ describe("permissionMenuGroups", () => {
     );
     assert.ok(titles.includes("ตั้งค่าข้อมูลหลัก"));
     assert.ok(titles.includes("ตารางงาน"));
-    assert.equal(titles.at(-1), "ตั้งค่าบุคลากร");
+    assert.ok(titles.includes("หน้าขาย"));
+    assert.ok(titles.includes("ตั้งค่าบุคลากร"));
+    assert.ok(titles.includes("ตั้งค่าระบบขาย"));
+    assert.equal(titles.at(-1), "ตั้งค่าระบบขาย");
   });
 
   it("groups catalog rows without dropping codes", () => {

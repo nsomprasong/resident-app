@@ -5,11 +5,12 @@ import {
   CreditCard,
   Home,
   ShipWheel,
+  ShoppingCart,
 } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { PageHeader } from "@/components/ui/PageHeader";
-import { BookingStatus, PaymentStatus } from "@/generated/prisma/client";
+import { BookingStatus, PaymentStatus, PosSaleStatus, PosShiftStatus } from "@/generated/prisma/client";
 import {
   activeBookingConflictStatuses,
   availableRaftStatuses,
@@ -86,6 +87,9 @@ export default async function DashboardPage() {
     todayBookings,
     openInspections,
     monthlyPayments,
+    todayPosSales,
+    openPosShifts,
+    lowStockProducts,
   ] = await Promise.all([
     prisma.room.findMany({ select: { id: true, status: true } }),
     prisma.raft.findMany({ select: { id: true, status: true } }),
@@ -130,6 +134,18 @@ export default async function DashboardPage() {
       },
       select: { amount: true, status: true },
     }),
+    prisma.posSale.aggregate({
+      where: {
+        soldAt: { gte: today },
+        status: { in: [PosSaleStatus.COMPLETED, PosSaleStatus.PARTIALLY_REFUNDED, PosSaleStatus.REFUNDED] },
+      },
+      _sum: { netTotal: true },
+      _count: { id: true },
+    }),
+    prisma.posShift.count({ where: { status: PosShiftStatus.OPEN } }),
+    prisma.posProduct.count({
+      where: { isActive: true, quantityOnHand: { lte: 5 } },
+    }),
   ]);
 
   const occupiedRoomIds = new Set(activeRoomBookings.map((item) => item.roomId));
@@ -149,6 +165,7 @@ export default async function DashboardPage() {
   ).length;
   const completedInspections = openInspections.length - pendingInspections;
   const netRevenue = calculateNetRevenue(monthlyPayments);
+  const todayPosNetSales = Number(todayPosSales._sum.netTotal ?? 0);
 
   return (
     <div className="min-h-screen bg-muted p-4 sm:p-8">
@@ -186,6 +203,36 @@ export default async function DashboardPage() {
             icon={<Home size={24} />}
           />
         </div>
+
+        <section className="rounded-3xl border border-border bg-surface p-5 shadow-sm">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-semibold text-foreground">Supermarket POS</h2>
+              <p className="mt-1 text-sm text-muted-foreground">ยอดขายและสถานะสต๊อกของวันนี้</p>
+            </div>
+            <span className="grid h-12 w-12 place-items-center rounded-2xl bg-primary/10 text-primary">
+              <ShoppingCart size={24} />
+            </span>
+          </div>
+          <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-2xl bg-background p-4">
+              <p className="text-sm text-muted-foreground">ยอดขายสุทธิวันนี้</p>
+              <p className="mt-2 text-2xl font-semibold">{formatCurrency(todayPosNetSales)}</p>
+            </div>
+            <div className="rounded-2xl bg-background p-4">
+              <p className="text-sm text-muted-foreground">จำนวนบิล</p>
+              <p className="mt-2 text-2xl font-semibold">{todayPosSales._count.id.toLocaleString("th-TH")}</p>
+            </div>
+            <div className="rounded-2xl bg-background p-4">
+              <p className="text-sm text-muted-foreground">กะที่เปิดอยู่</p>
+              <p className="mt-2 text-2xl font-semibold">{openPosShifts.toLocaleString("th-TH")}</p>
+            </div>
+            <div className="rounded-2xl bg-warning/10 p-4">
+              <p className="text-sm text-warning">สินค้าใกล้หมด</p>
+              <p className="mt-2 text-2xl font-semibold text-warning">{lowStockProducts.toLocaleString("th-TH")}</p>
+            </div>
+          </div>
+        </section>
 
         <section className="rounded-3xl border border-border bg-surface p-5 shadow-sm">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

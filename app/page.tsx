@@ -8,6 +8,7 @@ import {
   House,
   LayoutDashboard,
   Settings,
+  ShoppingCart,
   UsersRound,
   Utensils,
   type LucideIcon,
@@ -48,6 +49,12 @@ const cards: Array<{
     description: "ติดตามคิวอาหารของห้องครัว",
     href: "/kitchen",
     icon: CookingPot,
+  },
+  {
+    title: "ซูเปอร์มาร์เก็ต",
+    description: "ขายหน้าร้าน จัดการสินค้า สต๊อก และกะเงินสด",
+    href: "/pos",
+    icon: ShoppingCart,
   },
   {
     title: "แม่บ้านและตรวจสอบห้องพัก",

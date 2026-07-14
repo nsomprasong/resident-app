@@ -2,7 +2,7 @@
 
 ## Task
 
-Show room inspector name after checkout inspection
+Phase 20 — Supermarket POS & Inventory
 
 ## Status
 
@@ -10,13 +10,13 @@ COMPLETED
 
 ## Objective
 
-หลังเช็กเอาต์และตรวจห้องเสร็จ ให้แสดงชื่อผู้ตรวจ
+สร้างระบบขายหน้าร้านซูเปอร์มาร์เก็ต แยกจากเมนูอาหาร พร้อมสต๊อก POS กะ รายงาน และเชื่อมบัญชี
 
 ## Evidence
 
-- เพิ่ม `completed_by_id` บน `room_inspections` + migration deploy
-- บันทึกผู้ตรวจตอน complete จาก employee ของ session
-- แสดงใน Booking Detail และหน้าแม่บ้าน
+- ผู้ใช้อนุมัติปิด Phase 20 (2026-07-14)
+- Migration deploy, API/UI `/pos`, permissions `pos.*`, unit tests, dashboard widgets
+- รายละเอียดใน `docs/plans/phase_20_supermarket_pos_inventory.md`
 
 ## Next Task
 

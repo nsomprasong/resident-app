@@ -158,6 +158,54 @@ export const permissionMenuGroups: readonly PermissionMenuGroup[] = [
     title: "ตั้งค่าบุคลากร",
     permissions: ["hr.settings.manage"],
   },
+  {
+    id: "pos-sales",
+    sectionTitle: "ซูเปอร์มาร์เก็ต",
+    title: "หน้าขาย",
+    permissions: [
+      "pos.sell",
+      "pos.discount",
+      "pos.hold",
+      "pos.cancel",
+      "pos.refund",
+      "pos.view",
+    ],
+  },
+  {
+    id: "pos-products",
+    sectionTitle: "ซูเปอร์มาร์เก็ต",
+    title: "สินค้าและหมวดหมู่",
+    permissions: ["pos.product.manage", "pos.product.view"],
+  },
+  {
+    id: "pos-stock",
+    sectionTitle: "ซูเปอร์มาร์เก็ต",
+    title: "สต๊อก",
+    permissions: [
+      "pos.stock.receive",
+      "pos.stock.adjust",
+      "pos.stock.count",
+      "pos.stock.view",
+    ],
+  },
+  {
+    id: "pos-shifts",
+    sectionTitle: "ซูเปอร์มาร์เก็ต",
+    title: "กะขาย",
+    permissions: ["pos.shift.open", "pos.shift.close", "pos.shift.approve"],
+  },
+  {
+    id: "pos-reports",
+    sectionTitle: "ซูเปอร์มาร์เก็ต",
+    title: "รายงานและบัญชี",
+    permissions: ["pos.accounting.post", "pos.report.view"],
+  },
+  {
+    id: "pos-settings",
+    sectionTitle: "ซูเปอร์มาร์เก็ต",
+    title: "ตั้งค่าระบบขาย",
+    permissions: ["pos.settings.manage"],
+  },
 ] as const;
 
 export type PermissionMenuGroupView<T extends { code: string }> = {
