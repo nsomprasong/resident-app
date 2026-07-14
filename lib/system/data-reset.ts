@@ -1,3 +1,8 @@
+/**
+ * Destructive data wipe for operational / master datasets.
+ * Employee / role / permission / auth accounts are intentionally never included —
+ * support accounts must survive any reset from this module.
+ */
 import type { Prisma } from "@/generated/prisma/client";
 
 export const DATA_RESET_CONFIRM_PHRASE = "ล้างข้อมูล";

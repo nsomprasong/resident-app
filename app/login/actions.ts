@@ -1,27 +1,75 @@
 "use server";
 
-import { redirect } from "next/navigation";
-
+import { createPasswordResetTicket } from "@/lib/auth/password-reset-ticket";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 
 export type LoginState = {
   error: string | null;
+  nextPath?: string | null;
 };
+
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
+}
 
 export async function login(
   _previousState: LoginState,
   formData: FormData,
 ): Promise<LoginState> {
-  const email = formData.get("email");
-  const password = formData.get("password");
+  const emailRaw = formData.get("email");
+  const passwordRaw = formData.get("password");
 
-  if (
-    typeof email !== "string" ||
-    typeof password !== "string" ||
-    !email.trim() ||
-    !password
-  ) {
+  if (typeof emailRaw !== "string" || !emailRaw.trim()) {
+    return { error: "กรุณากรอกอีเมล" };
+  }
+
+  const email = normalizeEmail(emailRaw);
+  const password =
+    typeof passwordRaw === "string" ? passwordRaw : "";
+
+  const pendingReset = await prisma.employee.findFirst({
+    where: {
+      email: { equals: email, mode: "insensitive" },
+      mustResetPassword: true,
+      authUserId: { not: null },
+    },
+    select: {
+      id: true,
+      isActive: true,
+      roleId: true,
+      authUserId: true,
+      email: true,
+      mustResetPassword: true,
+    },
+  });
+
+  if (pendingReset) {
+    if (!pendingReset.isActive) {
+      return {
+        error:
+          "บัญชีรอการเปิดใช้งานจากผู้ดูแลระบบ กรุณาติดต่อผู้จัดการเพื่อกำหนดสิทธิ์",
+      };
+    }
+    if (!pendingReset.roleId || !pendingReset.authUserId || !pendingReset.email) {
+      return {
+        error: "บัญชียังไม่ได้กำหนดสิทธิ์ กรุณาติดต่อผู้ดูแลระบบ",
+      };
+    }
+
+    const ticket = createPasswordResetTicket({
+      employeeId: pendingReset.id,
+      authUserId: pendingReset.authUserId,
+      email: pendingReset.email,
+    });
+
+    return {
+      error: null,
+      nextPath: `/set-password?ticket=${encodeURIComponent(ticket)}`,
+    };
+  }
+
+  if (!password) {
     return { error: "กรุณากรอกอีเมลและรหัสผ่าน" };
   }
 
@@ -30,7 +78,7 @@ export async function login(
     data: { user },
     error,
   } = await supabase.auth.signInWithPassword({
-    email: email.trim(),
+    email,
     password,
   });
 
@@ -68,9 +116,8 @@ export async function login(
     };
   }
 
-  if (employee.mustResetPassword) {
-    redirect("/set-password");
-  }
-
-  redirect("/");
+  return {
+    error: null,
+    nextPath: employee.mustResetPassword ? "/set-password" : "/",
+  };
 }

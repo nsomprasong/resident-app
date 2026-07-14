@@ -389,13 +389,60 @@ Accepted
 
 - Public self-registration via `POST /api/auth/register` creates Supabase Auth user + Employee with `isActive=false` and no role.
 - Access requires admin/manager with `employee.manage` to assign role and activate; activation without role is rejected.
-- Password reset by privileged staff sets `employees.must_reset_password=true`. Next login redirects to `/set-password`; after `POST /api/auth/set-password` the flag clears and normal access continues.
-- Middleware blocks all other routes while `mustResetPassword` is true (except set-password, logout, me).
+- Password reset by privileged staff sets `employees.must_reset_password=true` (no temporary password). On login, the server checks the email first: if reset is pending, it issues a short-lived signed ticket and sends the user to `/set-password` without requiring the old password. Otherwise normal email+password login continues. After `POST /api/auth/set-password` (ticket or session) the flag clears, any session is signed out, and the user must log in again with the new password before entering the app.
+- Middleware allows unauthenticated access to `/set-password` and `/api/auth/set-password` for the ticket flow, and still blocks other routes while an authenticated user has `mustResetPassword`.
 
 ## Reason
 
 - Staff can enroll themselves without granting immediate system access.
 - Password reset stays under employee.manage control without requiring email delivery infrastructure.
+
+---
+
+# ADR-016
+
+## Title
+
+Separate employee role assignment from role-permission editing
+
+## Status
+
+Accepted
+
+## Decision
+
+- `employee.manage` may assign an existing role to an employee (Employees settings).
+- `authorization.manage` is required to open Roles settings and to mutate role definitions / permission matrices.
+- `GET /api/roles` allows either `employee.manage` or `authorization.manage` so managers can populate the role dropdown without permission-editing access.
+- Settings hub hides the Roles section unless the current user has `authorization.manage`.
+
+## Reason
+
+Managers often need to assign roles without being able to escalate privileges by editing permission sets.
+
+---
+
+# ADR-017
+
+## Title
+
+Protected system support employee account
+
+## Status
+
+Accepted
+
+## Decision
+
+- Support account emails are configured via `SUPPORT_ACCOUNT_EMAILS` (comma-separated; default includes the designated support mailbox when unset).
+- Other users must not list, view detail, mutate, archive, unlink auth, deactivate, or password-reset those employees (Settings + HR APIs).
+- The support actor may still see the account (same email) for operational use.
+- Data-reset never deletes employees/roles/auth — support accounts therefore survive “ลบทั้งหมด” operational wipes.
+- The `ADMIN` role (`ผู้ดูแลระบบ`) is listed/editable/assignable only to the support mailbox so there remains a single system-admin track.
+
+## Reason
+
+Keep a durable support login for system recovery without exposing it or the sole ADMIN role to other staff.
 
 ---
 

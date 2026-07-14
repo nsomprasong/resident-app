@@ -3,6 +3,8 @@
 import { KeyRound, Pencil, Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
+import { useConfirmDialog } from "@/hooks/useConfirmDialog";
+import { resolvePermissionThaiLabel } from "@/lib/auth/permission-labels";
 import type {
   PermissionRecord,
   RolePermissionMapping,
@@ -29,6 +31,7 @@ type CurrentEmployee = {
 };
 
 export function RolesManager() {
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const [canManage, setCanManage] = useState(false);
   const [identityLoaded, setIdentityLoaded] = useState(false);
   const [items, setItems] = useState<RoleRecord[]>([]);
@@ -265,9 +268,12 @@ export function RolesManager() {
     if (
       !nextActive &&
       item.employeeCount > 0 &&
-      !window.confirm(
-        `Role ${item.code} มีพนักงาน ${item.employeeCount} คนที่ถูก map อยู่ ต้องการปิดใช้งานหรือไม่? พนักงานเหล่านี้จะเข้าใช้งานไม่ได้จนกว่าจะเปลี่ยน role`,
-      )
+      !(await confirm({
+        title: `ปิดใช้งาน Role ${item.code}?`,
+        description: `มีพนักงาน ${item.employeeCount} คนที่ถูก map อยู่ พนักงานเหล่านี้จะเข้าใช้งานไม่ได้จนกว่าจะเปลี่ยน role`,
+        confirmLabel: "ปิดใช้งาน",
+        tone: "danger",
+      }))
     ) {
       return;
     }
@@ -307,7 +313,8 @@ export function RolesManager() {
       <div className="mt-6 border-t border-border pt-4">
         <p className="text-sm font-medium text-foreground">Roles</p>
         <p className="mt-2 text-sm text-muted-foreground">
-          การจัดการ roles ต้องใช้สิทธิ์ authorization.manage (ผู้ดูแลระบบเท่านั้น)
+          การสร้าง/แก้ไขบทบาทและชุดสิทธิ์ต้องใช้สิทธิ์ authorization.manage
+          (แก้ไขชุดสิทธิ์ของบทบาท) — การกำหนดบทบาทให้พนักงานใช้ที่เมนูพนักงาน
         </p>
       </div>
     );
@@ -315,6 +322,7 @@ export function RolesManager() {
 
   return (
     <div className="mt-6 border-t border-border pt-4">
+      {confirmDialog}
       <div className="mb-3 flex items-center justify-between gap-3">
         <p className="text-sm font-medium text-foreground">Roles</p>
         <button
@@ -514,7 +522,9 @@ export function RolesManager() {
                       />
                       <span>
                         <span className="block text-sm font-medium text-foreground">
-                          {permission.description ?? permission.code}
+                          {resolvePermissionThaiLabel(permission.code) ??
+                            permission.description ??
+                            permission.code}
                         </span>
                         <span className="mt-0.5 block font-mono text-xs text-muted-foreground">
                           {permission.code}

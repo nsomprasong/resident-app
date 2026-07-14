@@ -47,15 +47,19 @@ export async function GET(
         rooms: {
           include: {
             room: { include: { zone: true, roomType: true } },
-            inspection: true,
+            inspection: {
+              include: {
+                completedBy: { select: { id: true, name: true } },
+              },
+            },
           },
         },
         rafts: { include: { raft: true } },
         charges: { orderBy: { createdAt: "asc" } },
         payments: {
-          where: { status: { in: ["PAID", "REFUNDED"] } },
           orderBy: { createdAt: "desc" },
         },
+        paymentRefunds: { select: { amount: true } },
         orders: {
           where: { status: { not: "CANCELLED" } },
           include: {
@@ -80,6 +84,7 @@ export async function GET(
       charges: booking.charges,
       orders: booking.orders,
       payments: booking.payments,
+      paymentRefunds: booking.paymentRefunds,
     });
     return NextResponse.json({
       id: booking.id,
@@ -110,6 +115,8 @@ export async function GET(
         extraBeds,
         isExtra,
         inspectionStatus: inspection?.status ?? null,
+        inspectionCompletedAt: inspection?.completedAt?.toISOString() ?? null,
+        inspectionCompletedByName: inspection?.completedBy?.name ?? null,
       })),
       rafts: booking.rafts.map(({ raft, rate, isExtra }) => ({
         id: raft.id,
@@ -145,25 +152,32 @@ export async function GET(
           roomNumber: order.room?.number ?? null,
         })),
       ),
-      payments: booking.payments.map((payment, index) => ({
-        id: payment.id,
-        type: "PAYMENT",
-        title:
-          payment.reference ||
-          (payment.status === "REFUNDED"
-            ? "คืนเงิน"
-            : index === booking.payments.length - 1
-              ? "เงินมัดจำ"
-              : "รับชำระเงิน"),
-        price:
-          payment.status === "REFUNDED"
-            ? -Number(payment.amount)
-            : Number(payment.amount),
-      })),
+      payments: booking.payments
+        .filter((payment) =>
+          ["PAID", "VERIFIED", "REFUNDED", "PARTIALLY_REFUNDED"].includes(
+            payment.status,
+          ),
+        )
+        .map((payment, index) => ({
+          id: payment.id,
+          type: "PAYMENT",
+          title:
+            payment.reference ||
+            (payment.status === "REFUNDED"
+              ? "คืนเงิน"
+              : index === 0
+                ? "เงินมัดจำ"
+                : "รับชำระเงิน"),
+          price:
+            payment.status === "REFUNDED"
+              ? -Number(payment.amount)
+              : Number(payment.amount),
+        })),
       totals: {
         charges: financialSummary.chargeTotal,
         orders: financialSummary.extraOrderTotal,
         paid: financialSummary.netPaidTotal,
+        pending: financialSummary.pendingTotal,
         grand: financialSummary.grandTotal,
         outstanding: financialSummary.outstandingTotal,
       },

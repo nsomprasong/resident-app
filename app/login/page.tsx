@@ -5,7 +5,14 @@ import LoginForm from "@/app/login/LoginForm";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 
-export default async function LoginPage() {
+type LoginPageProps = {
+  searchParams: Promise<{ passwordUpdated?: string }>;
+};
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const params = await searchParams;
+  const passwordUpdated = params.passwordUpdated === "1";
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -39,6 +46,14 @@ export default async function LoginPage() {
             ระบบจัดการที่พักสำหรับพนักงาน
           </p>
         </div>
+        {passwordUpdated ? (
+          <p
+            role="status"
+            className="mb-5 rounded-xl bg-success/10 px-4 py-3 text-sm text-success"
+          >
+            ตั้งรหัสผ่านใหม่สำเร็จแล้ว กรุณาเข้าสู่ระบบด้วยรหัสผ่านใหม่
+          </p>
+        ) : null}
         <LoginForm />
       </section>
     </main>

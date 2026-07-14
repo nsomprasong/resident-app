@@ -3,20 +3,20 @@ import {
   ArrowRight,
   BedDouble,
   CalendarCheck2,
-  CalendarDays,
   ClipboardList,
   CookingPot,
   Eraser,
-  HandCoins,
   House,
   LayoutDashboard,
   Settings,
+  UsersRound,
   Utensils,
   type LucideIcon,
 } from "lucide-react";
 
 import { canAccessPageWithPermissions } from "@/lib/auth/authorization";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { filterHrNavItems } from "@/lib/hr/nav";
 
 const cards: Array<{
   title: string;
@@ -49,12 +49,6 @@ const cards: Array<{
     icon: CookingPot,
   },
   {
-    title: "ตารางพนักงาน",
-    description: "ดูและจัดการตารางเวรพนักงาน",
-    href: "/employeeSchedule",
-    icon: CalendarDays,
-  },
-  {
     title: "แม่บ้านและมินิบาร์",
     description: "ตรวจห้องและบันทึกมินิบาร์",
     href: "/houseKeeperMinibar",
@@ -79,12 +73,6 @@ const cards: Array<{
     icon: Eraser,
   },
   {
-    title: "ค่าแรง",
-    description: "ดูข้อมูลค่าแรงพนักงาน",
-    href: "/wage",
-    icon: HandCoins,
-  },
-  {
     title: "รายงานรวม",
     description: "รายงานสรุปการดำเนินงาน",
     href: "/report",
@@ -95,9 +83,20 @@ const cards: Array<{
 export default async function Home() {
   const currentUser = await getCurrentUser();
   const permissions = currentUser?.employee?.role?.permissions ?? [];
-  const visibleCards = cards.filter((card) =>
-    canAccessPageWithPermissions(permissions, card.href),
-  );
+  const hrCards = filterHrNavItems(permissions)
+    .filter((item) => item.path === "/hr")
+    .map((item) => ({
+      title: "บริหารพนักงาน",
+      description: item.description,
+      href: item.path,
+      icon: UsersRound as LucideIcon,
+    }));
+  const visibleCards = [
+    ...cards.filter((card) =>
+      canAccessPageWithPermissions(permissions, card.href),
+    ),
+    ...hrCards,
+  ];
 
   return (
     <div className="mx-auto max-w-6xl p-4 sm:p-8">

@@ -5,6 +5,13 @@ import {
 } from "@/lib/api/validation";
 import { recordAuditLog } from "@/lib/audit/audit-log";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import {
+  assertActorMayAssignRoleCode,
+  canActorAccessSupportEmployee,
+  isProtectedSupportEmail,
+  protectedSupportEmployeeWhere,
+  supportAccountForbiddenResponseMessage,
+} from "@/lib/auth/support-account";
 import { prisma } from "@/lib/prisma";
 import { parseEmployeeInput, serializeEmployee } from "@/lib/settings/employees";
 import { resolveAuthUserIdForEmail } from "@/lib/supabase/admin";
@@ -22,7 +29,10 @@ const employeeInclude = {
   },
 } as const;
 
-async function assertRoleAssignable(roleId: string | null | undefined) {
+async function assertRoleAssignable(
+  roleId: string | null | undefined,
+  actorEmail: string | null | undefined,
+) {
   if (roleId === undefined) return { ok: true as const };
   if (roleId === null) return { ok: true as const };
 
@@ -49,12 +59,30 @@ async function assertRoleAssignable(roleId: string | null | undefined) {
     };
   }
 
+  const adminRoleCheck = assertActorMayAssignRoleCode(actorEmail, role.code);
+  if (!adminRoleCheck.ok) {
+    return {
+      ok: false as const,
+      response: apiErrorResponse(
+        adminRoleCheck.message,
+        403,
+        "SYSTEM_ADMIN_ROLE_PROTECTED",
+      ),
+    };
+  }
+
   return { ok: true as const };
 }
 
 export async function GET() {
   try {
+    const currentUser = await getCurrentUser();
+    const where = await protectedSupportEmployeeWhere({
+      email: currentUser?.user.email,
+      authUserId: currentUser?.user.id,
+    });
     const employees = await prisma.employee.findMany({
+      where,
       include: employeeInclude,
       orderBy: { name: "asc" },
     });
@@ -90,7 +118,27 @@ export async function POST(request: NextRequest) {
       ]);
     }
 
-    const roleCheck = await assertRoleAssignable(roleId ?? null);
+    if (
+      isProtectedSupportEmail(email) &&
+      !canActorAccessSupportEmployee(currentUser?.user.email, email)
+    ) {
+      const existingSupport = await prisma.employee.findFirst({
+        where: { email: { equals: email, mode: "insensitive" } },
+        select: { id: true },
+      });
+      if (existingSupport) {
+        return apiErrorResponse(
+          supportAccountForbiddenResponseMessage(),
+          403,
+          "SUPPORT_ACCOUNT_PROTECTED",
+        );
+      }
+    }
+
+    const roleCheck = await assertRoleAssignable(
+      roleId ?? null,
+      currentUser?.user.email,
+    );
     if (!roleCheck.ok) return roleCheck.response;
 
     const emailOwner = await prisma.employee.findUnique({

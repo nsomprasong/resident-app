@@ -47,14 +47,16 @@ describe("parseEmployeeInput", () => {
     }
   });
 
-  it("clears authUserId and roleId with empty strings", () => {
-    const result = parseEmployeeInput(
-      { authUserId: "", roleId: "" },
-      "update",
-    );
+  it("rejects client authUserId and clears roleId with empty string", () => {
+    const rejected = parseEmployeeInput({ authUserId: "" }, "update");
+    assert.equal(rejected.ok, false);
+    if (!rejected.ok) {
+      assert.ok(rejected.issues.some((issue) => issue.path === "authUserId"));
+    }
+
+    const result = parseEmployeeInput({ roleId: "" }, "update");
     assert.equal(result.ok, true);
     if (result.ok) {
-      assert.equal(result.data.authUserId, null);
       assert.equal(result.data.roleId, null);
     }
   });

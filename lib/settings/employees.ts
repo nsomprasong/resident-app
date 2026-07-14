@@ -65,7 +65,6 @@ export type ParsedEmployeeInput = {
   name?: string;
   email?: string | null;
   phone?: string | null;
-  authUserId?: string | null;
   roleId?: string | null;
   isActive?: boolean;
 };
@@ -132,17 +131,10 @@ export function parseEmployeeInput(
   }
 
   if ("authUserId" in body) {
-    const authUserId = readTrimmedString(body, "authUserId");
-    if (authUserId === undefined || authUserId === "") {
-      data.authUserId = null;
-    } else if (!isUuid(authUserId)) {
-      issues.push({
-        path: "authUserId",
-        message: "authUserId ต้องเป็น UUID ของ Supabase Auth user",
-      });
-    } else {
-      data.authUserId = authUserId.toLowerCase();
-    }
+    issues.push({
+      path: "authUserId",
+      message: "ไม่รองรับการตั้งหรือถอด authUserId โดยตรง — ใช้การผูกผ่านอีเมล",
+    });
   }
 
   if ("roleId" in body) {

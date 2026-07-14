@@ -42,8 +42,8 @@ async function main() {
 
     if (
       roleCount !== 6 ||
-      permissionCount !== 24 ||
-      matrixCount !== 69 ||
+      permissionCount !== 42 ||
+      matrixCount !== 108 ||
       employeeCount !== 8 ||
       linkedCount !== 7 ||
       missingRoleCount !== 1 ||

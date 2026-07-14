@@ -3,6 +3,7 @@
 import { Pencil, Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
+import { useConfirmDialog } from "@/hooks/useConfirmDialog";
 import {
   inspectionItemTypeOptions,
   type InspectionCatalogMasterRecord,
@@ -39,6 +40,7 @@ function typeLabel(type: string) {
 }
 
 export function InspectionCatalogManager() {
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const [items, setItems] = useState<InspectionCatalogMasterRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -145,10 +147,19 @@ export function InspectionCatalogManager() {
 
   const toggleActive = async (item: InspectionCatalogMasterRecord) => {
     const nextActive = !item.isActive;
-    const message = nextActive
-      ? `เปิดใช้งานรายการ "${item.name}" อีกครั้ง?`
-      : `ปิดใช้งานรายการ "${item.name}"? จะไม่แสดงในขั้นตอนตรวจห้อง`;
-    if (!window.confirm(message)) return;
+    const confirmed = nextActive
+      ? await confirm({
+          title: `เปิดใช้งานรายการ "${item.name}"?`,
+          confirmLabel: "เปิดใช้งาน",
+          tone: "default",
+        })
+      : await confirm({
+          title: `ปิดใช้งานรายการ "${item.name}"?`,
+          description: "จะไม่แสดงในขั้นตอนตรวจห้อง",
+          confirmLabel: "ปิดใช้งาน",
+          tone: "danger",
+        });
+    if (!confirmed) return;
 
     setSaving(true);
     setError("");
@@ -174,6 +185,7 @@ export function InspectionCatalogManager() {
 
   return (
     <div className="mt-6 border-t border-border pt-4">
+      {confirmDialog}
       <div className="mb-3 flex items-center justify-between gap-3">
         <p className="text-sm font-medium text-foreground">ราคากลางตรวจห้อง</p>
         <button

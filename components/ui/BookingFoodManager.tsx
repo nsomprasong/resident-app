@@ -3,6 +3,8 @@
 import { Minus, Plus, Trash2, Utensils } from "lucide-react";
 import { useState } from "react";
 
+import { useConfirmDialog } from "@/hooks/useConfirmDialog";
+
 import PricingToggle from "./PricingToggle";
 
 export type ManagedFoodItem = {
@@ -37,6 +39,7 @@ export default function BookingFoodManager({
   onAdd?: () => void;
 }) {
   const isGroup = mode === "group";
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState("");
 
@@ -69,6 +72,7 @@ export default function BookingFoodManager({
 
   return (
     <section className="rounded-2xl border border-border bg-surface shadow-sm">
+      {confirmDialog}
       <div className="flex items-center justify-between gap-3 border-b border-border p-4">
         <div className="flex items-center gap-3">
           <span className="grid h-11 w-11 place-items-center rounded-xl bg-muted text-muted-foreground">
@@ -175,13 +179,17 @@ export default function BookingFoodManager({
                           aria-label="ลบรายการ"
                           disabled={busyId === item.id}
                           onClick={() => {
-                            if (
-                              window.confirm(
-                                `ลบ ${item.productName} ออกจากรายการจอง?`,
-                              )
-                            ) {
-                              void patchItem(item, { quantity: 0 });
-                            }
+                            void (async () => {
+                              const ok = await confirm({
+                                title: `ลบ ${item.productName}?`,
+                                description: "รายการนี้จะถูกลบออกจากการจอง",
+                                confirmLabel: "ลบรายการ",
+                                tone: "danger",
+                              });
+                              if (ok) {
+                                void patchItem(item, { quantity: 0 });
+                              }
+                            })();
                           }}
                           className="grid h-8 w-8 place-items-center rounded-lg border border-destructive/30 text-destructive hover:bg-destructive/10 disabled:opacity-50"
                         >

@@ -3,6 +3,7 @@
 import { Pencil, Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
+import { useConfirmDialog } from "@/hooks/useConfirmDialog";
 import type { RoomTypeRecord } from "@/lib/settings/room-types";
 
 type FormState = {
@@ -35,6 +36,7 @@ type ApiErrorBody = {
 };
 
 export function RoomTypesManager() {
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const [items, setItems] = useState<RoomTypeRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -139,11 +141,18 @@ export function RoomTypesManager() {
 
   const toggleActive = async (item: RoomTypeRecord) => {
     const nextActive = !item.isActive;
-    const confirmed = window.confirm(
-      nextActive
-        ? `เปิดใช้งานประเภทห้อง "${item.name}" อีกครั้ง?`
-        : `ปิดใช้งานประเภทห้อง "${item.name}"? ห้องเดิมที่ผูกอยู่ยังคงข้อมูลเดิม`,
-    );
+    const confirmed = nextActive
+      ? await confirm({
+          title: `เปิดใช้งานประเภทห้อง "${item.name}"?`,
+          confirmLabel: "เปิดใช้งาน",
+          tone: "default",
+        })
+      : await confirm({
+          title: `ปิดใช้งานประเภทห้อง "${item.name}"?`,
+          description: "ห้องเดิมที่ผูกอยู่ยังคงข้อมูลเดิม",
+          confirmLabel: "ปิดใช้งาน",
+          tone: "danger",
+        });
     if (!confirmed) return;
 
     setSaving(true);
@@ -170,6 +179,7 @@ export function RoomTypesManager() {
 
   return (
     <div className="mt-4">
+      {confirmDialog}
       <div className="mb-3 flex items-center justify-between gap-3">
         <p className="text-sm font-medium text-foreground">ประเภทห้อง</p>
         <button

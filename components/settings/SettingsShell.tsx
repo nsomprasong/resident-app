@@ -9,23 +9,27 @@ import {
   Layers3,
   MapPinned,
   PackageOpen,
+  QrCode,
+  Settings,
   ShieldCheck,
   ShipWheel,
   UsersRound,
   type LucideIcon,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { EmployeesManager } from "@/components/settings/EmployeesManager";
 import { InspectionCatalogManager } from "@/components/settings/InspectionCatalogManager";
 import { PaymentChannelsManager } from "@/components/settings/PaymentChannelsManager";
 import { ProductsManager } from "@/components/settings/ProductsManager";
+import { PromptPayAccountsManager } from "@/components/settings/PromptPayAccountsManager";
 import { RaftsManager } from "@/components/settings/RaftsManager";
 import { RolesManager } from "@/components/settings/RolesManager";
 import { RoomTypesManager } from "@/components/settings/RoomTypesManager";
 import { RoomsManager } from "@/components/settings/RoomsManager";
 import { ZonesManager } from "@/components/settings/ZonesManager";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 export type SettingsSummary = {
   roomTypes: number;
@@ -53,6 +57,7 @@ type SectionId =
   | "products"
   | "inspection-catalog"
   | "payment-channels"
+  | "promptpay-accounts"
   | "employees"
   | "roles";
 
@@ -62,6 +67,11 @@ type SectionDef = {
   description: string;
   icon: LucideIcon;
   summary: (s: SettingsSummary) => string;
+  /** Extra permission beyond settings.manage page access */
+  requiredPermission?:
+    | "employee.manage"
+    | "authorization.manage"
+    | "payment.promptpay_settings.manage";
 };
 
 type GroupDef = {
@@ -140,6 +150,14 @@ const groups: GroupDef[] = [
         icon: CreditCard,
         summary: (s) => `${s.channelsActive}/${s.channels} เปิดใช้`,
       },
+      {
+        id: "promptpay-accounts",
+        title: "บัญชีพร้อมเพย์",
+        description: "บัญชีสำหรับสร้าง PromptPay QR ตามยอดชำระ",
+        icon: QrCode,
+        summary: () => "ตั้งค่า QR",
+        requiredPermission: "payment.promptpay_settings.manage",
+      },
     ],
   },
   {
@@ -150,16 +168,18 @@ const groups: GroupDef[] = [
       {
         id: "employees",
         title: "พนักงาน",
-        description: "ข้อมูลพนักงานและการผูกบทบาท",
+        description: "ข้อมูลพนักงานและการกำหนดบทบาท",
         icon: UsersRound,
         summary: (s) => `${s.employeesWithRole}/${s.employees} มีบทบาท`,
+        requiredPermission: "employee.manage",
       },
       {
         id: "roles",
-        title: "บทบาทและสิทธิ์",
-        description: "กำหนดบทบาทและชุดสิทธิ์การเข้าถึง",
+        title: "บทบาทและชุดสิทธิ์",
+        description: "สร้างบทบาทและแก้ไขชุดสิทธิ์การเข้าถึง",
         icon: ShieldCheck,
         summary: (s) => `${s.roles} บทบาท`,
+        requiredPermission: "authorization.manage",
       },
     ],
   },
@@ -187,6 +207,8 @@ function renderManager(id: SectionId) {
       return <InspectionCatalogManager />;
     case "payment-channels":
       return <PaymentChannelsManager />;
+    case "promptpay-accounts":
+      return <PromptPayAccountsManager />;
     case "employees":
       return <EmployeesManager />;
     case "roles":
@@ -194,20 +216,88 @@ function renderManager(id: SectionId) {
   }
 }
 
+function canViewSection(
+  section: SectionDef,
+  permissions: readonly string[],
+): boolean {
+  if (!section.requiredPermission) return true;
+  return permissions.includes(section.requiredPermission);
+}
+
 export function SettingsShell({ summary }: { summary: SettingsSummary }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const activeId = searchParams.get("section");
-  const activeSection = useMemo(
-    () => (isSectionId(activeId) ? allSections.find((s) => s.id === activeId) : undefined),
-    [activeId],
+  const [permissions, setPermissions] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    async function loadPermissions() {
+      try {
+        const response = await fetch("/api/auth/me", {
+          signal: controller.signal,
+          cache: "no-store",
+        });
+        if (!response.ok) {
+          setPermissions([]);
+          return;
+        }
+        const data = (await response.json()) as {
+          employee?: { permissions?: string[] };
+        };
+        setPermissions(data.employee?.permissions ?? []);
+      } catch {
+        if (!controller.signal.aborted) {
+          setPermissions([]);
+        }
+      }
+    }
+    void loadPermissions();
+    return () => controller.abort();
+  }, []);
+
+  const visibleGroups = useMemo(() => {
+    if (!permissions) return groups;
+    return groups
+      .map((group) => ({
+        ...group,
+        sections: group.sections.filter((section) =>
+          canViewSection(section, permissions),
+        ),
+      }))
+      .filter((group) => group.sections.length > 0);
+  }, [permissions]);
+
+  const visibleSections = useMemo(
+    () => visibleGroups.flatMap((group) => group.sections),
+    [visibleGroups],
   );
+
+  const activeId = searchParams.get("section");
+  const activeSection = useMemo(() => {
+    if (!isSectionId(activeId)) return undefined;
+    if (permissions && !canViewSection(
+      allSections.find((s) => s.id === activeId)!,
+      permissions,
+    )) {
+      return undefined;
+    }
+    return visibleSections.find((s) => s.id === activeId)
+      ?? (permissions === null && isSectionId(activeId)
+        ? allSections.find((s) => s.id === activeId)
+        : undefined);
+  }, [activeId, permissions, visibleSections]);
+
   const activeGroup = useMemo(
     () =>
       activeSection
-        ? groups.find((group) => group.sections.some((s) => s.id === activeSection.id))
+        ? visibleGroups.find((group) =>
+            group.sections.some((s) => s.id === activeSection.id),
+          ) ??
+          groups.find((group) =>
+            group.sections.some((s) => s.id === activeSection.id),
+          )
         : undefined,
-    [activeSection],
+    [activeSection, visibleGroups],
   );
 
   function openSection(id: SectionId) {
@@ -218,49 +308,67 @@ export function SettingsShell({ summary }: { summary: SettingsSummary }) {
     router.push("/settings");
   }
 
+  if (activeId && permissions && !activeSection) {
+    return (
+      <div className="min-h-screen bg-muted p-4 sm:p-8">
+        <div className="mx-auto max-w-6xl space-y-4">
+          <button
+            type="button"
+            onClick={backToHub}
+            className="inline-flex items-center gap-2 text-sm font-medium text-secondary hover:text-secondary/80"
+          >
+            <ArrowLeft size={16} />
+            กลับไปตั้งค่าข้อมูลหลัก
+          </button>
+          <p className="text-sm text-destructive" role="alert">
+            คุณไม่มีสิทธิ์เปิดส่วนนี้
+            {activeId === "roles"
+              ? " — การแก้ไขชุดสิทธิ์ของบทบาทต้องใช้ authorization.manage"
+              : activeId === "employees"
+                ? " — การกำหนดบทบาทให้พนักงานต้องใช้ employee.manage"
+                : ""}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (activeSection) {
     const Icon = activeSection.icon;
     return (
       <div className="min-h-screen bg-muted p-4 sm:p-8">
         <div className="mx-auto max-w-6xl space-y-6">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <button
-                type="button"
-                onClick={backToHub}
-                className="mb-3 inline-flex items-center gap-2 text-sm font-medium text-secondary hover:text-secondary/80"
-              >
-                <ArrowLeft size={16} />
-                กลับไปตั้งค่าข้อมูลหลัก
-              </button>
-              <p className="text-sm font-medium text-primary">
-                ตั้งค่าข้อมูลหลัก
-                {activeGroup ? ` · ${activeGroup.title}` : ""}
-              </p>
-              <h1 className="mt-1 text-3xl font-semibold text-foreground">
-                {activeSection.title}
-              </h1>
-              <p className="mt-2 text-sm text-muted-foreground">
-                {activeSection.description}
-              </p>
-            </div>
-            <div className="flex items-center gap-3 rounded-3xl border border-border bg-surface px-4 py-3 shadow-sm">
-              <span className="grid h-11 w-11 place-items-center rounded-2xl bg-primary/10 text-primary">
-                <Icon size={20} />
-              </span>
-              <div>
+          <button
+            type="button"
+            onClick={backToHub}
+            className="inline-flex items-center gap-2 text-sm font-medium text-secondary hover:text-secondary/80"
+          >
+            <ArrowLeft size={16} />
+            กลับไปตั้งค่าข้อมูลหลัก
+          </button>
+          <PageHeader
+            icon={<Icon size={24} />}
+            eyebrow={
+              activeGroup
+                ? `งานประจำวัน · ${activeGroup.title}`
+                : "งานประจำวัน"
+            }
+            title={activeSection.title}
+            description={activeSection.description}
+            actions={
+              <div className="rounded-2xl border border-border bg-surface px-4 py-3 shadow-sm">
                 <p className="text-xs text-muted-foreground">สรุป</p>
                 <p className="text-sm font-semibold text-foreground">
                   {activeSection.summary(summary)}
                 </p>
               </div>
-            </div>
-          </div>
+            }
+          />
 
           <section className="overflow-hidden rounded-3xl border border-border bg-surface shadow-sm">
             <div className="border-b border-border p-4 sm:px-5">
               <nav className="flex gap-2 overflow-x-auto">
-                {activeGroup?.sections.map((section) => {
+                {(activeGroup?.sections ?? []).map((section) => {
                   const selected = section.id === activeSection.id;
                   const ItemIcon = section.icon;
                   return (
@@ -291,18 +399,18 @@ export function SettingsShell({ summary }: { summary: SettingsSummary }) {
   return (
     <div className="min-h-screen bg-muted p-4 sm:p-8">
       <div className="mx-auto max-w-6xl space-y-6">
-        <div>
-          <p className="text-sm font-medium text-primary">Settings</p>
-          <h1 className="mt-1 text-3xl font-semibold text-foreground">
-            ตั้งค่าข้อมูลหลัก
-          </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            ตรวจสอบและจัดการข้อมูลหลักที่ใช้ในการจอง ทรัพยากร สินค้า การรับเงิน
-            และพนักงาน โดยเลือกหัวข้อทีละส่วน
-          </p>
-        </div>
+        <PageHeader
+          icon={<Settings size={24} />}
+          eyebrow="งานประจำวัน"
+          title="ตั้งค่าข้อมูลหลัก"
+          description="ตรวจสอบและจัดการข้อมูลหลักที่ใช้ในการจอง ทรัพยากร สินค้า การรับเงิน และพนักงาน โดยเลือกหัวข้อทีละส่วน"
+        />
 
-        {groups.map((group) => (
+        {permissions === null ? (
+          <p className="text-sm text-muted-foreground">กำลังโหลดเมนูตามสิทธิ์...</p>
+        ) : null}
+
+        {visibleGroups.map((group) => (
           <section
             key={group.id}
             className="rounded-3xl border border-border bg-surface p-5 shadow-sm"

@@ -1,6 +1,14 @@
-import { Download, FileText, Hotel, ReceiptText, Wallet } from "lucide-react";
+import {
+  ClipboardList,
+  Download,
+  FileText,
+  Hotel,
+  ReceiptText,
+  Wallet,
+} from "lucide-react";
 import type { ReactNode } from "react";
 
+import { PageHeader } from "@/components/ui/PageHeader";
 import { BookingStatus, PaymentStatus } from "@/generated/prisma/client";
 import {
   activeBookingConflictStatuses,
@@ -121,24 +129,21 @@ export default async function ReportPage() {
   return (
     <div className="min-h-screen bg-muted p-4 sm:p-8">
       <div className="mx-auto max-w-6xl space-y-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-medium text-primary">Reports</p>
-            <h1 className="mt-1 text-3xl font-semibold text-foreground">
-              รายงานกิจการ
-            </h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              รายได้ Occupancy ใบเสร็จ และ export ข้อมูลรายรับเดือนปัจจุบัน
-            </p>
-          </div>
-          <a
-            href="/api/reports/export"
-            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-          >
-            <Download size={16} />
-            Export CSV
-          </a>
-        </div>
+        <PageHeader
+          icon={<ClipboardList size={24} />}
+          eyebrow="งานประจำวัน"
+          title="รายงานกิจการ"
+          description="รายได้ Occupancy ใบเสร็จ และ export ข้อมูลรายรับเดือนปัจจุบัน"
+          actions={
+            <a
+              href="/api/reports/export"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            >
+              <Download size={16} />
+              Export CSV
+            </a>
+          }
+        />
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatCard

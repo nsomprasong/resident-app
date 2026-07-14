@@ -1,6 +1,7 @@
 import TodayOpsBoard, {
   type TodayOpsCardData,
 } from "@/components/dashboard/TodayOpsBoard";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { activeBookingConflictStatuses } from "@/lib/bookings/availability";
 import {
   bangkokDateOnly,
@@ -9,6 +10,7 @@ import {
   summarizeTodayOps,
 } from "@/lib/dashboard/today-ops";
 import { prisma } from "@/lib/prisma";
+import { CalendarCheck2 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -297,34 +299,23 @@ export default async function TodayOpsPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-8">
-      <header className="overflow-hidden rounded-[2rem] border border-border bg-surface shadow-sm">
-        <div className="relative bg-gradient-to-br from-primary via-primary to-secondary px-6 py-8 text-primary-foreground sm:px-10 sm:py-10">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.18),transparent_55%)]" />
-          <div className="relative flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <p className="text-sm font-medium text-primary-foreground/75">
-                ภาพรวมงานวันนี้
-              </p>
-              <h1 className="mt-1 text-3xl font-semibold tracking-tight sm:text-4xl">
-                {formatThaiDate(todayKey)}
-              </h1>
-              <p className="mt-2 max-w-xl text-sm text-primary-foreground/80">
-                แสดงเฉพาะกรุ๊ป/การจองที่เข้าพักอยู่และยังไม่ปิดงาน —
-                แตะการ์ดเพื่อดูรายละเอียด
-              </p>
-            </div>
-            <div className="rounded-2xl bg-primary-foreground/10 px-4 py-3 text-sm backdrop-blur">
-              <p className="text-primary-foreground/70">การจองวันนี้</p>
-              <p className="text-2xl font-semibold">
-                {formatNumber(summary.checkInBookingCount)}
-                <span className="ml-2 text-sm font-normal text-primary-foreground/75">
-                  รายการเช็กอิน
-                </span>
-              </p>
-            </div>
+      <PageHeader
+        icon={<CalendarCheck2 size={24} />}
+        eyebrow="งานประจำวัน"
+        title={formatThaiDate(todayKey)}
+        description="แสดงเฉพาะกรุ๊ป/การจองที่เข้าพักอยู่และยังไม่ปิดงาน — แตะการ์ดเพื่อดูรายละเอียด"
+        actions={
+          <div className="rounded-2xl border border-border bg-surface px-4 py-3 text-sm shadow-sm">
+            <p className="text-muted-foreground">การจองวันนี้</p>
+            <p className="text-2xl font-semibold text-foreground">
+              {formatNumber(summary.checkInBookingCount)}
+              <span className="ml-2 text-sm font-normal text-muted-foreground">
+                รายการเช็กอิน
+              </span>
+            </p>
           </div>
-        </div>
-      </header>
+        }
+      />
 
       <TodayOpsBoard cards={cards} />
     </div>

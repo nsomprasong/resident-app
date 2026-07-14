@@ -3,6 +3,10 @@ import {
 } from "@/lib/api/validation";
 import { recordAuditLog } from "@/lib/audit/audit-log";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import {
+  canActorMutateSupportEmployee,
+  supportAccountForbiddenResponseMessage,
+} from "@/lib/auth/support-account";
 import { prisma } from "@/lib/prisma";
 import { isUuid } from "@/lib/settings/employees";
 import { NextRequest, NextResponse } from "next/server";
@@ -24,6 +28,7 @@ export async function POST(_request: NextRequest, context: RouteContext) {
       select: {
         id: true,
         name: true,
+        email: true,
         authUserId: true,
         isActive: true,
       },
@@ -31,11 +36,35 @@ export async function POST(_request: NextRequest, context: RouteContext) {
     if (!existing) {
       return apiErrorResponse("ไม่พบพนักงาน", 404, "NOT_FOUND");
     }
+
+    if (
+      !(await canActorMutateSupportEmployee(
+        {
+          email: currentUser?.user.email,
+          authUserId: currentUser?.user.id,
+        },
+        existing,
+      ))
+    ) {
+      return apiErrorResponse(
+        supportAccountForbiddenResponseMessage(),
+        403,
+        "SUPPORT_ACCOUNT_PROTECTED",
+      );
+    }
+
     if (!existing.authUserId) {
       return apiErrorResponse(
         "พนักงานยังไม่มีบัญชี Auth — ผูกอีเมลก่อนรีเซ็ต",
         400,
         "NO_AUTH_USER",
+      );
+    }
+    if (!existing.email) {
+      return apiErrorResponse(
+        "พนักงานยังไม่มีอีเมล — ระบุอีเมลก่อนรีเซ็ต",
+        400,
+        "NO_EMAIL",
       );
     }
 
@@ -60,7 +89,7 @@ export async function POST(_request: NextRequest, context: RouteContext) {
       ok: true,
       mustResetPassword: employee.mustResetPassword,
       message:
-        "ตั้งค่าแล้ว — ครั้งถัดไปที่ผู้ใช้นี้เข้าสู่ระบบ จะถูกพาไปตั้งรหัสผ่านใหม่",
+        "ตั้งค่าแล้ว — ผู้ใช้ใส่อีเมลแล้วกดเข้าสู่ระบบ จะถูกพาไปตั้งรหัสผ่านใหม่โดยไม่ต้องใส่รหัสเดิม",
     });
   } catch (error) {
     console.error("POST /api/employees/[employeeId]/reset-password failed", error);

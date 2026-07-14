@@ -3,6 +3,7 @@
 import { KeyRound, Pencil, Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
+import { useConfirmDialog } from "@/hooks/useConfirmDialog";
 import type { EmployeeRecord } from "@/lib/settings/employees-shared";
 import type { RoleRecord } from "@/lib/settings/roles-shared";
 
@@ -30,6 +31,7 @@ type CurrentEmployee = {
 };
 
 export function EmployeesManager() {
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const [canManage, setCanManage] = useState(false);
   const [identityLoaded, setIdentityLoaded] = useState(false);
   const [items, setItems] = useState<EmployeeRecord[]>([]);
@@ -178,38 +180,6 @@ export function EmployeesManager() {
     }
   };
 
-  const unlinkAuth = async (item: EmployeeRecord) => {
-    if (!item.authUserId) return;
-    if (
-      !window.confirm(
-        `ถอดการผูก Auth ของ ${item.name}? บัญชีนี้จะเข้าสู่ระบบไม่ได้จนกว่าจะผูกใหม่`,
-      )
-    ) {
-      return;
-    }
-
-    setSaving(true);
-    setError("");
-    try {
-      const response = await fetch(`/api/employees/${item.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ authUserId: null }),
-      });
-      if (!response.ok) {
-        const body = (await response.json()) as ApiErrorBody;
-        throw new Error(body.message ?? "ถอดการผูก Auth ไม่สำเร็จ");
-      }
-      await loadItems();
-    } catch (reason) {
-      setError(
-        reason instanceof Error ? reason.message : "ถอดการผูก Auth ไม่สำเร็จ",
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const toggleActive = async (item: EmployeeRecord) => {
     const nextActive = !item.isActive;
     if (nextActive && !item.roleId) {
@@ -218,9 +188,13 @@ export function EmployeesManager() {
     }
     if (
       !nextActive &&
-      !window.confirm(
-        `ปิดใช้งาน ${item.name}? บัญชีนี้จะเข้าสู่ระบบไม่ได้จนกว่าจะเปิดใช้งานอีกครั้ง (Auth mapping ยังคงอยู่)`,
-      )
+      !(await confirm({
+        title: `ปิดใช้งาน ${item.name}?`,
+        description:
+          "บัญชีนี้จะเข้าสู่ระบบไม่ได้จนกว่าจะเปิดใช้งานอีกครั้ง (Auth mapping ยังคงอยู่)",
+        confirmLabel: "ปิดใช้งาน",
+        tone: "danger",
+      }))
     ) {
       return;
     }
@@ -252,10 +226,18 @@ export function EmployeesManager() {
       setError("พนักงานยังไม่มีบัญชี Auth");
       return;
     }
+    if (!item.email) {
+      setError("พนักงานยังไม่มีอีเมล");
+      return;
+    }
     if (
-      !window.confirm(
-        `รีเซ็ตรหัสผ่านของ ${item.name}? ครั้งถัดไปที่เข้าสู่ระบบจะต้องตั้งรหัสผ่านใหม่`,
-      )
+      !(await confirm({
+        title: `รีเซ็ตรหัสผ่านของ ${item.name}?`,
+        description:
+          "ครั้งถัดไปที่ใส่อีเมลแล้วกดเข้าสู่ระบบ จะถูกพาไปตั้งรหัสผ่านใหม่โดยไม่ต้องใส่รหัสเดิม",
+        confirmLabel: "รีเซ็ตรหัสผ่าน",
+        tone: "warning",
+      }))
     ) {
       return;
     }
@@ -302,6 +284,7 @@ export function EmployeesManager() {
 
   return (
     <div className="mt-6 border-t border-border pt-4">
+      {confirmDialog}
       <div className="mb-3 flex items-center justify-between gap-3">
         <p className="text-sm font-medium text-foreground">Employees</p>
         <button
@@ -395,16 +378,6 @@ export function EmployeesManager() {
                 >
                   <KeyRound size={14} />
                   รีเซ็ตรหัสผ่าน
-                </button>
-              ) : null}
-              {employee.authUserId ? (
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={() => void unlinkAuth(employee)}
-                  className="rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-surface-muted disabled:opacity-50"
-                >
-                  ถอด Auth
                 </button>
               ) : null}
             </div>

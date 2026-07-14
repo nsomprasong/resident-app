@@ -26,11 +26,31 @@ test("financial summary separates gross paid, refunds, net paid, and outstanding
     extraOrderTotal: 240,
     paidTotal: 800,
     refundedTotal: 200,
+    pendingTotal: 0,
     netPaidTotal: 600,
     grandTotal: 1740,
     outstandingTotal: 1140,
     refundableTotal: 600,
   });
+});
+
+test("financial summary counts VERIFIED and pending PromptPay statuses", () => {
+  const summary = calculateBookingFinancialSummary({
+    charges: [{ amount: 1000 }],
+    orders: [],
+    payments: [
+      { amount: 400, status: "VERIFIED" },
+      { amount: 100, status: "PENDING_VERIFICATION" },
+      { amount: 50, status: "AWAITING_PAYMENT" },
+    ],
+    paymentRefunds: [{ amount: 50 }],
+  });
+
+  assert.equal(summary.paidTotal, 400);
+  assert.equal(summary.pendingTotal, 150);
+  assert.equal(summary.refundedTotal, 50);
+  assert.equal(summary.netPaidTotal, 350);
+  assert.equal(summary.outstandingTotal, 650);
 });
 
 test("financial summary reports zero outstanding only when net paid covers grand total", () => {

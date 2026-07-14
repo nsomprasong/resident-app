@@ -3,6 +3,7 @@
 import { Pencil, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { useConfirmDialog } from "@/hooks/useConfirmDialog";
 import type { RoomTypeRecord } from "@/lib/settings/room-types";
 import {
   roomStatusOptions,
@@ -35,6 +36,7 @@ function statusLabel(status: string) {
 }
 
 export function RoomsManager() {
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const [items, setItems] = useState<RoomMasterRecord[]>([]);
   const [zones, setZones] = useState<ZoneRecord[]>([]);
   const [roomTypes, setRoomTypes] = useState<RoomTypeRecord[]>([]);
@@ -190,9 +192,12 @@ export function RoomsManager() {
 
   const setMaintenance = async (item: RoomMasterRecord) => {
     if (
-      !window.confirm(
-        `ตั้งห้อง ${item.number} เป็นสถานะปิดซ่อม (ไม่เปิดให้จองใหม่)?`,
-      )
+      !(await confirm({
+        title: `ตั้งห้อง ${item.number} เป็นปิดซ่อม?`,
+        description: "ห้องนี้จะไม่เปิดให้จองใหม่จนกว่าจะเปลี่ยนสถานะ",
+        confirmLabel: "ตั้งปิดซ่อม",
+        tone: "warning",
+      }))
     ) {
       return;
     }
@@ -220,6 +225,7 @@ export function RoomsManager() {
 
   return (
     <div className="mt-4 border-t border-border pt-4">
+      {confirmDialog}
       <div className="mb-3 flex items-center justify-between gap-3">
         <p className="text-sm font-medium text-foreground">ห้องพัก</p>
         <button

@@ -1,4 +1,5 @@
 import {
+  BarChart3,
   BedDouble,
   ClipboardCheck,
   CreditCard,
@@ -7,6 +8,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { PageHeader } from "@/components/ui/PageHeader";
 import { BookingStatus, PaymentStatus } from "@/generated/prisma/client";
 import {
   activeBookingConflictStatuses,
@@ -151,15 +153,12 @@ export default async function DashboardPage() {
   return (
     <div className="min-h-screen bg-muted p-4 sm:p-8">
       <div className="mx-auto max-w-6xl space-y-6">
-        <div>
-          <p className="text-sm font-medium text-primary">Manager Dashboard</p>
-          <h1 className="mt-1 text-3xl font-semibold text-foreground">
-            ภาพรวมกิจการวันนี้
-          </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            รวมสถานะการเข้าพัก รายได้สุทธิเดือนนี้ และงานแม่บ้านที่ยังเปิดอยู่
-          </p>
-        </div>
+        <PageHeader
+          icon={<BarChart3 size={24} />}
+          eyebrow="งานประจำวัน"
+          title="ภาพรวมกิจการวันนี้"
+          description="รวมสถานะการเข้าพัก รายได้สุทธิเดือนนี้ และงานแม่บ้านที่ยังเปิดอยู่"
+        />
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatCard

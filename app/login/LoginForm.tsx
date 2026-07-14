@@ -1,11 +1,12 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { LoaderCircle, LogIn, UserPlus } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 import { login, type LoginState } from "@/app/login/actions";
 
-const initialState: LoginState = { error: null };
+const initialState: LoginState = { error: null, nextPath: null };
 
 type RegisterState = {
   error: string | null;
@@ -13,6 +14,7 @@ type RegisterState = {
 };
 
 export default function LoginForm() {
+  const router = useRouter();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [state, formAction, pending] = useActionState(login, initialState);
   const [registerState, setRegisterState] = useState<RegisterState>({
@@ -20,6 +22,12 @@ export default function LoginForm() {
     success: null,
   });
   const [registerPending, setRegisterPending] = useState(false);
+
+  useEffect(() => {
+    if (!state.nextPath) return;
+    router.replace(state.nextPath);
+    router.refresh();
+  }, [state.nextPath, router]);
 
   const submitRegister = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -118,10 +126,12 @@ export default function LoginForm() {
               name="password"
               type="password"
               autoComplete="current-password"
-              required
               className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-ring/30"
               placeholder="••••••••"
             />
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              หากผู้ดูแลรีเซ็ตรหัสผ่าน ให้ใส่อีเมลแล้วกดเข้าสู่ระบบได้เลย โดยไม่ต้องใส่รหัสผ่าน
+            </p>
           </div>
           {state.error ? (
             <p

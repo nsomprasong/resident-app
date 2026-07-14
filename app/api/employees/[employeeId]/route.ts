@@ -6,6 +6,14 @@ import {
 } from "@/lib/api/validation";
 import { recordAuditLog } from "@/lib/audit/audit-log";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import {
+  assertActorMayAssignRoleCode,
+  canActorAccessSupportEmployee,
+  canActorMutateSupportEmployee,
+  isProtectedSupportEmail,
+  isProtectedSupportEmployeeRecord,
+  supportAccountForbiddenResponseMessage,
+} from "@/lib/auth/support-account";
 import { prisma } from "@/lib/prisma";
 import {
   isUuid,
@@ -30,13 +38,16 @@ const employeeInclude = {
   },
 } as const;
 
-async function assertRoleAssignable(roleId: string | null | undefined) {
+async function assertRoleAssignable(
+  roleId: string | null | undefined,
+  actorEmail: string | null | undefined,
+) {
   if (roleId === undefined) return { ok: true as const };
   if (roleId === null) return { ok: true as const };
 
   const role = await prisma.role.findUnique({
     where: { id: roleId },
-    select: { id: true, isActive: true },
+    select: { id: true, isActive: true, code: true },
   });
 
   if (!role) {
@@ -54,6 +65,18 @@ async function assertRoleAssignable(roleId: string | null | undefined) {
       response: validationErrorResponse("ไม่สามารถกำหนด role ที่ปิดใช้งาน", [
         { path: "roleId", message: "role ถูกปิดใช้งาน" },
       ]),
+    };
+  }
+
+  const adminRoleCheck = assertActorMayAssignRoleCode(actorEmail, role.code);
+  if (!adminRoleCheck.ok) {
+    return {
+      ok: false as const,
+      response: apiErrorResponse(
+        adminRoleCheck.message,
+        403,
+        "SYSTEM_ADMIN_ROLE_PROTECTED",
+      ),
     };
   }
 
@@ -87,13 +110,56 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       return apiErrorResponse("ไม่พบพนักงาน", 404, "NOT_FOUND");
     }
 
-    const isSelf = currentUser?.employee?.id === existing.id;
-    if (isSelf && "authUserId" in validated.data && validated.data.authUserId === null) {
-      return validationErrorResponse(
-        "ไม่สามารถถอดการผูก Auth ของบัญชีที่กำลังใช้งานอยู่",
-        [{ path: "authUserId", message: "ห้ามถอด mapping ของตัวเอง" }],
+    if (
+      !(await canActorMutateSupportEmployee(
+        {
+          email: currentUser?.user.email,
+          authUserId: currentUser?.user.id,
+        },
+        existing,
+      ))
+    ) {
+      return apiErrorResponse(
+        supportAccountForbiddenResponseMessage(),
+        403,
+        "SUPPORT_ACCOUNT_PROTECTED",
       );
     }
+
+    if (await isProtectedSupportEmployeeRecord(existing)) {
+      if (validated.data.isActive === false) {
+        return apiErrorResponse(
+          "ห้ามปิดใช้งานบัญชี support ของระบบ",
+          403,
+          "SUPPORT_ACCOUNT_PROTECTED",
+        );
+      }
+      if ("roleId" in validated.data && validated.data.roleId === null) {
+        return apiErrorResponse(
+          "ห้ามถอด role ของบัญชี support ของระบบ",
+          403,
+          "SUPPORT_ACCOUNT_PROTECTED",
+        );
+      }
+    }
+
+    if (
+      "email" in validated.data &&
+      typeof validated.data.email === "string" &&
+      isProtectedSupportEmail(validated.data.email) &&
+      !canActorAccessSupportEmployee(
+        currentUser?.user.email,
+        validated.data.email,
+      )
+    ) {
+      return apiErrorResponse(
+        supportAccountForbiddenResponseMessage(),
+        403,
+        "SUPPORT_ACCOUNT_PROTECTED",
+      );
+    }
+
+    const isSelf = currentUser?.employee?.id === existing.id;
     if (isSelf && "roleId" in validated.data && validated.data.roleId === null) {
       return validationErrorResponse(
         "ไม่สามารถลบ role ของบัญชีที่กำลังใช้งานอยู่",
@@ -107,7 +173,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       );
     }
 
-    const roleCheck = await assertRoleAssignable(validated.data.roleId);
+    const roleCheck = await assertRoleAssignable(
+      validated.data.roleId,
+      currentUser?.user.email,
+    );
     if (!roleCheck.ok) return roleCheck.response;
 
     const nextActive =
@@ -129,7 +198,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       name?: string;
       email?: string | null;
       phone?: string | null;
-      authUserId?: string | null;
+      authUserId?: string;
       roleId?: string | null;
       isActive?: boolean;
     } = { ...validated.data };

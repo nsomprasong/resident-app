@@ -1,7 +1,11 @@
 "use client";
-import { CheckCircle2, ClipboardCheck, Plus, Trash2 } from "lucide-react";
+
+import { CheckCircle2, ClipboardCheck, House, Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+
 import Modal from "@/components/ui/Modal";
+import { PageHeader } from "@/components/ui/PageHeader";
+
 type ItemType = "MINIBAR" | "DAMAGE" | "STAIN" | "MISSING" | "OTHER";
 interface Catalog {
   id: string;
@@ -22,6 +26,8 @@ interface Inspection {
   notes?: string;
   room: string;
   customerName: string;
+  completedAt?: string | null;
+  completedByName?: string | null;
   items: Item[];
 }
 const typeLabels: Record<ItemType, string> = {
@@ -49,7 +55,8 @@ export default function HousekeepingPage() {
         fetch("/api/inspection-catalog", { cache: "no-store" }),
       ]);
       const inspectionData = (await inspectionResponse.json()) as
-        Inspection[] | { message: string };
+        | Inspection[]
+        | { message: string };
       const catalogData = (await catalogResponse.json()) as Catalog[];
       if (!inspectionResponse.ok || !Array.isArray(inspectionData))
         throw new Error(
@@ -147,18 +154,16 @@ export default function HousekeepingPage() {
     }
   };
   return (
-    <div className="mx-auto max-w-5xl p-4 sm:p-8">
-      <div className="mb-6">
-        <p className="text-sm font-medium text-primary">HOUSEKEEPING</p>
-        <h1 className="text-2xl font-semibold text-foreground">
-          ห้องรอตรวจหลังเช็กเอาต์
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          เลือกรายการจากราคากลาง แล้วระบุเฉพาะจำนวน
-        </p>
-      </div>
+    <div className="min-h-screen bg-muted p-4 sm:p-8">
+      <div className="mx-auto max-w-6xl space-y-6">
+        <PageHeader
+          icon={<House size={24} />}
+          eyebrow="งานประจำวัน"
+          title="แม่บ้านและมินิบาร์"
+          description="ห้องรอตรวจหลังเช็กเอาต์ — เลือกรายการจากราคากลางแล้วระบุจำนวน"
+        />
       {error && !selected && (
-        <p className="mb-4 rounded-xl bg-destructive/10 p-3 text-destructive">{error}</p>
+        <p className="rounded-xl bg-destructive/10 p-3 text-destructive">{error}</p>
       )}
       {loading ? (
         <p className="rounded-2xl bg-surface p-8 text-center text-muted-foreground">
@@ -179,6 +184,12 @@ export default function HousekeepingPage() {
                   <p className="text-sm text-muted-foreground">
                     {inspection.customerName}
                   </p>
+                  {inspection.status === "COMPLETED" &&
+                  inspection.completedByName ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      ผู้ตรวจ: {inspection.completedByName}
+                    </p>
+                  ) : null}
                 </div>
                 <span
                   className={`h-fit rounded-full px-2.5 py-1 text-xs ${inspection.status === "COMPLETED" ? "bg-success/10 text-success" : "bg-warning/10 text-warning"}`}
@@ -347,6 +358,7 @@ export default function HousekeepingPage() {
           </div>
         </div>
       </Modal>
+      </div>
     </div>
   );
 }

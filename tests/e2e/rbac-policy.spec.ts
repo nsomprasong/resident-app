@@ -35,14 +35,23 @@ test("every protected page resolves to an explicit permission", () => {
     ["/foodOrder/id/basket", "order.write"],
     ["/foodOrder/id/food", "order.write"],
     ["/kitchen", "order.kitchen"],
-    ["/employeeSchedule", "employee.read"],
+    ["/employeeSchedule", "hr.schedule.manage"],
     ["/houseKeeperMinibar", "inspection.read"],
     ["/today", "ops.read"],
     ["/dashboard", "report.read"],
     ["/settings", "settings.manage"],
     ["/system/data-reset", "data.reset"],
-    ["/wage", "wage.read"],
+    ["/wage", "hr.compensation.view"],
     ["/report", "report.read"],
+    ["/hr", "hr.employee.view"],
+    ["/hr/employees", "hr.employee.view"],
+    ["/hr/schedules", "hr.schedule.manage"],
+    ["/hr/attendance", "hr.attendance.manage"],
+    ["/hr/leave", "hr.leave.request"],
+    ["/hr/payroll", "hr.compensation.view"],
+    ["/hr/documents", "hr.document.manage"],
+    ["/hr/reports", "hr.report.view"],
+    ["/hr/settings", "hr.settings.manage"],
   ] as const;
 
   for (const [path, permission] of pages) {
@@ -105,7 +114,9 @@ test("every current business API method resolves to an explicit permission", () 
     ["POST", "/api/rooms", "resource.manage"],
     ["PATCH", `/api/rooms/${id}`, "resource.manage"],
     ["GET", "/api/rooms", "resource.read"],
-    ["GET", "/api/roles", "authorization.manage"],
+    ["GET", "/api/roles", {
+      anyOf: ["authorization.manage", "employee.manage"],
+    }],
     ["POST", "/api/roles", "authorization.manage"],
     ["PATCH", `/api/roles/${id}`, "authorization.manage"],
     ["GET", `/api/roles/${id}/permissions`, "authorization.manage"],
@@ -117,10 +128,51 @@ test("every current business API method resolves to an explicit permission", () 
     ["POST", `/api/employees/${id}/reset-password`, "employee.manage"],
     ["GET", "/api/system/data-reset", "data.reset"],
     ["POST", "/api/system/data-reset", "data.reset"],
+    ["GET", "/api/hr/employees", "hr.employee.view"],
+    ["POST", "/api/hr/employees", "hr.employee.create"],
+    ["GET", `/api/hr/employees/${id}`, "hr.employee.view"],
+    ["PATCH", `/api/hr/employees/${id}`, "hr.employee.update"],
+    ["GET", "/api/hr/shift-templates", "hr.schedule.manage"],
+    ["POST", "/api/hr/shift-templates", "hr.schedule.manage"],
+    ["PATCH", `/api/hr/shift-templates/${id}`, "hr.schedule.manage"],
+    ["GET", "/api/hr/schedules", "hr.schedule.manage"],
+    ["POST", "/api/hr/schedules", "hr.schedule.manage"],
+    ["GET", "/api/hr/holidays", "hr.schedule.manage"],
+    ["POST", "/api/hr/holidays", "hr.schedule.manage"],
+    ["GET", "/api/hr/attendance", "hr.attendance.manage"],
+    ["POST", "/api/hr/attendance", "hr.attendance.manage"],
+    ["GET", "/api/hr/leave-types", "hr.leave.request"],
+    ["POST", "/api/hr/leave-types", "hr.settings.manage"],
+    ["PATCH", "/api/hr/leave-types/00000000-0000-4000-8000-000000000001", "hr.settings.manage"],
+    ["GET", "/api/hr/leave-balances", "hr.leave.request"],
+    ["POST", "/api/hr/leave-balances", "hr.settings.manage"],
+    ["GET", "/api/hr/leave-requests", "hr.leave.request"],
+    ["POST", "/api/hr/leave-requests", "hr.leave.request"],
+    ["GET", "/api/hr/compensations", "hr.compensation.view"],
+    ["POST", "/api/hr/compensations", "hr.payroll.calculate"],
+    ["GET", "/api/hr/payroll/settings", "hr.compensation.view"],
+    ["POST", "/api/hr/payroll/settings", "hr.settings.manage"],
+    ["GET", "/api/hr/payroll/periods", "hr.compensation.view"],
+    ["POST", "/api/hr/payroll/periods", "hr.payroll.calculate"],
+    [
+      "GET",
+      "/api/hr/payroll/periods/00000000-0000-4000-8000-000000000001/export",
+      "hr.compensation.view",
+    ],
+    ["GET", "/api/hr/documents", "hr.document.manage"],
+    ["POST", "/api/hr/documents", "hr.document.manage"],
+    ["DELETE", "/api/hr/documents", "hr.document.manage"],
+    [
+      "GET",
+      "/api/hr/documents/00000000-0000-4000-8000-000000000001/download",
+      "hr.document.manage",
+    ],
+    ["GET", "/api/hr/dashboard", "hr.employee.view"],
+    ["GET", "/api/hr/reports", "hr.report.view"],
   ] as const;
 
   for (const [method, path, permission] of handlers) {
-    expect(resolveApiPermission(method, path)).toBe(permission);
+    expect(resolveApiPermission(method, path)).toEqual(permission);
   }
 
   expect(resolveApiPermission("POST", "/api/unknown")).toBeNull();
@@ -137,10 +189,17 @@ test("permission policy follows approved financial and administration rules", ()
   expect(hasPermission("MANAGER", "settings.manage")).toBe(true);
   expect(hasPermission("MANAGER", "authorization.manage")).toBe(false);
   expect(hasPermission("MANAGER", "data.reset")).toBe(false);
+  expect(hasPermission("MANAGER", "hr.employee.view")).toBe(true);
+  expect(hasPermission("MANAGER", "hr.payroll.approve")).toBe(false);
+  expect(hasPermission("ACCOUNTING", "hr.compensation.view")).toBe(true);
   expect(hasPermission("ADMIN", "authorization.manage")).toBe(true);
   expect(hasPermission("ADMIN", "data.reset")).toBe(true);
+  expect(hasPermission("ADMIN", "hr.settings.manage")).toBe(true);
   expect(canAccessPage("ADMIN", "/system/data-reset")).toBe(true);
   expect(canAccessPage("MANAGER", "/system/data-reset")).toBe(false);
+  expect(canAccessPage("ADMIN", "/hr")).toBe(true);
+  expect(canAccessPage("MANAGER", "/hr/schedules")).toBe(true);
+  expect(canAccessPage("RECEPTION", "/hr")).toBe(false);
   expect(permissions.every((permission) => hasPermission("ADMIN", permission))).toBe(
     true,
   );
@@ -215,9 +274,9 @@ test("master data permission matrix matches role policy", () => {
   const roleId = "00000000-0000-0000-0000-000000000000";
   expect(roleCanManageAuthorization("ADMIN")).toBe(true);
   expect(roleCanManageAuthorization("MANAGER")).toBe(false);
-  expect(resolveApiPermission("GET", "/api/roles")).toBe(
-    authorizationManagePermission,
-  );
+  expect(resolveApiPermission("GET", "/api/roles")).toEqual({
+    anyOf: ["authorization.manage", "employee.manage"],
+  });
   expect(resolveApiPermission("POST", "/api/roles")).toBe(
     authorizationManagePermission,
   );

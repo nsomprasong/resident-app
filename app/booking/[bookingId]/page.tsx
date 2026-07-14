@@ -1,9 +1,8 @@
 "use client";
 
-import Image from "next/image";
 import {
+  BedDouble,
   CalendarDays,
-  CircleUserRound,
   ClipboardCheck,
   DoorOpen,
   LogIn,
@@ -23,8 +22,11 @@ import BillItem from "@/components/ui/BillItem";
 import type { ManagedFoodItem } from "@/components/ui/BookingFoodManager";
 import ManageBookingResourcesDialog from "@/components/ui/ManageBookingResourcesDialog";
 import PayButton from "@/components/ui/PayButton";
+import { PageHeader } from "@/components/ui/PageHeader";
 import PricingToggle from "@/components/ui/PricingToggle";
 import Status from "@/components/ui/Status";
+import { BookingPromptPaySection } from "@/components/ui/BookingPromptPaySection";
+import { useConfirmDialog } from "@/hooks/useConfirmDialog";
 import { formatThaiDateRange } from "@/lib/format/date";
 
 interface Item {
@@ -54,6 +56,8 @@ interface Detail {
     rate: number;
     isExtra: boolean;
     inspectionStatus?: string | null;
+    inspectionCompletedAt?: string | null;
+    inspectionCompletedByName?: string | null;
   }>;
   rafts: Array<{
     id: string;
@@ -84,6 +88,7 @@ const actionIcons: Record<string, typeof LogIn> = {
 
 export default function BookingDetailPage() {
   const { bookingId } = useParams<{ bookingId: string }>();
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const [data, setData] = useState<Detail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -122,9 +127,13 @@ export default function BookingDetailPage() {
   const updateStatus = async (status: string) => {
     if (
       status === "CHECKED_OUT" &&
-      !window.confirm(
-        "ยืนยันเช็กเอาต์? ห้องทั้งหมดจะถูกส่งให้แม่บ้านและเปลี่ยนเป็นสถานะรอตรวจห้อง",
-      )
+      !(await confirm({
+        title: "ยืนยันเช็กเอาต์?",
+        description:
+          "ห้องทั้งหมดจะถูกส่งให้แม่บ้านและเปลี่ยนเป็นสถานะรอตรวจห้อง",
+        confirmLabel: "เช็กเอาต์",
+        tone: "warning",
+      }))
     ) {
       return;
     }
@@ -178,7 +187,14 @@ export default function BookingDetailPage() {
   };
 
   const closeJob = async () => {
-    if (!window.confirm("ยืนยันปิดงาน? รายการนี้จะถูกนำออกจากหน้าแม่บ้าน")) {
+    if (
+      !(await confirm({
+        title: "ยืนยันปิดงาน?",
+        description: "รายการนี้จะถูกนำออกจากหน้าแม่บ้าน",
+        confirmLabel: "ปิดงาน",
+        tone: "warning",
+      }))
+    ) {
       return;
     }
     setUpdating(true);
@@ -271,17 +287,21 @@ export default function BookingDetailPage() {
 
   if (loading && !data) {
     return (
-      <div className="grid min-h-screen place-items-center text-muted-foreground">
-        กำลังโหลด...
+      <div className="min-h-screen bg-muted p-4 sm:p-8">
+        <div className="mx-auto max-w-6xl">
+          <p className="text-muted-foreground">กำลังโหลด...</p>
+        </div>
       </div>
     );
   }
 
   if (!data) {
     return (
-      <div className="p-8">
-        <BackButton route="/booking" />
-        <p className="mt-5 text-destructive">{error}</p>
+      <div className="min-h-screen bg-muted p-4 sm:p-8">
+        <div className="mx-auto max-w-6xl space-y-4">
+          <BackButton route="/booking" />
+          <p className="text-destructive">{error}</p>
+        </div>
       </div>
     );
   }
@@ -314,39 +334,35 @@ export default function BookingDetailPage() {
 
   return (
     <>
-      <div className="min-h-screen bg-muted pb-8">
-        <div className="relative h-56 overflow-hidden">
-          <Image
-            fill
-            src="/images/room/room1.jpg"
-            alt="การจอง"
-            className="object-cover"
-            priority
+      {confirmDialog}
+      <div className="min-h-screen bg-muted p-4 pb-8 sm:p-8">
+        <div className="mx-auto max-w-6xl space-y-6">
+          <BackButton route="/booking" />
+          <PageHeader
+            icon={<BedDouble size={24} />}
+            eyebrow="งานประจำวัน"
+            title={data.customerName}
+            description={`${data.reference} · ${formatThaiDateRange(data.checkIn, data.checkOut)}`}
+            meta={
+              <span>
+                {data.phone}
+                {data.contactName ? ` · ${data.contactName}` : ""}
+              </span>
+            }
+            actions={<Status status={data.statusLabel} />}
           />
-          <div className="absolute inset-0 bg-foreground/45" />
-          <BackButton
-            classProps="absolute left-4 top-4 z-10"
-            route="/booking"
-          />
-          <div className="absolute bottom-5 left-5 text-surface">
-            <p className="text-sm text-surface/70">{data.reference}</p>
-            <h1 className="text-2xl font-semibold">{data.customerName}</h1>
-          </div>
-        </div>
 
-        <div className="relative z-10 mx-auto -mt-3 max-w-3xl space-y-3 px-4">
-          <section className="rounded-2xl bg-surface p-5 shadow-sm">
-            <div className="flex justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <span className="grid h-12 w-12 place-items-center rounded-full bg-primary/15 text-primary">
-                  <CircleUserRound />
-                </span>
-                <div>
-                  <h2 className="font-semibold">{data.customerName}</h2>
-                  <p className="text-sm text-muted-foreground">{data.phone}</p>
-                </div>
+          <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+            <div className="flex items-center gap-3">
+              <span className="grid h-12 w-12 place-items-center rounded-2xl bg-primary/15 text-primary">
+                <ReceiptText size={22} />
+              </span>
+              <div>
+                <h2 className="font-semibold text-foreground">สรุปรายละเอียด</h2>
+                <p className="text-sm text-muted-foreground">
+                  ห้องพัก แพ อาหาร และรายการคิดเงิน
+                </p>
               </div>
-              <Status status={data.statusLabel} />
             </div>
 
             <p className="mt-4 flex items-center gap-2 border-t border-border pt-4 text-sm">
@@ -388,7 +404,11 @@ export default function BookingDetailPage() {
                           {room.rate.toLocaleString()}/คืน
                           {data.status === "CHECKED_OUT"
                             ? room.inspectionStatus === "COMPLETED"
-                              ? " · ตรวจสอบเสร็จแล้ว"
+                              ? ` · ตรวจสอบเสร็จแล้ว${
+                                  room.inspectionCompletedByName
+                                    ? ` โดย ${room.inspectionCompletedByName}`
+                                    : ""
+                                }`
                               : " · รอตรวจสอบห้อง"
                             : ""}
                         </p>
@@ -647,6 +667,15 @@ export default function BookingDetailPage() {
               </div>
             }
           />
+
+          {data.status !== "CANCELLED" ? (
+            <BookingPromptPaySection
+              bookingId={data.id}
+              bookingReference={data.reference}
+              outstanding={data.totals.outstanding}
+              onChanged={() => void load()}
+            />
+          ) : null}
         </div>
       </div>
 

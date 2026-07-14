@@ -18,7 +18,7 @@ describe("permissionThaiLabels", () => {
     assert.equal(resolvePermissionThaiLabel("booking.read"), "ดูการจอง");
     assert.equal(
       resolvePermissionThaiLabel("authorization.manage"),
-      "จัดการบทบาทและสิทธิ์",
+      "แก้ไขชุดสิทธิ์ของบทบาท",
     );
     assert.equal(resolvePermissionThaiLabel("unknown.permission"), null);
   });

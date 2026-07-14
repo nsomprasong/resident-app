@@ -24,6 +24,7 @@ export async function GET() {
       },
       include: {
         items: true,
+        completedBy: { select: { id: true, name: true } },
         bookingRoom: {
           include: {
             room: true,
@@ -63,6 +64,8 @@ export async function GET() {
             [booking.guest?.firstName, booking.guest?.lastName]
               .filter(Boolean)
               .join(" "),
+          completedAt: inspection.completedAt?.toISOString() ?? null,
+          completedByName: inspection.completedBy?.name ?? null,
           paid:
             financialSummary.netPaidTotal >= financialSummary.grandTotal &&
             financialSummary.grandTotal > 0,

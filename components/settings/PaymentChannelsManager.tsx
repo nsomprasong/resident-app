@@ -3,6 +3,7 @@
 import { Pencil, Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
+import { useConfirmDialog } from "@/hooks/useConfirmDialog";
 import {
   paymentMethodOptions,
   type PaymentChannelMasterRecord,
@@ -29,6 +30,7 @@ function methodLabel(method: string) {
 }
 
 export function PaymentChannelsManager() {
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const [items, setItems] = useState<PaymentChannelMasterRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -133,15 +135,23 @@ export function PaymentChannelsManager() {
 
   const toggleActive = async (item: PaymentChannelMasterRecord) => {
     const nextActive = !item.isActive;
-    let message = nextActive
-      ? `เปิดใช้งานช่องทาง "${item.name}" อีกครั้ง?`
-      : `ปิดใช้งานช่องทาง "${item.name}"? จะไม่แสดงในหน้ารับชำระเงิน`;
+    const confirmed = nextActive
+      ? await confirm({
+          title: `เปิดใช้งานช่องทาง "${item.name}"?`,
+          confirmLabel: "เปิดใช้งาน",
+          tone: "default",
+        })
+      : await confirm({
+          title: `ปิดใช้งานช่องทาง "${item.name}"?`,
+          description:
+            item.paymentCount > 0
+              ? `มีประวัติรับชำระ ${item.paymentCount} รายการ การปิดใช้งานจะไม่ลบประวัติ แต่จะไม่ให้เลือกช่องทางนี้ใหม่`
+              : "จะไม่แสดงในหน้ารับชำระเงิน",
+          confirmLabel: "ปิดใช้งาน",
+          tone: "danger",
+        });
 
-    if (!nextActive && item.paymentCount > 0) {
-      message = `ช่องทาง "${item.name}" มีประวัติรับชำระ ${item.paymentCount} รายการ การปิดใช้งานจะไม่ลบประวัติ แต่จะไม่ให้เลือกช่องทางนี้ใหม่ ต้องการดำเนินการต่อหรือไม่?`;
-    }
-
-    if (!window.confirm(message)) return;
+    if (!confirmed) return;
 
     setSaving(true);
     setError("");
@@ -167,6 +177,7 @@ export function PaymentChannelsManager() {
 
   return (
     <div className="mt-4">
+      {confirmDialog}
       <div className="mb-3 flex items-center justify-between gap-3">
         <p className="text-sm font-medium text-foreground">ช่องทางรับชำระ</p>
         <button

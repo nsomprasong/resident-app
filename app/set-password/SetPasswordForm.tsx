@@ -4,7 +4,11 @@ import { LoaderCircle, KeyRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-export default function SetPasswordForm() {
+type SetPasswordFormProps = {
+  ticket?: string;
+};
+
+export default function SetPasswordForm({ ticket }: SetPasswordFormProps) {
   const router = useRouter();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -19,13 +23,17 @@ export default function SetPasswordForm() {
       const response = await fetch("/api/auth/set-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password, confirmPassword }),
+        body: JSON.stringify({
+          password,
+          confirmPassword,
+          ...(ticket ? { ticket } : {}),
+        }),
       });
       const data = (await response.json()) as { message?: string };
       if (!response.ok) {
         throw new Error(data.message ?? "บันทึกรหัสผ่านไม่สำเร็จ");
       }
-      router.replace("/");
+      router.replace("/login?passwordUpdated=1");
       router.refresh();
     } catch (reason) {
       setError(
@@ -94,7 +102,7 @@ export default function SetPasswordForm() {
         ) : (
           <KeyRound size={20} />
         )}
-        {pending ? "กำลังบันทึก..." : "บันทึกรหัสผ่านแล้วเข้าใช้งาน"}
+        {pending ? "กำลังบันทึก..." : "บันทึกรหัสผ่านแล้วไปเข้าสู่ระบบ"}
       </button>
     </form>
   );

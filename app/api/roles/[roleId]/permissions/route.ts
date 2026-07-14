@@ -5,6 +5,11 @@ import {
 } from "@/lib/api/validation";
 import { recordAuditLog } from "@/lib/audit/audit-log";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import {
+  SYSTEM_ADMIN_ROLE_CODE,
+  canActorManageSystemAdminRole,
+  systemAdminRoleForbiddenMessage,
+} from "@/lib/auth/support-account";
 import { prisma } from "@/lib/prisma";
 import {
   isUuid,
@@ -42,6 +47,13 @@ async function loadRolePermissionCodes(roleId: string) {
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   try {
+    const currentUser = await getCurrentUser();
+    if (
+      !currentUser?.employee?.role?.permissions.includes("authorization.manage")
+    ) {
+      return apiErrorResponse("ไม่มีสิทธิ์", 403, "FORBIDDEN");
+    }
+
     const { roleId } = await context.params;
     if (!isUuid(roleId)) {
       return apiErrorResponse("ไม่พบ role", 404, "NOT_FOUND");
@@ -50,6 +62,17 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     const mapping = await loadRolePermissionCodes(roleId);
     if (!mapping) {
       return apiErrorResponse("ไม่พบ role", 404, "NOT_FOUND");
+    }
+
+    if (
+      mapping.roleCode === SYSTEM_ADMIN_ROLE_CODE &&
+      !canActorManageSystemAdminRole(currentUser.user.email)
+    ) {
+      return apiErrorResponse(
+        systemAdminRoleForbiddenMessage(),
+        403,
+        "SYSTEM_ADMIN_ROLE_PROTECTED",
+      );
     }
 
     return NextResponse.json(mapping);
@@ -65,12 +88,18 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
 export async function PUT(request: NextRequest, context: RouteContext) {
   try {
+    const currentUser = await getCurrentUser();
+    if (
+      !currentUser?.employee?.role?.permissions.includes("authorization.manage")
+    ) {
+      return apiErrorResponse("ไม่มีสิทธิ์", 403, "FORBIDDEN");
+    }
+
     const { roleId } = await context.params;
     if (!isUuid(roleId)) {
       return apiErrorResponse("ไม่พบ role", 404, "NOT_FOUND");
     }
 
-    const currentUser = await getCurrentUser();
     const parsed = await readJsonObject(request);
     if (!parsed.ok) return parsed.response;
 
@@ -88,6 +117,17 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     });
     if (!role) {
       return apiErrorResponse("ไม่พบ role", 404, "NOT_FOUND");
+    }
+
+    if (
+      role.code === SYSTEM_ADMIN_ROLE_CODE &&
+      !canActorManageSystemAdminRole(currentUser.user.email)
+    ) {
+      return apiErrorResponse(
+        systemAdminRoleForbiddenMessage(),
+        403,
+        "SYSTEM_ADMIN_ROLE_PROTECTED",
+      );
     }
 
     const requestedCodes = validated.data.permissionCodes;

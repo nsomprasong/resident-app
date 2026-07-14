@@ -3,6 +3,7 @@
 import { Pencil, Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
+import { useConfirmDialog } from "@/hooks/useConfirmDialog";
 import type { ZoneRecord } from "@/lib/settings/zones";
 
 type FormState = {
@@ -15,6 +16,7 @@ type ApiErrorBody = {
 };
 
 export function ZonesManager() {
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const [items, setItems] = useState<ZoneRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -104,15 +106,23 @@ export function ZonesManager() {
 
   const toggleActive = async (item: ZoneRecord) => {
     const nextActive = !item.isActive;
-    let message = nextActive
-      ? `เปิดใช้งานโซน "${item.name}" อีกครั้ง?`
-      : `ปิดใช้งานโซน "${item.name}"?`;
+    const confirmed = nextActive
+      ? await confirm({
+          title: `เปิดใช้งานโซน "${item.name}"?`,
+          confirmLabel: "เปิดใช้งาน",
+          tone: "default",
+        })
+      : await confirm({
+          title: `ปิดใช้งานโซน "${item.name}"?`,
+          description:
+            item.roomCount > 0
+              ? `ยังมีห้อง ${item.roomCount} ห้องอยู่ การปิดใช้งานจะไม่ลบห้อง แต่ควรย้ายหรือปิดห้องก่อนใช้งานจองใหม่`
+              : undefined,
+          confirmLabel: "ปิดใช้งาน",
+          tone: "danger",
+        });
 
-    if (!nextActive && item.roomCount > 0) {
-      message = `โซน "${item.name}" ยังมีห้อง ${item.roomCount} ห้องอยู่ การปิดใช้งานจะไม่ลบห้อง แต่ควรย้ายหรือปิดห้องก่อนใช้งานจองใหม่ ต้องการดำเนินการต่อหรือไม่?`;
-    }
-
-    if (!window.confirm(message)) return;
+    if (!confirmed) return;
 
     setSaving(true);
     setError("");
@@ -138,6 +148,7 @@ export function ZonesManager() {
 
   return (
     <div className="mt-6 border-t border-border pt-4">
+      {confirmDialog}
       <div className="mb-3 flex items-center justify-between gap-3">
         <p className="text-sm font-medium text-foreground">โซน / อาคาร</p>
         <button

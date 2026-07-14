@@ -3,6 +3,7 @@
 import { Pencil, Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
+import { useConfirmDialog } from "@/hooks/useConfirmDialog";
 import {
   raftStatusOptions,
   type RaftMasterRecord,
@@ -41,6 +42,7 @@ function statusLabel(status: string) {
 }
 
 export function RaftsManager() {
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const [items, setItems] = useState<RaftMasterRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -143,9 +145,12 @@ export function RaftsManager() {
 
   const setMaintenance = async (item: RaftMasterRecord) => {
     if (
-      !window.confirm(
-        `ตั้งแพ ${item.name} (${item.number}) เป็นปิดซ่อม (ไม่เปิดให้จองใหม่)?`,
-      )
+      !(await confirm({
+        title: `ตั้งแพ ${item.name} เป็นปิดซ่อม?`,
+        description: `หมายเลข ${item.number} จะไม่เปิดให้จองใหม่จนกว่าจะเปลี่ยนสถานะ`,
+        confirmLabel: "ตั้งปิดซ่อม",
+        tone: "warning",
+      }))
     ) {
       return;
     }
@@ -173,6 +178,7 @@ export function RaftsManager() {
 
   return (
     <div className="mt-6 border-t border-border pt-4">
+      {confirmDialog}
       <div className="mb-3 flex items-center justify-between gap-3">
         <p className="text-sm font-medium text-foreground">แพ</p>
         <button

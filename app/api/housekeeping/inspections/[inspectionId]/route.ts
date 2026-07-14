@@ -194,6 +194,9 @@ export async function PATCH(
         });
       const completed =
         complete || current.status === InspectionStatus.COMPLETED;
+      const completedById = completed
+        ? (current.completedById ?? currentUser?.employee?.id ?? null)
+        : null;
       const updatedInspection = await tx.roomInspection.update({
         where: { id: inspectionId },
         data: {
@@ -202,8 +205,9 @@ export async function PATCH(
             ? InspectionStatus.COMPLETED
             : InspectionStatus.IN_PROGRESS,
           completedAt: completed ? (current.completedAt ?? new Date()) : null,
+          completedById,
         },
-        select: { id: true, status: true },
+        select: { id: true, status: true, completedById: true },
       });
       if (completed)
         await tx.room.update({
@@ -252,6 +256,9 @@ export async function PATCH(
         status: result.status,
         itemCount: result.itemCount,
         chargeAmount: result.chargeAmount,
+        completedById: result.status === InspectionStatus.COMPLETED
+          ? currentUser?.employee?.id ?? null
+          : null,
       },
     });
     return NextResponse.json({ success: true });

@@ -104,7 +104,7 @@ export default function KitchenPage() {
       <div className="mx-auto max-w-6xl space-y-6">
         <PageHeader
           icon={<CookingPot size={22} />}
-          eyebrow="Kitchen Workflow"
+          eyebrow="งานประจำวัน"
           title="คิวออเดอร์ครัว"
           description="ติดตามออเดอร์ที่รอทำ กำลังเตรียม และพร้อมส่ง"
           meta={<>อัปเดตล่าสุด {updatedLabel}</>}

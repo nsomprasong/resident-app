@@ -2,7 +2,7 @@
 
 ## Task
 
-Fix service data reset rollback on audit logs
+Show room inspector name after checkout inspection
 
 ## Status
 
@@ -10,15 +10,14 @@ COMPLETED
 
 ## Objective
 
-แก้การล้างข้อมูลบริการที่ไม่สำเร็จเพราะ audit_logs immutable trigger ทำให้ transaction rollback ทั้งก้อน
+หลังเช็กเอาต์และตรวจห้องเสร็จ ให้แสดงชื่อผู้ตรวจ
 
 ## Evidence
 
-- Root cause: DELETE audit_logs blocked → whole wipe rolled back
-- Migration allows purge when `app.allow_audit_purge=on`
-- Service data wiped successfully after fix
-- `/today` set to `force-dynamic`
+- เพิ่ม `completed_by_id` บน `room_inspections` + migration deploy
+- บันทึกผู้ตรวจตอน complete จาก employee ของ session
+- แสดงใน Booking Detail และหน้าแม่บ้าน
 
 ## Next Task
 
-(รอ approval — MASTER_PLAN ยังไม่มี Phase 18)
+ตาม MASTER_PLAN / คำสั่งผู้ใช้

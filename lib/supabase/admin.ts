@@ -27,7 +27,7 @@ function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
-async function findAuthUserIdByEmail(email: string): Promise<string | null> {
+export async function findAuthUserIdByEmail(email: string): Promise<string | null> {
   const admin = createAdminClient();
   const normalized = normalizeEmail(email);
   const perPage = 200;
@@ -53,7 +53,7 @@ async function findAuthUserIdByEmail(email: string): Promise<string | null> {
   }
 }
 
-function createTemporaryPassword() {
+export function createTemporaryPassword() {
   const bytes = crypto.getRandomValues(new Uint8Array(24));
   const encoded = Buffer.from(bytes).toString("base64url");
   return `${encoded}Aa1!`;

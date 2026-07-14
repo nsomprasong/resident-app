@@ -21,6 +21,15 @@ export const permissions = [
   "payment.read",
   "payment.collect",
   "payment.refund",
+  "payment.view",
+  "payment.create",
+  "payment.submit",
+  "payment.verify",
+  "payment.cancel",
+  "payment.receipt.print",
+  "payment.promptpay_settings.view",
+  "payment.promptpay_settings.manage",
+  "payment.report.view",
   "payment_channel.manage",
   "inspection.read",
   "inspection.write",
@@ -35,6 +44,23 @@ export const permissions = [
   "settings.manage",
   "authorization.manage",
   "data.reset",
+  "hr.employee.view",
+  "hr.employee.create",
+  "hr.employee.update",
+  "hr.employee.archive",
+  "hr.sensitive.view",
+  "hr.compensation.view",
+  "hr.schedule.manage",
+  "hr.attendance.manage",
+  "hr.attendance.approve",
+  "hr.leave.request",
+  "hr.leave.approve",
+  "hr.payroll.calculate",
+  "hr.payroll.approve",
+  "hr.payroll.mark_paid",
+  "hr.document.manage",
+  "hr.report.view",
+  "hr.settings.manage",
 ] as const;
 
 export type Permission = (typeof permissions)[number];
@@ -67,6 +93,12 @@ const rolePermissions: Readonly<Record<Role, ReadonlySet<Permission>>> = {
     "order.write",
     "payment.read",
     "payment.collect",
+    "payment.view",
+    "payment.create",
+    "payment.submit",
+    "payment.cancel",
+    "payment.receipt.print",
+    "payment.promptpay_settings.view",
     "inspection.read",
     "catalog.read",
     "ops.read",
@@ -86,9 +118,21 @@ const rolePermissions: Readonly<Record<Role, ReadonlySet<Permission>>> = {
     "payment.read",
     "payment.collect",
     "payment.refund",
+    "payment.view",
+    "payment.create",
+    "payment.submit",
+    "payment.verify",
+    "payment.cancel",
+    "payment.receipt.print",
+    "payment.promptpay_settings.view",
+    "payment.promptpay_settings.manage",
+    "payment.report.view",
     "payment_channel.manage",
     "report.read",
     "ops.read",
+    "hr.compensation.view",
+    "hr.payroll.calculate",
+    "hr.report.view",
   ]),
   MANAGER: new Set([
     "booking.read",
@@ -102,6 +146,15 @@ const rolePermissions: Readonly<Record<Role, ReadonlySet<Permission>>> = {
     "payment.read",
     "payment.collect",
     "payment.refund",
+    "payment.view",
+    "payment.create",
+    "payment.submit",
+    "payment.verify",
+    "payment.cancel",
+    "payment.receipt.print",
+    "payment.promptpay_settings.view",
+    "payment.promptpay_settings.manage",
+    "payment.report.view",
     "payment_channel.manage",
     "inspection.read",
     "inspection.write",
@@ -113,6 +166,20 @@ const rolePermissions: Readonly<Record<Role, ReadonlySet<Permission>>> = {
     "report.read",
     "ops.read",
     "settings.manage",
+    "hr.employee.view",
+    "hr.employee.create",
+    "hr.employee.update",
+    "hr.sensitive.view",
+    "hr.compensation.view",
+    "hr.schedule.manage",
+    "hr.attendance.manage",
+    "hr.attendance.approve",
+    "hr.leave.request",
+    "hr.leave.approve",
+    "hr.payroll.calculate",
+    "hr.document.manage",
+    "hr.report.view",
+    "hr.settings.manage",
   ]),
 };
 
@@ -134,14 +201,23 @@ const pagePermissionRules: readonly PagePermissionRule[] = [
   { pattern: /^\/booking(?:\/[^/]+)?$/, permission: "booking.read" },
   { pattern: /^\/foodOrder(?:\/[^/]+\/(?:basket|food))?$/, permission: "order.write" },
   { pattern: /^\/kitchen$/, permission: "order.kitchen" },
-  { pattern: /^\/employeeSchedule$/, permission: "employee.read" },
+  { pattern: /^\/employeeSchedule$/, permission: "hr.schedule.manage" },
   { pattern: /^\/houseKeeperMinibar$/, permission: "inspection.read" },
   { pattern: /^\/today$/, permission: "ops.read" },
   { pattern: /^\/dashboard$/, permission: "report.read" },
   { pattern: /^\/settings$/, permission: "settings.manage" },
   { pattern: /^\/system\/data-reset$/, permission: "data.reset" },
-  { pattern: /^\/wage$/, permission: "wage.read" },
+  { pattern: /^\/wage$/, permission: "hr.compensation.view" },
   { pattern: /^\/report$/, permission: "report.read" },
+  { pattern: /^\/hr$/, permission: "hr.employee.view" },
+  { pattern: /^\/hr\/employees(?:\/.*)?$/, permission: "hr.employee.view" },
+  { pattern: /^\/hr\/schedules(?:\/.*)?$/, permission: "hr.schedule.manage" },
+  { pattern: /^\/hr\/attendance(?:\/.*)?$/, permission: "hr.attendance.manage" },
+  { pattern: /^\/hr\/leave(?:\/.*)?$/, permission: "hr.leave.request" },
+  { pattern: /^\/hr\/payroll(?:\/.*)?$/, permission: "hr.compensation.view" },
+  { pattern: /^\/hr\/documents(?:\/.*)?$/, permission: "hr.document.manage" },
+  { pattern: /^\/hr\/reports(?:\/.*)?$/, permission: "hr.report.view" },
+  { pattern: /^\/hr\/settings(?:\/.*)?$/, permission: "hr.settings.manage" },
 ];
 
 export function resolvePagePermission(
@@ -176,8 +252,13 @@ export function canAccessPageWithPermissions(
 type ApiPermissionRule = {
   method: string;
   pattern: RegExp;
-  permission: Permission;
+  permission: Permission | { readonly anyOf: readonly Permission[] };
 };
+
+export type ApiPermissionRequirement =
+  | Permission
+  | "identity"
+  | { readonly anyOf: readonly Permission[] };
 
 const apiPermissionRules: readonly ApiPermissionRule[] = [
   { method: "GET", pattern: /^\/api\/bookings$/, permission: "booking.read" },
@@ -185,7 +266,39 @@ const apiPermissionRules: readonly ApiPermissionRule[] = [
   { method: "GET", pattern: /^\/api\/bookings\/[^/]+$/, permission: "booking.read" },
   { method: "PATCH", pattern: /^\/api\/bookings\/[^/]+$/, permission: "booking.lifecycle" },
   { method: "POST", pattern: /^\/api\/bookings\/[^/]+\/payments$/, permission: "payment.collect" },
+  { method: "GET", pattern: /^\/api\/bookings\/[^/]+\/promptpay-payments$/, permission: {
+    anyOf: ["payment.view", "payment.read"],
+  } },
+  { method: "POST", pattern: /^\/api\/bookings\/[^/]+\/promptpay-payments$/, permission: {
+    anyOf: ["payment.create", "payment.collect"],
+  } },
+  { method: "POST", pattern: /^\/api\/bookings\/[^/]+\/promptpay-payments\/[^/]+\/submit$/, permission: {
+    anyOf: ["payment.submit", "payment.collect"],
+  } },
+  { method: "POST", pattern: /^\/api\/bookings\/[^/]+\/promptpay-payments\/[^/]+\/verify$/, permission: "payment.verify" },
+  { method: "POST", pattern: /^\/api\/bookings\/[^/]+\/promptpay-payments\/[^/]+\/reject$/, permission: "payment.verify" },
+  { method: "POST", pattern: /^\/api\/bookings\/[^/]+\/promptpay-payments\/[^/]+\/cancel$/, permission: {
+    anyOf: ["payment.cancel", "payment.collect"],
+  } },
+  { method: "POST", pattern: /^\/api\/bookings\/[^/]+\/promptpay-payments\/[^/]+\/refund$/, permission: "payment.refund" },
+  { method: "GET", pattern: /^\/api\/bookings\/[^/]+\/promptpay-payments\/[^/]+\/slip$/, permission: {
+    anyOf: ["payment.view", "payment.verify", "payment.read"],
+  } },
+  { method: "GET", pattern: /^\/api\/bookings\/[^/]+\/promptpay-payments\/[^/]+\/qr$/, permission: {
+    anyOf: ["payment.view", "payment.create", "payment.receipt.print", "payment.read"],
+  } },
   { method: "POST", pattern: /^\/api\/bookings\/[^/]+\/refunds$/, permission: "payment.refund" },
+  { method: "GET", pattern: /^\/api\/promptpay-accounts$/, permission: {
+    anyOf: ["payment.promptpay_settings.view", "payment.create", "payment.collect"],
+  } },
+  { method: "GET", pattern: /^\/api\/promptpay-accounts\/master$/, permission: {
+    anyOf: ["payment.promptpay_settings.manage", "settings.manage"],
+  } },
+  { method: "POST", pattern: /^\/api\/promptpay-accounts$/, permission: "payment.promptpay_settings.manage" },
+  { method: "PATCH", pattern: /^\/api\/promptpay-accounts\/[^/]+$/, permission: "payment.promptpay_settings.manage" },
+  { method: "GET", pattern: /^\/api\/payments\/report$/, permission: {
+    anyOf: ["payment.report.view", "report.read"],
+  } },
   { method: "POST", pattern: /^\/api\/bookings\/[^/]+\/resources$/, permission: "resource.manage" },
   { method: "PATCH", pattern: /^\/api\/bookings\/[^/]+\/resources$/, permission: "resource.manage" },
   { method: "GET", pattern: /^\/api\/housekeeping\/inspections$/, permission: "inspection.read" },
@@ -226,7 +339,9 @@ const apiPermissionRules: readonly ApiPermissionRule[] = [
   { method: "POST", pattern: /^\/api\/rooms$/, permission: "resource.manage" },
   { method: "PATCH", pattern: /^\/api\/rooms\/[^/]+$/, permission: "resource.manage" },
   { method: "GET", pattern: /^\/api\/rooms$/, permission: "resource.read" },
-  { method: "GET", pattern: /^\/api\/roles$/, permission: "authorization.manage" },
+  { method: "GET", pattern: /^\/api\/roles$/, permission: {
+    anyOf: ["authorization.manage", "employee.manage"],
+  } },
   { method: "POST", pattern: /^\/api\/roles$/, permission: "authorization.manage" },
   { method: "PATCH", pattern: /^\/api\/roles\/[^/]+$/, permission: "authorization.manage" },
   { method: "GET", pattern: /^\/api\/roles\/[^/]+\/permissions$/, permission: "authorization.manage" },
@@ -238,6 +353,39 @@ const apiPermissionRules: readonly ApiPermissionRule[] = [
   { method: "POST", pattern: /^\/api\/employees\/[^/]+\/reset-password$/, permission: "employee.manage" },
   { method: "GET", pattern: /^\/api\/system\/data-reset$/, permission: "data.reset" },
   { method: "POST", pattern: /^\/api\/system\/data-reset$/, permission: "data.reset" },
+  { method: "GET", pattern: /^\/api\/hr\/employees$/, permission: "hr.employee.view" },
+  { method: "POST", pattern: /^\/api\/hr\/employees$/, permission: "hr.employee.create" },
+  { method: "GET", pattern: /^\/api\/hr\/employees\/[^/]+$/, permission: "hr.employee.view" },
+  { method: "PATCH", pattern: /^\/api\/hr\/employees\/[^/]+$/, permission: "hr.employee.update" },
+  { method: "GET", pattern: /^\/api\/hr\/shift-templates$/, permission: "hr.schedule.manage" },
+  { method: "POST", pattern: /^\/api\/hr\/shift-templates$/, permission: "hr.schedule.manage" },
+  { method: "PATCH", pattern: /^\/api\/hr\/shift-templates\/[^/]+$/, permission: "hr.schedule.manage" },
+  { method: "GET", pattern: /^\/api\/hr\/schedules$/, permission: "hr.schedule.manage" },
+  { method: "POST", pattern: /^\/api\/hr\/schedules$/, permission: "hr.schedule.manage" },
+  { method: "GET", pattern: /^\/api\/hr\/holidays$/, permission: "hr.schedule.manage" },
+  { method: "POST", pattern: /^\/api\/hr\/holidays$/, permission: "hr.schedule.manage" },
+  { method: "GET", pattern: /^\/api\/hr\/attendance$/, permission: "hr.attendance.manage" },
+  { method: "POST", pattern: /^\/api\/hr\/attendance$/, permission: "hr.attendance.manage" },
+  { method: "GET", pattern: /^\/api\/hr\/leave-types$/, permission: "hr.leave.request" },
+  { method: "POST", pattern: /^\/api\/hr\/leave-types$/, permission: "hr.settings.manage" },
+  { method: "PATCH", pattern: /^\/api\/hr\/leave-types\/[^/]+$/, permission: "hr.settings.manage" },
+  { method: "GET", pattern: /^\/api\/hr\/leave-balances$/, permission: "hr.leave.request" },
+  { method: "POST", pattern: /^\/api\/hr\/leave-balances$/, permission: "hr.settings.manage" },
+  { method: "GET", pattern: /^\/api\/hr\/leave-requests$/, permission: "hr.leave.request" },
+  { method: "POST", pattern: /^\/api\/hr\/leave-requests$/, permission: "hr.leave.request" },
+  { method: "GET", pattern: /^\/api\/hr\/compensations$/, permission: "hr.compensation.view" },
+  { method: "POST", pattern: /^\/api\/hr\/compensations$/, permission: "hr.payroll.calculate" },
+  { method: "GET", pattern: /^\/api\/hr\/payroll\/settings$/, permission: "hr.compensation.view" },
+  { method: "POST", pattern: /^\/api\/hr\/payroll\/settings$/, permission: "hr.settings.manage" },
+  { method: "GET", pattern: /^\/api\/hr\/payroll\/periods$/, permission: "hr.compensation.view" },
+  { method: "POST", pattern: /^\/api\/hr\/payroll\/periods$/, permission: "hr.payroll.calculate" },
+  { method: "GET", pattern: /^\/api\/hr\/payroll\/periods\/[^/]+\/export$/, permission: "hr.compensation.view" },
+  { method: "GET", pattern: /^\/api\/hr\/documents$/, permission: "hr.document.manage" },
+  { method: "POST", pattern: /^\/api\/hr\/documents$/, permission: "hr.document.manage" },
+  { method: "DELETE", pattern: /^\/api\/hr\/documents$/, permission: "hr.document.manage" },
+  { method: "GET", pattern: /^\/api\/hr\/documents\/[^/]+\/download$/, permission: "hr.document.manage" },
+  { method: "GET", pattern: /^\/api\/hr\/dashboard$/, permission: "hr.employee.view" },
+  { method: "GET", pattern: /^\/api\/hr\/reports$/, permission: "hr.report.view" },
 ];
 
 /**
@@ -291,10 +439,21 @@ export function roleCanManageEmployees(role: Role): boolean {
   return hasPermission(role, employeeManagePermission);
 }
 
+export function employeeHasApiPermission(
+  permissionCodes: readonly string[],
+  required: ApiPermissionRequirement,
+): boolean {
+  if (required === "identity") return true;
+  if (typeof required === "object" && "anyOf" in required) {
+    return required.anyOf.some((code) => permissionCodes.includes(code));
+  }
+  return permissionCodes.includes(required);
+}
+
 export function resolveApiPermission(
   method: string,
   pathname: string,
-): Permission | "identity" | null {
+): ApiPermissionRequirement | null {
   if (method === "GET" && pathname === "/api/auth/me") return "identity";
   if (method === "POST" && pathname === "/api/auth/set-password") {
     return "identity";
