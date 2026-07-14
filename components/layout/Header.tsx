@@ -7,7 +7,13 @@ export default function Header({ onMenuClick }: { onMenuClick: () => void }) {
   return (
     <header className="fixed inset-x-0 top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-surface px-4 md:hidden">
       <div className="flex items-center gap-3">
-        <button type="button" aria-label="เปิดเมนู" onClick={onMenuClick} className="rounded-xl p-2 text-muted-foreground hover:bg-muted">
+        <button
+          type="button"
+          aria-label="เปิดเมนู"
+          data-tooltip="เปิดเมนูนำทางของระบบ"
+          onClick={onMenuClick}
+          className="rounded-xl p-2 text-muted-foreground hover:bg-muted"
+        >
           <Menu size={22} />
         </button>
         <Image

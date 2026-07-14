@@ -135,33 +135,36 @@ export function PosReportsBoard() {
         </p>
       ) : null}
 
-      <section className="flex flex-wrap items-end gap-3 rounded-3xl border border-border bg-surface p-4 shadow-sm">
-        <label className="text-sm">
+      <section className="flex flex-wrap items-end gap-3 rounded-[1.75rem] border border-border bg-surface p-5 shadow-sm">
+        <label className="text-sm font-medium">
           ตั้งแต่
           <input
             type="date"
             value={from}
             onChange={(event) => setFrom(event.target.value)}
-            className="mt-1 block rounded-xl border border-border bg-background px-3 py-2"
+            className="mt-1.5 block rounded-2xl border border-border bg-background px-3 py-2.5"
           />
         </label>
-        <label className="text-sm">
+        <label className="text-sm font-medium">
           ถึง
           <input
             type="date"
             value={to}
             onChange={(event) => setTo(event.target.value)}
-            className="mt-1 block rounded-xl border border-border bg-background px-3 py-2"
+            className="mt-1.5 block rounded-2xl border border-border bg-background px-3 py-2.5"
           />
         </label>
         <button
           type="button"
           onClick={exportCsv}
-          className="rounded-xl border border-border px-4 py-2"
+          className="rounded-2xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-sm"
         >
           ส่งออก CSV
         </button>
-        <Link href="/dashboard" className="rounded-xl border border-border px-4 py-2">
+        <Link
+          href="/dashboard"
+          className="rounded-2xl border border-border bg-background px-4 py-2.5 text-sm font-medium hover:bg-muted"
+        >
           ดูบัญชี/แดชบอร์ด
         </Link>
       </section>
@@ -180,10 +183,12 @@ export function PosReportsBoard() {
             ].map((item) => (
               <section
                 key={item.label}
-                className="rounded-2xl border border-border bg-surface p-4 shadow-sm"
+                className="rounded-[1.5rem] border border-border bg-gradient-to-br from-surface to-muted/50 p-5 shadow-sm"
               >
                 <p className="text-sm text-muted-foreground">{item.label}</p>
-                <p className="mt-2 text-2xl font-semibold">{item.value}</p>
+                <p className="mt-2 text-2xl font-semibold tracking-tight">
+                  {item.value}
+                </p>
               </section>
             ))}
           </div>

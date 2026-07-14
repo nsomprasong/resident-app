@@ -5,6 +5,7 @@ import { Provider } from "react-redux";
 import { usePathname } from "next/navigation";
 
 import { EmployeePermissionsProvider } from "@/components/auth/EmployeePermissionsProvider";
+import { AppTooltip } from "@/components/ui/AppTooltip";
 import { store } from "../../store";
 import Header from "./Header";
 import Sidebar from "./Sidebar";
@@ -20,6 +21,7 @@ export default function MainLayoutClient({ children }: { children: React.ReactNo
   return (
     <Provider store={store}>
       <EmployeePermissionsProvider>
+        <AppTooltip />
         <Header onMenuClick={() => setSidebarOpen(true)} />
         <div className="flex min-h-screen pt-16 md:pt-0">
           <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />

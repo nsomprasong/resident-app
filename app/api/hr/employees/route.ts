@@ -19,6 +19,7 @@ import {
   serializeHrEmployee,
 } from "@/lib/hr/employees";
 import { prisma } from "@/lib/prisma";
+import { resolveAuthUserIdForEmail } from "@/lib/supabase/admin";
 import { Prisma } from "@/generated/prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -26,6 +27,7 @@ const employeeInclude = {
   department: { select: { id: true, name: true } },
   position: { select: { id: true, name: true } },
   roleRecord: { select: { id: true, displayName: true } },
+  defaultShiftTemplate: { select: { id: true, name: true } },
 } as const;
 
 async function nextEmployeeCode() {
@@ -161,44 +163,127 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    if (!rest.email) {
+      return validationErrorResponse("กรุณาตรวจสอบข้อมูลพนักงาน", [
+        { path: "email", message: "กรุณาระบุอีเมลสำหรับสร้างบัญชีเข้าสู่ระบบ" },
+      ]);
+    }
+    const email = rest.email;
+
+    const emailOwner = await prisma.employee.findFirst({
+      where: { email: { equals: email, mode: "insensitive" } },
+      select: { id: true },
+    });
+    if (emailOwner) {
+      return validationErrorResponse("อีเมลนี้ถูกใช้โดยพนักงานอื่นแล้ว", [
+        { path: "email", message: "อีเมลซ้ำ" },
+      ]);
+    }
+
+    if (rest.defaultShiftTemplateId) {
+      const template = await prisma.shiftTemplate.findUnique({
+        where: { id: rest.defaultShiftTemplateId },
+        select: { id: true },
+      });
+      if (!template) {
+        return validationErrorResponse("กรุณาตรวจสอบข้อมูลพนักงาน", [
+          { path: "defaultShiftTemplateId", message: "ไม่พบกะที่เลือก" },
+        ]);
+      }
+    }
+
+    // Create the Supabase Auth user first (server-only, service role) so every
+    // new employee is guaranteed to have login credentials from step one.
+    const authResolved = await resolveAuthUserIdForEmail(email);
+    if (!authResolved.ok) {
+      return apiErrorResponse(authResolved.message, 502, "AUTH_PROVISION_FAILED");
+    }
+
+    const authOwner = await prisma.employee.findUnique({
+      where: { authUserId: authResolved.authUserId },
+      select: { id: true },
+    });
+    if (authOwner) {
+      return validationErrorResponse(
+        "Auth user นี้ถูกผูกกับพนักงานอื่นแล้ว",
+        [{ path: "email", message: "authUserId ซ้ำ" }],
+      );
+    }
+
     const employeeCode = validated.data.employeeCode ?? (await nextEmployeeCode());
     const name = buildEmployeeDisplayName(firstName, lastName);
 
-    const created = await prisma.employee.create({
-      data: {
-        employeeCode,
-        firstName,
-        lastName,
-        name,
-        employmentType,
-        hrStatus,
-        isActive: isLoginEligibleStatus(hrStatus),
-        nickname: rest.nickname,
-        email: rest.email,
-        phone: rest.phone,
-        address: rest.address,
-        nationalId: rest.nationalId,
-        birthDate: rest.birthDate,
-        emergencyContactName: rest.emergencyContactName,
-        emergencyContactPhone: rest.emergencyContactPhone,
-        departmentId: rest.departmentId,
-        positionId: rest.positionId,
-        managerEmployeeId: rest.managerEmployeeId,
-        branchName: rest.branchName,
-        hiredAt: rest.hiredAt,
-        probationEndsAt: rest.probationEndsAt,
-        endedAt: rest.endedAt,
-        bankAccountName: rest.bankAccountName,
-        bankAccountNumber: rest.bankAccountNumber,
-        bankName: rest.bankName,
-        promptPay: rest.promptPay,
-        notes: rest.notes,
-        roleId: rest.roleId,
-        hourlyRate: rest.hourlyRate,
-        photoUrl: rest.photoUrl,
-      },
-      include: employeeInclude,
-    });
+    let created;
+    try {
+      created = await prisma.$transaction(async (tx) => {
+        const employee = await tx.employee.create({
+          data: {
+            employeeCode,
+            firstName,
+            lastName,
+            name,
+            employmentType,
+            hrStatus,
+            isActive: isLoginEligibleStatus(hrStatus),
+            nickname: rest.nickname,
+            email,
+            authUserId: authResolved.authUserId,
+            mustResetPassword: authResolved.created,
+            phone: rest.phone,
+            address: rest.address,
+            nationalId: rest.nationalId,
+            birthDate: rest.birthDate,
+            emergencyContactName: rest.emergencyContactName,
+            emergencyContactPhone: rest.emergencyContactPhone,
+            departmentId: rest.departmentId,
+            positionId: rest.positionId,
+            managerEmployeeId: rest.managerEmployeeId,
+            branchName: rest.branchName,
+            hiredAt: rest.hiredAt,
+            probationEndsAt: rest.probationEndsAt,
+            endedAt: rest.endedAt,
+            bankAccountName: rest.bankAccountName,
+            bankAccountNumber: rest.bankAccountNumber,
+            bankName: rest.bankName,
+            promptPay: rest.promptPay,
+            notes: rest.notes,
+            roleId: rest.roleId,
+            hourlyRate: rest.hourlyRate,
+            otHourlyRate: rest.otHourlyRate,
+            payDayOfMonth: rest.payDayOfMonth,
+            defaultShiftTemplateId: rest.defaultShiftTemplateId,
+            photoUrl: rest.photoUrl,
+          },
+          include: employeeInclude,
+        });
+
+        if (rest.dailyRate !== undefined || rest.monthlySalary !== undefined) {
+          await tx.employeeCompensation.create({
+            data: {
+              employeeId: employee.id,
+              employmentType,
+              dailyRate: rest.dailyRate ?? 0,
+              hourlyRate: rest.hourlyRate ?? 0,
+              monthlySalary: rest.monthlySalary ?? 0,
+              effectiveFrom:
+                rest.compensationEffectiveFrom ?? rest.hiredAt ?? new Date(),
+              isActive: true,
+            },
+          });
+        }
+
+        return employee;
+      });
+    } catch (createError) {
+      // Auth user already exists at this point; a retry with the same email
+      // will find and reuse it via resolveAuthUserIdForEmail (no orphan risk).
+      console.error(
+        "POST /api/hr/employees failed after auth provisioning",
+        { authUserCreated: authResolved.created, email },
+        createError,
+      );
+      throw createError;
+    }
 
     await recordAuditLog({
       actor: {
@@ -212,6 +297,7 @@ export async function POST(request: NextRequest) {
         employeeCode: created.employeeCode,
         employmentType: created.employmentType,
         hrStatus: created.hrStatus,
+        authUserCreated: authResolved.created,
       },
     });
 
@@ -223,7 +309,11 @@ export async function POST(request: NextRequest) {
       "code" in error &&
       error.code === "P2002"
     ) {
-      return apiErrorResponse("รหัสหรืออีเมลซ้ำในระบบ", 409, "CONFLICT");
+      return apiErrorResponse(
+        "รหัสหรืออีเมลซ้ำในระบบ กรุณาลองบันทึกใหม่ (บัญชี Auth ที่สร้างไว้จะถูกใช้ซ้ำ ไม่สร้างซ้ำ)",
+        409,
+        "CONFLICT",
+      );
     }
     console.error("POST /api/hr/employees failed", error);
     return apiErrorResponse("ไม่สามารถสร้างพนักงานได้", 500, "INTERNAL_ERROR");

@@ -21,6 +21,21 @@ type ListResponse = {
   totalPages: number;
 };
 
+type RoleOption = {
+  id: string;
+  code: string;
+  displayName: string;
+  isActive: boolean;
+};
+
+type ShiftTemplateOption = {
+  id: string;
+  name: string;
+  startTime: string;
+  endTime: string;
+  isActive: boolean;
+};
+
 type FormState = {
   firstName: string;
   lastName: string;
@@ -30,6 +45,13 @@ type FormState = {
   employmentType: "DAILY" | "MONTHLY";
   hrStatus: string;
   notes: string;
+  roleId: string;
+  payDayOfMonth: string;
+  defaultShiftTemplateId: string;
+  otHourlyRate: string;
+  dailyRate: string;
+  monthlySalary: string;
+  compensationEffectiveFrom: string;
 };
 
 const emptyForm: FormState = {
@@ -41,6 +63,13 @@ const emptyForm: FormState = {
   employmentType: "MONTHLY",
   hrStatus: "ACTIVE",
   notes: "",
+  roleId: "",
+  payDayOfMonth: "",
+  defaultShiftTemplateId: "",
+  otHourlyRate: "",
+  dailyRate: "",
+  monthlySalary: "",
+  compensationEffectiveFrom: "",
 };
 
 export function HrEmployeesManager() {
@@ -60,10 +89,30 @@ export function HrEmployeesManager() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+  const [roleOptions, setRoleOptions] = useState<RoleOption[]>([]);
+  const [shiftTemplateOptions, setShiftTemplateOptions] = useState<
+    ShiftTemplateOption[]
+  >([]);
 
   const canCreate = permissions.includes("hr.employee.create");
   const canUpdate = permissions.includes("hr.employee.update");
   const canArchive = permissions.includes("hr.employee.archive");
+
+  useEffect(() => {
+    // Roles list is ADMIN-only (see /api/roles); fail closed and simply hide
+    // the role select for actors without access instead of surfacing an error.
+    fetch("/api/roles", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : []))
+      .then((data: RoleOption[]) => setRoleOptions(Array.isArray(data) ? data : []))
+      .catch(() => setRoleOptions([]));
+
+    fetch("/api/hr/shift-templates", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : []))
+      .then((data: ShiftTemplateOption[]) =>
+        setShiftTemplateOptions(Array.isArray(data) ? data : []),
+      )
+      .catch(() => setShiftTemplateOptions([]));
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -118,6 +167,13 @@ export function HrEmployeesManager() {
       employmentType: item.employmentType,
       hrStatus: item.hrStatus,
       notes: item.notes ?? "",
+      roleId: item.roleId ?? "",
+      payDayOfMonth: item.payDayOfMonth ? String(item.payDayOfMonth) : "",
+      defaultShiftTemplateId: item.defaultShiftTemplateId ?? "",
+      otHourlyRate: item.otHourlyRate !== null ? String(item.otHourlyRate) : "",
+      dailyRate: "",
+      monthlySalary: "",
+      compensationEffectiveFrom: "",
     });
     setFormError("");
     setModalOpen(true);
@@ -127,7 +183,7 @@ export function HrEmployeesManager() {
     setSaving(true);
     setFormError("");
     try {
-      const payload = {
+      const payload: Record<string, unknown> = {
         firstName: form.firstName,
         lastName: form.lastName,
         nickname: form.nickname || null,
@@ -136,7 +192,18 @@ export function HrEmployeesManager() {
         employmentType: form.employmentType,
         hrStatus: form.hrStatus,
         notes: form.notes || null,
+        roleId: form.roleId || null,
+        payDayOfMonth: form.payDayOfMonth ? Number(form.payDayOfMonth) : null,
+        defaultShiftTemplateId: form.defaultShiftTemplateId || null,
+        otHourlyRate: form.otHourlyRate ? Number(form.otHourlyRate) : null,
       };
+      if (!editingId) {
+        if (form.dailyRate) payload.dailyRate = Number(form.dailyRate);
+        if (form.monthlySalary) payload.monthlySalary = Number(form.monthlySalary);
+        if (form.compensationEffectiveFrom) {
+          payload.compensationEffectiveFrom = form.compensationEffectiveFrom;
+        }
+      }
       const response = await fetch(
         editingId ? `/api/hr/employees/${editingId}` : "/api/hr/employees",
         {
@@ -425,9 +492,10 @@ export function HrEmployeesManager() {
               </label>
               <label className="text-sm sm:col-span-2">
                 <span className="mb-1 block text-muted-foreground">
-                  อีเมล (ถ้ามีบัญชี)
+                  อีเมล{editingId ? "" : " (จำเป็น — ใช้สร้างบัญชีเข้าสู่ระบบ)"}
                 </span>
                 <input
+                  type="email"
                   value={form.email}
                   onChange={(event) =>
                     setForm((current) => ({
@@ -437,6 +505,11 @@ export function HrEmployeesManager() {
                   }
                   className="w-full rounded-xl border border-border bg-background px-3 py-2"
                 />
+                {!editingId ? (
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    ระบบจะสร้างบัญชีผู้ใช้จากอีเมลนี้โดยอัตโนมัติ พร้อมให้ตั้งรหัสผ่านใหม่ในการเข้าสู่ระบบครั้งแรก
+                  </span>
+                ) : null}
               </label>
               <label className="text-sm">
                 <span className="mb-1 block text-muted-foreground">ประเภทจ้าง</span>
@@ -476,6 +549,149 @@ export function HrEmployeesManager() {
                   ))}
                 </select>
               </label>
+              {roleOptions.length > 0 ? (
+                <label className="text-sm">
+                  <span className="mb-1 block text-muted-foreground">
+                    บทบาทเข้าสู่ระบบ
+                  </span>
+                  <select
+                    value={form.roleId}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        roleId: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-xl border border-border bg-background px-3 py-2"
+                  >
+                    <option value="">ไม่กำหนด</option>
+                    {roleOptions
+                      .filter((role) => role.isActive)
+                      .map((role) => (
+                        <option key={role.id} value={role.id}>
+                          {role.displayName}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              ) : null}
+              <label className="text-sm">
+                <span className="mb-1 block text-muted-foreground">
+                  กะประจำ (ค่าเริ่มต้น)
+                </span>
+                <select
+                  value={form.defaultShiftTemplateId}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      defaultShiftTemplateId: event.target.value,
+                    }))
+                  }
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2"
+                >
+                  <option value="">ไม่กำหนด</option>
+                  {shiftTemplateOptions
+                    .filter((template) => template.isActive)
+                    .map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.name} ({template.startTime}–{template.endTime})
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label className="text-sm">
+                <span className="mb-1 block text-muted-foreground">
+                  วันจ่ายเงินของเดือน
+                </span>
+                <input
+                  type="number"
+                  min={1}
+                  max={31}
+                  value={form.payDayOfMonth}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      payDayOfMonth: event.target.value,
+                    }))
+                  }
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2"
+                />
+              </label>
+              <label className="text-sm">
+                <span className="mb-1 block text-muted-foreground">
+                  อัตรา OT ต่อชั่วโมง (บาท)
+                </span>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={form.otHourlyRate}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      otHourlyRate: event.target.value,
+                    }))
+                  }
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2"
+                />
+              </label>
+              {!editingId ? (
+                <>
+                  <label className="text-sm sm:col-span-2">
+                    <span className="mb-1 block text-muted-foreground">
+                      ค่าตอบแทน
+                      {form.employmentType === "DAILY"
+                        ? " — ค่าแรงต่อวัน (บาท)"
+                        : " — เงินเดือน (บาท)"}
+                    </span>
+                    {form.employmentType === "DAILY" ? (
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={form.dailyRate}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            dailyRate: event.target.value,
+                          }))
+                        }
+                        className="w-full rounded-xl border border-border bg-background px-3 py-2"
+                      />
+                    ) : (
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={form.monthlySalary}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            monthlySalary: event.target.value,
+                          }))
+                        }
+                        className="w-full rounded-xl border border-border bg-background px-3 py-2"
+                      />
+                    )}
+                  </label>
+                  <label className="text-sm sm:col-span-2">
+                    <span className="mb-1 block text-muted-foreground">
+                      มีผลตั้งแต่วันที่ (ค่าตอบแทน)
+                    </span>
+                    <input
+                      type="date"
+                      value={form.compensationEffectiveFrom}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          compensationEffectiveFrom: event.target.value,
+                        }))
+                      }
+                      className="w-full rounded-xl border border-border bg-background px-3 py-2"
+                    />
+                  </label>
+                </>
+              ) : null}
               <label className="text-sm sm:col-span-2">
                 <span className="mb-1 block text-muted-foreground">หมายเหตุ</span>
                 <textarea

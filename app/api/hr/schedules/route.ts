@@ -48,6 +48,7 @@ function serializeSchedule(schedule: {
   workDate: Date;
   startsAt: Date;
   endsAt: Date;
+  isDayOff: boolean;
   notes: string | null;
   status: string;
   employee: {
@@ -77,6 +78,7 @@ function serializeSchedule(schedule: {
     workDate: dateKeyUtc(schedule.workDate),
     startsAt: schedule.startsAt.toISOString(),
     endsAt: schedule.endsAt.toISOString(),
+    isDayOff: schedule.isDayOff,
     notes: schedule.notes,
     status: schedule.status,
   };
@@ -187,31 +189,71 @@ export async function GET(request: NextRequest) {
 
 type AssignBody = {
   employeeId: string;
-  shiftTemplateId: string;
+  shiftTemplateId?: string;
   workDate: string;
+  isDayOff?: boolean;
   notes?: string | null;
 };
 
 async function createAssignment(input: AssignBody) {
   const workDate = parseDateKey(input.workDate);
   if (!workDate) throw new Error("INVALID_DATE");
-  if (!isUuid(input.employeeId) || !isUuid(input.shiftTemplateId)) {
+  if (!isUuid(input.employeeId)) throw new Error("INVALID_ID");
+
+  const employee = await prisma.employee.findFirst({
+    where: {
+      id: input.employeeId,
+      hrStatus: { in: ["ACTIVE", "PROBATION"] },
+    },
+    select: { id: true },
+  });
+  if (!employee) throw new Error("EMPLOYEE_NOT_FOUND");
+
+  if (input.isDayOff) {
+    const dayStart = Date.UTC(
+      workDate.getUTCFullYear(),
+      workDate.getUTCMonth(),
+      workDate.getUTCDate(),
+    );
+    const startsAt = new Date(dayStart);
+    const endsAt = new Date(dayStart + 24 * 60 * 60_000);
+
+    const existing = await prisma.workSchedule.findMany({
+      where: {
+        employeeId: input.employeeId,
+        status: "ASSIGNED",
+        startsAt: { lt: endsAt },
+        endsAt: { gt: startsAt },
+      },
+    });
+    const overlaps = findEmployeeScheduleOverlaps(
+      { employeeId: input.employeeId, startsAt, endsAt },
+      existing,
+    );
+    if (overlaps.length) throw new Error("OVERLAP");
+
+    return prisma.workSchedule.create({
+      data: {
+        employeeId: input.employeeId,
+        shiftTemplateId: null,
+        workDate,
+        startsAt,
+        endsAt,
+        isDayOff: true,
+        notes: input.notes ?? null,
+        status: "ASSIGNED",
+      },
+      include: scheduleInclude,
+    });
+  }
+
+  if (!input.shiftTemplateId || !isUuid(input.shiftTemplateId)) {
     throw new Error("INVALID_ID");
   }
 
-  const [employee, template] = await Promise.all([
-    prisma.employee.findFirst({
-      where: {
-        id: input.employeeId,
-        hrStatus: { in: ["ACTIVE", "PROBATION"] },
-      },
-      select: { id: true },
-    }),
-    prisma.shiftTemplate.findFirst({
-      where: { id: input.shiftTemplateId, isActive: true },
-    }),
-  ]);
-  if (!employee) throw new Error("EMPLOYEE_NOT_FOUND");
+  const template = await prisma.shiftTemplate.findFirst({
+    where: { id: input.shiftTemplateId, isActive: true },
+  });
   if (!template) throw new Error("TEMPLATE_NOT_FOUND");
 
   const range = buildScheduleRange(
@@ -276,8 +318,9 @@ export async function POST(request: NextRequest) {
         typeof parsed.body.workDate === "string"
           ? parsed.body.workDate.trim()
           : "";
+      const isDayOff = parsed.body.isDayOff === true;
       if (!employeeId) issues.push({ path: "employeeId", message: "ต้องระบุพนักงาน" });
-      if (!shiftTemplateId)
+      if (!isDayOff && !shiftTemplateId)
         issues.push({ path: "shiftTemplateId", message: "ต้องระบุกะ" });
       if (!workDate) issues.push({ path: "workDate", message: "ต้องระบุวันที่" });
       if (issues.length) {
@@ -286,8 +329,9 @@ export async function POST(request: NextRequest) {
 
       const created = await createAssignment({
         employeeId,
-        shiftTemplateId,
+        shiftTemplateId: isDayOff ? undefined : shiftTemplateId,
         workDate,
+        isDayOff,
         notes:
           typeof parsed.body.notes === "string" ? parsed.body.notes.trim() : null,
       });
@@ -300,7 +344,7 @@ export async function POST(request: NextRequest) {
         action: "HR_SCHEDULE_ASSIGNED",
         entityType: "WORK_SCHEDULE",
         entityId: created.id,
-        metadata: { employeeId, shiftTemplateId, workDate },
+        metadata: { employeeId, shiftTemplateId: isDayOff ? null : shiftTemplateId, workDate, isDayOff },
       });
 
       return NextResponse.json(serializeSchedule(created), { status: 201 });

@@ -120,7 +120,11 @@ export const permissionMenuGroups: readonly PermissionMenuGroup[] = [
     id: "hr-attendance",
     sectionTitle: "บริหารพนักงาน",
     title: "ลงเวลา",
-    permissions: ["hr.attendance.manage", "hr.attendance.approve"],
+    permissions: [
+      "hr.attendance.manage",
+      "hr.attendance.approve",
+      "hr.overtime.manage",
+    ],
   },
   {
     id: "hr-leave",
@@ -137,8 +141,15 @@ export const permissionMenuGroups: readonly PermissionMenuGroup[] = [
       "hr.payroll.approve",
       "hr.payroll.mark_paid",
       "hr.compensation.view",
+      "hr.payroll_summary.view",
       "wage.read",
     ],
+  },
+  {
+    id: "my-work",
+    sectionTitle: "งานประจำวัน",
+    title: "งานของฉัน",
+    permissions: ["hr.attendance.self", "hr.leave.self"],
   },
   {
     id: "hr-documents",

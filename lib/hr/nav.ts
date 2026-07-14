@@ -1,13 +1,8 @@
 import type { LucideIcon } from "lucide-react";
 import {
-  Banknote,
   CalendarDays,
-  ClipboardList,
   Clock3,
-  FileStack,
   LayoutDashboard,
-  Settings2,
-  Umbrella,
   UsersRound,
 } from "lucide-react";
 
@@ -21,72 +16,64 @@ export type HrNavItem = {
   permission: Permission;
 };
 
+/**
+ * Admin HR menu — trimmed to 4 items per Phase 21 (attendance/leave/OT/payroll
+ * summary now live as tabs inside "เวลาและค่าจ้าง" instead of separate pages).
+ */
 export const hrNavItems: readonly HrNavItem[] = [
   {
-    text: "ภาพรวมบุคลากร",
-    description: "สรุปสถานะพนักงาน ตาราง เวลา และค่าจ้าง",
+    text: "ภาพรวมพนักงาน",
+    description: "สรุปสถานะพนักงานและความผิดปกติวันนี้",
     path: "/hr",
     icon: LayoutDashboard,
     permission: "hr.employee.view",
   },
   {
     text: "พนักงาน",
-    description: "ข้อมูลพนักงานรายวันและรายเดือน",
+    description: "ข้อมูลพนักงาน บัญชี บทบาท และค่าจ้าง",
     path: "/hr/employees",
     icon: UsersRound,
     permission: "hr.employee.view",
   },
   {
     text: "ตารางงาน",
-    description: "จัดกะและตารางเวร",
+    description: "แม่แบบกะและจัดตารางเวรรายสัปดาห์/รายเดือน",
     path: "/hr/schedules",
     icon: CalendarDays,
     permission: "hr.schedule.manage",
   },
   {
-    text: "ลงเวลา",
-    description: "เวลาเข้า–ออก พัก และ OT",
-    path: "/hr/attendance",
+    text: "เวลาและค่าจ้าง",
+    description: "ลงเวลา การลา OT ความผิดปกติ และสรุปรอบจ่ายเงิน",
+    path: "/hr/time-pay",
     icon: Clock3,
     permission: "hr.attendance.manage",
-  },
-  {
-    text: "วันลา",
-    description: "คำขอลาและวันหยุด",
-    path: "/hr/leave",
-    icon: Umbrella,
-    permission: "hr.leave.request",
-  },
-  {
-    text: "ค่าจ้างและเงินเดือน",
-    description: "รอบจ่าย คำนวณ และสลิป",
-    path: "/hr/payroll",
-    icon: Banknote,
-    permission: "hr.compensation.view",
-  },
-  {
-    text: "เอกสารพนักงาน",
-    description: "สัญญา บัตรประชาชน และเอกสารลา",
-    path: "/hr/documents",
-    icon: FileStack,
-    permission: "hr.document.manage",
-  },
-  {
-    text: "รายงานบุคลากร",
-    description: "รายงานเข้างาน ลา และต้นทุน",
-    path: "/hr/reports",
-    icon: ClipboardList,
-    permission: "hr.report.view",
-  },
-  {
-    text: "ตั้งค่าบุคลากร",
-    description: "แผนก กะ ประเภทลา และกฎค่าจ้าง",
-    path: "/hr/settings",
-    icon: Settings2,
-    permission: "hr.settings.manage",
   },
 ] as const;
 
 export function filterHrNavItems(permissionCodes: readonly string[]) {
   return hrNavItems.filter((item) => permissionCodes.includes(item.permission));
+}
+
+export type SelfNavItem = {
+  text: string;
+  description: string;
+  path: string;
+  icon: LucideIcon;
+  permission: Permission;
+};
+
+/** Employee self-service menu — visible to anyone with attendance.self. */
+export const selfNavItems: readonly SelfNavItem[] = [
+  {
+    text: "งานของฉัน",
+    description: "กะวันนี้ ลงเวลาเข้า–ออก แจ้งลา และประวัติของตนเอง",
+    path: "/my-work",
+    icon: Clock3,
+    permission: "hr.attendance.self",
+  },
+] as const;
+
+export function filterSelfNavItems(permissionCodes: readonly string[]) {
+  return selfNavItems.filter((item) => permissionCodes.includes(item.permission));
 }

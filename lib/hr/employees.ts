@@ -5,6 +5,7 @@ import type {
   EmploymentType,
   Position,
   Role,
+  ShiftTemplate,
 } from "@/generated/prisma/client";
 
 import type { ValidationIssue } from "@/lib/api/validation";
@@ -67,9 +68,14 @@ export type HrEmployeeRecord = {
   promptPay: string | null;
   notes: string | null;
   authUserId: string | null;
+  hasAuth: boolean;
   roleId: string | null;
   roleDisplayName: string | null;
   hourlyRate: number | null;
+  otHourlyRate: number | null;
+  payDayOfMonth: number | null;
+  defaultShiftTemplateId: string | null;
+  defaultShiftTemplateName: string | null;
   isActive: boolean;
 };
 
@@ -77,6 +83,7 @@ type EmployeeWithHr = Employee & {
   department: Pick<Department, "id" | "name"> | null;
   position: Pick<Position, "id" | "name"> | null;
   roleRecord: Pick<Role, "id" | "displayName"> | null;
+  defaultShiftTemplate: Pick<ShiftTemplate, "id" | "name"> | null;
 };
 
 function dateOnly(value: Date | null | undefined): string | null {
@@ -135,10 +142,16 @@ export function serializeHrEmployee(employee: EmployeeWithHr): HrEmployeeRecord 
     promptPay: employee.promptPay,
     notes: employee.notes,
     authUserId: employee.authUserId,
+    hasAuth: Boolean(employee.authUserId),
     roleId: employee.roleId,
     roleDisplayName: employee.roleRecord?.displayName ?? null,
     hourlyRate:
       employee.hourlyRate === null ? null : Number(employee.hourlyRate),
+    otHourlyRate:
+      employee.otHourlyRate === null ? null : Number(employee.otHourlyRate),
+    payDayOfMonth: employee.payDayOfMonth,
+    defaultShiftTemplateId: employee.defaultShiftTemplateId,
+    defaultShiftTemplateName: employee.defaultShiftTemplate?.name ?? null,
     isActive: employee.isActive,
   };
 }
@@ -193,8 +206,15 @@ export type ParsedHrEmployeeInput = {
   notes?: string | null;
   roleId?: string | null;
   hourlyRate?: number | null;
+  otHourlyRate?: number | null;
+  payDayOfMonth?: number | null;
+  defaultShiftTemplateId?: string | null;
   photoUrl?: string | null;
   employeeCode?: string;
+  /** Compensation section — creates an EmployeeCompensation row alongside the employee. */
+  dailyRate?: number;
+  monthlySalary?: number;
+  compensationEffectiveFrom?: Date;
 };
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -245,7 +265,11 @@ export function parseHrEmployeeInput(
   if (mode === "create" || "email" in body) {
     const emailRaw = readTrimmed(body, "email");
     if (!emailRaw) {
-      data.email = null;
+      if (mode === "create") {
+        issues.push({ path: "email", message: "กรุณาระบุอีเมลสำหรับสร้างบัญชีเข้าสู่ระบบ" });
+      } else {
+        data.email = null;
+      }
     } else {
       const email = emailRaw.toLowerCase();
       if (!EMAIL_PATTERN.test(email)) {
@@ -310,6 +334,7 @@ export function parseHrEmployeeInput(
     "positionId",
     "managerEmployeeId",
     "roleId",
+    "defaultShiftTemplateId",
   ] as const) {
     if (key in body) {
       const value = readTrimmed(body, key);
@@ -339,6 +364,60 @@ export function parseHrEmployeeInput(
         data.hourlyRate = rate;
       }
     }
+  }
+
+  if ("otHourlyRate" in body) {
+    const raw = body.otHourlyRate;
+    if (raw === null || raw === "") {
+      data.otHourlyRate = null;
+    } else {
+      const rate = Number(raw);
+      if (!Number.isFinite(rate) || rate < 0) {
+        issues.push({ path: "otHourlyRate", message: "อัตรา OT ไม่ถูกต้อง" });
+      } else {
+        data.otHourlyRate = rate;
+      }
+    }
+  }
+
+  if ("payDayOfMonth" in body) {
+    const raw = body.payDayOfMonth;
+    if (raw === null || raw === "") {
+      data.payDayOfMonth = null;
+    } else {
+      const day = Number(raw);
+      if (!Number.isInteger(day) || day < 1 || day > 31) {
+        issues.push({
+          path: "payDayOfMonth",
+          message: "วันจ่ายเงินต้องเป็นจำนวนเต็ม 1–31",
+        });
+      } else {
+        data.payDayOfMonth = day;
+      }
+    }
+  }
+
+  if ("dailyRate" in body) {
+    const rate = Number(body.dailyRate);
+    if (!Number.isFinite(rate) || rate < 0) {
+      issues.push({ path: "dailyRate", message: "ค่าแรงรายวันไม่ถูกต้อง" });
+    } else {
+      data.dailyRate = rate;
+    }
+  }
+
+  if ("monthlySalary" in body) {
+    const salary = Number(body.monthlySalary);
+    if (!Number.isFinite(salary) || salary < 0) {
+      issues.push({ path: "monthlySalary", message: "เงินเดือนไม่ถูกต้อง" });
+    } else {
+      data.monthlySalary = salary;
+    }
+  }
+
+  if ("compensationEffectiveFrom" in body) {
+    const parsedDate = readOptionalDate(body, "compensationEffectiveFrom", issues);
+    if (parsedDate) data.compensationEffectiveFrom = parsedDate;
   }
 
   if ("employeeCode" in body) {

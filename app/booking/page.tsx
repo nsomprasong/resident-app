@@ -447,7 +447,7 @@ export default function BookingPage() {
             type="button"
             onClick={openCreate}
             aria-label="เพิ่มการจอง"
-            title="เพิ่มการจอง"
+            data-tooltip="สร้างการจองใหม่ แบบเดี่ยวหรือกลุ่ม"
             className="fixed right-[max(1.5rem,env(safe-area-inset-right))] bottom-[max(1.5rem,env(safe-area-inset-bottom))] z-40 grid size-14 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-foreground/20 transition hover:-translate-y-0.5 hover:bg-primary/90 hover:shadow-xl active:translate-y-0 active:scale-95 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/40 sm:size-16"
           >
             <Plus size={28} strokeWidth={2.5} />

@@ -52,6 +52,112 @@ body {
 button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 
+/*
+  Project-wide hover / interactive feedback (@layer base so Tailwind hover:* still wins).
+  Uses :where() for low specificity. True-hover devices only (avoids sticky touch).
+*/
+@layer base {
+  :where(
+    a[href],
+    button,
+    [role="button"],
+    summary,
+    label[for],
+    select,
+    input[type="checkbox"],
+    input[type="radio"],
+    input[type="file"],
+    [data-hover]
+  ) {
+    transition-property: color, background-color, border-color, box-shadow, transform, filter, opacity;
+    transition-duration: 160ms;
+    transition-timing-function: ease;
+  }
+
+  :where(button, [role="button"], a[href], select):disabled,
+  :where(button, [role="button"], a[href])[aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    :where(button, [role="button"]):not(:disabled):not([aria-disabled="true"]):hover {
+      filter: brightness(0.97);
+      transform: translateY(-1px);
+    }
+
+    :where(button, [role="button"]):not(:disabled):not([aria-disabled="true"]):active {
+      filter: brightness(0.94);
+      transform: translateY(0);
+    }
+
+    :where(a[href]):not([aria-disabled="true"]):hover {
+      filter: brightness(0.98);
+    }
+
+    :where(select):not(:disabled):hover {
+      border-color: color-mix(in srgb, var(--color-primary) 45%, var(--color-border));
+      background-color: var(--color-surface-muted);
+    }
+
+    :where(summary):hover {
+      background-color: var(--color-muted);
+    }
+
+    /* Opt-in for clickable cards / rows that are not <button>/<a> */
+    :where([data-hover]):hover {
+      border-color: color-mix(in srgb, var(--color-primary) 35%, var(--color-border));
+      box-shadow: 0 8px 24px rgba(28, 25, 23, 0.06);
+      transform: translateY(-2px);
+    }
+
+    :where(a[href], button, [role="button"]).rounded-2xl:not(:disabled):not([aria-disabled="true"]):hover,
+    :where(a[href], button, [role="button"]).rounded-3xl:not(:disabled):not([aria-disabled="true"]):hover {
+      box-shadow: 0 10px 28px rgba(28, 25, 23, 0.08);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :where(
+      a[href],
+      button,
+      [role="button"],
+      summary,
+      label[for],
+      select,
+      input[type="checkbox"],
+      input[type="radio"],
+      input[type="file"],
+      [data-hover]
+    ) {
+      transition: none;
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      :where(button, [role="button"]):not(:disabled):not([aria-disabled="true"]):hover,
+      :where(a[href]):not([aria-disabled="true"]):hover,
+      :where([data-hover]):hover {
+        transform: none;
+      }
+    }
+  }
+}
+
+/* Floating button tip rendered by AppTooltip */
+.app-tooltip {
+  animation: app-tooltip-in 120ms ease-out;
+}
+
+@keyframes app-tooltip-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-tooltip {
+    animation: none;
+  }
+}
+
 @font-face {
   font-family: "RobotoCondensed";
   src: url("../public/fonts/english/RobotoCondensed-Light.ttf") format("truetype");

@@ -26,7 +26,10 @@ test("production security headers include baseline browser hardening", () => {
   assert.equal(headerMap.get("X-Frame-Options"), "DENY");
   assert.equal(headerMap.get("X-Content-Type-Options"), "nosniff");
   assert.equal(headerMap.has("Referrer-Policy"), true);
-  assert.equal(headerMap.has("Permissions-Policy"), true);
+  assert.equal(
+    headerMap.get("Permissions-Policy"),
+    "camera=(self), microphone=(), geolocation=(self)",
+  );
 });
 
 test("health response is stable and non-secret", () => {

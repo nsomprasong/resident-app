@@ -26,6 +26,7 @@ const employeeInclude = {
   department: { select: { id: true, name: true } },
   position: { select: { id: true, name: true } },
   roleRecord: { select: { id: true, displayName: true } },
+  defaultShiftTemplate: { select: { id: true, name: true } },
 } as const;
 
 export async function GET(
@@ -230,6 +231,15 @@ export async function PATCH(
         ...(patch.roleId !== undefined ? { roleId: patch.roleId } : {}),
         ...(patch.hourlyRate !== undefined
           ? { hourlyRate: patch.hourlyRate }
+          : {}),
+        ...(patch.otHourlyRate !== undefined
+          ? { otHourlyRate: patch.otHourlyRate }
+          : {}),
+        ...(patch.payDayOfMonth !== undefined
+          ? { payDayOfMonth: patch.payDayOfMonth }
+          : {}),
+        ...(patch.defaultShiftTemplateId !== undefined
+          ? { defaultShiftTemplateId: patch.defaultShiftTemplateId }
           : {}),
         ...(patch.photoUrl !== undefined ? { photoUrl: patch.photoUrl } : {}),
         ...(patch.employeeCode !== undefined

@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 
 export const dynamic = "force-dynamic";
 
+/** Kept for direct/deep links — the main HR menu now points to /hr/time-pay instead. */
 export default function HrAttendancePage() {
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 sm:p-8">

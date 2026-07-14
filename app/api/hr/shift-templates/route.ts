@@ -42,6 +42,8 @@ export async function POST(request: NextRequest) {
         startMinutes: validated.data.startMinutes!,
         endMinutes: validated.data.endMinutes!,
         breakMinutes: validated.data.breakMinutes ?? 0,
+        lateGraceMinutes: validated.data.lateGraceMinutes ?? 0,
+        earlyLeaveGraceMinutes: validated.data.earlyLeaveGraceMinutes ?? 0,
         requiredHeadcount: validated.data.requiredHeadcount ?? 1,
         color: validated.data.color,
         isActive: validated.data.isActive ?? true,

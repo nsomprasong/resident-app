@@ -51,6 +51,7 @@ export default function Modal({
           <button
             type="button"
             aria-label="ปิด"
+            data-tooltip="ปิดหน้าต่างนี้"
             onClick={onClose}
             className="grid h-9 w-9 place-items-center rounded-full bg-muted text-foreground hover:bg-border"
           >

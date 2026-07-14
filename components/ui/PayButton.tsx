@@ -87,6 +87,11 @@ export default function PayButton({
       <button
         type="button"
         disabled={amount <= 0}
+        data-tooltip={
+          refund
+            ? "บันทึกการคืนเงินให้ลูกค้า"
+            : "เปิดหน้าต่างรับชำระเงินของรายการจอง"
+        }
         onClick={() => {
           setPaidAmount(amount);
           setError("");

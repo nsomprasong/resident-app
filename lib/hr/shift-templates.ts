@@ -15,6 +15,8 @@ export type ShiftTemplateRecord = {
   startTime: string;
   endTime: string;
   breakMinutes: number;
+  lateGraceMinutes: number;
+  earlyLeaveGraceMinutes: number;
   requiredHeadcount: number;
   color: string | null;
   isActive: boolean;
@@ -32,6 +34,8 @@ export function serializeShiftTemplate(
     startTime: formatMinutesAsTime(template.startMinutes),
     endTime: formatMinutesAsTime(template.endMinutes),
     breakMinutes: template.breakMinutes,
+    lateGraceMinutes: template.lateGraceMinutes,
+    earlyLeaveGraceMinutes: template.earlyLeaveGraceMinutes,
     requiredHeadcount: template.requiredHeadcount,
     color: template.color,
     isActive: template.isActive,
@@ -52,6 +56,8 @@ export type ParsedShiftTemplateInput = {
   startMinutes?: number;
   endMinutes?: number;
   breakMinutes?: number;
+  lateGraceMinutes?: number;
+  earlyLeaveGraceMinutes?: number;
   requiredHeadcount?: number;
   color?: string | null;
   isActive?: boolean;
@@ -124,6 +130,27 @@ export function parseShiftTemplateInput(
     } else data.breakMinutes = value;
   } else if (mode === "create") {
     data.breakMinutes = 0;
+  }
+
+  if ("lateGraceMinutes" in body) {
+    const value = Number(body.lateGraceMinutes);
+    if (!Number.isInteger(value) || value < 0 || value > 240) {
+      issues.push({ path: "lateGraceMinutes", message: "นาทีอนุโลมสายไม่ถูกต้อง" });
+    } else data.lateGraceMinutes = value;
+  } else if (mode === "create") {
+    data.lateGraceMinutes = 0;
+  }
+
+  if ("earlyLeaveGraceMinutes" in body) {
+    const value = Number(body.earlyLeaveGraceMinutes);
+    if (!Number.isInteger(value) || value < 0 || value > 240) {
+      issues.push({
+        path: "earlyLeaveGraceMinutes",
+        message: "นาทีอนุโลมออกก่อนไม่ถูกต้อง",
+      });
+    } else data.earlyLeaveGraceMinutes = value;
+  } else if (mode === "create") {
+    data.earlyLeaveGraceMinutes = 0;
   }
 
   if ("requiredHeadcount" in body || mode === "create") {

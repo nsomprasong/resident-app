@@ -18,24 +18,74 @@ import Image from "next/image";
 import { useMemo } from "react";
 
 import { useEmployeePermissions } from "@/components/auth/EmployeePermissionsProvider";
-import { filterHrNavItems } from "@/lib/hr/nav";
+import { filterHrNavItems, filterSelfNavItems } from "@/lib/hr/nav";
 import ListMenu from "../ui/ListMenu";
 import UserNav from "../ui/UserNav";
 
 const dailyMenuItems = [
-  { text: "ภาพรวมวันนี้", icon: CalendarCheck2, path: "/today" },
-  { text: "รายการจอง", icon: BedDouble, path: "/booking" },
-  { text: "สั่งอาหาร", icon: Utensils, path: "/foodOrder" },
-  { text: "ครัว", icon: CookingPot, path: "/kitchen" },
-  { text: "แม่บ้านและตรวจสอบห้องพัก", icon: House, path: "/houseKeeperMinibar" },
-  { text: "ซูเปอร์มาร์เก็ต", icon: ShoppingCart, path: "/pos" },
-  { text: "บัญชีและแดชบอร์ด", icon: BarChart3, path: "/dashboard" },
-  { text: "รายงานรวม", icon: ClipboardList, path: "/report" },
+  {
+    text: "ภาพรวมวันนี้",
+    icon: CalendarCheck2,
+    path: "/today",
+    tooltip: "ดูงานวันนี้ เช็กอิน/เช็กเอาต์ และสถานะห้อง",
+  },
+  {
+    text: "รายการจอง",
+    icon: BedDouble,
+    path: "/booking",
+    tooltip: "จัดการการจอง เช็กอิน เช็กเอาต์ และรับชำระ",
+  },
+  {
+    text: "สั่งอาหาร",
+    icon: Utensils,
+    path: "/foodOrder",
+    tooltip: "สั่งอาหารเข้าห้องพักหรือลูกค้าหน้าร้าน",
+  },
+  {
+    text: "ครัว",
+    icon: CookingPot,
+    path: "/kitchen",
+    tooltip: "ดูออเดอร์ครัวและอัปเดตสถานะทำอาหาร",
+  },
+  {
+    text: "แม่บ้านและตรวจสอบห้องพัก",
+    icon: House,
+    path: "/houseKeeperMinibar",
+    tooltip: "ตรวจห้องหลังเช็กเอาต์และมินิบาร์",
+  },
+  {
+    text: "ซูเปอร์มาร์เก็ต",
+    icon: ShoppingCart,
+    path: "/pos",
+    tooltip: "ขายหน้าร้าน จัดการสินค้า สต๊อก และกะขาย",
+  },
+  {
+    text: "บัญชีและแดชบอร์ด",
+    icon: BarChart3,
+    path: "/dashboard",
+    tooltip: "ดูยอดขาย สรุปบัญชี และตัวชี้วัด",
+  },
+  {
+    text: "รายงานรวม",
+    icon: ClipboardList,
+    path: "/report",
+    tooltip: "ดูและส่งออกรายงานสรุปของระบบ",
+  },
 ];
 
 const systemMenuItems = [
-  { text: "ตั้งค่าข้อมูลหลัก", icon: Settings, path: "/settings" },
-  { text: "ล้างข้อมูลเริ่มต้นใหม่", icon: Eraser, path: "/system/data-reset" },
+  {
+    text: "ตั้งค่าข้อมูลหลัก",
+    icon: Settings,
+    path: "/settings",
+    tooltip: "จัดการห้อง แพ สินค้า พนักงาน บทบาท และช่องทางชำระ",
+  },
+  {
+    text: "ล้างข้อมูลเริ่มต้นใหม่",
+    icon: Eraser,
+    path: "/system/data-reset",
+    tooltip: "ล้างข้อมูลทดสอบเพื่อเริ่มต้นระบบใหม่",
+  },
 ];
 
 export default function Sidebar({
@@ -47,12 +97,28 @@ export default function Sidebar({
 }) {
   const { employee, loaded, canAccessPath } = useEmployeePermissions();
 
+  const visibleSelfItems = useMemo(
+    () =>
+      employee
+        ? filterSelfNavItems(employee.permissions).map((item) => ({
+            text: item.text,
+            icon: item.icon,
+            path: item.path,
+            tooltip: item.description,
+          }))
+        : [],
+    [employee],
+  );
+
   const visibleDailyItems = useMemo(
     () =>
       employee
-        ? dailyMenuItems.filter((item) => canAccessPath(item.path))
+        ? [
+            ...visibleSelfItems,
+            ...dailyMenuItems.filter((item) => canAccessPath(item.path)),
+          ]
         : [],
-    [employee, canAccessPath],
+    [employee, canAccessPath, visibleSelfItems],
   );
 
   const visibleSystemItems = useMemo(
@@ -70,6 +136,7 @@ export default function Sidebar({
             text: item.text,
             icon: item.icon,
             path: item.path,
+            tooltip: item.description,
           }))
         : [],
     [employee],
@@ -80,6 +147,7 @@ export default function Sidebar({
       {open ? (
         <button
           aria-label="ปิดเมนู"
+          data-tooltip-off
           className="fixed inset-0 z-40 bg-foreground/40 backdrop-blur-[1px] md:hidden"
           onClick={onClose}
         />
@@ -112,6 +180,7 @@ export default function Sidebar({
             </div>
             <button
               aria-label="ปิดเมนู"
+              data-tooltip="ปิดเมนูด้านข้าง"
               onClick={onClose}
               className="rounded-xl p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground md:hidden"
             >

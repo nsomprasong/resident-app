@@ -3,6 +3,7 @@ import {
   BedDouble,
   CalendarCheck2,
   ClipboardList,
+  Clock3,
   CookingPot,
   Eraser,
   House,
@@ -29,6 +30,12 @@ type MenuCard = {
 };
 
 const dailyCards: MenuCard[] = [
+  {
+    title: "งานของฉัน",
+    description: "กะวันนี้ ลงเวลาเข้า–ออก แจ้งลา และประวัติของตนเอง",
+    href: "/my-work",
+    icon: Clock3,
+  },
   {
     title: "ภาพรวมวันนี้",
     description: "ห้อง กรุ๊ป แพ ลูกค้า และอาหารของวันนี้",
@@ -119,6 +126,7 @@ function MenuSection({
           <Link
             key={href}
             href={href}
+            data-tooltip={itemDescription}
             className={`group flex items-start gap-4 rounded-2xl border bg-surface p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
               tone === "danger"
                 ? "border-destructive/25 hover:border-destructive/40"

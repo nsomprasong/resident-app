@@ -611,11 +611,16 @@ model Employee {
   roleId                String?          @map("role_id") @db.Uuid
   roleRecord            Role?            @relation(fields: [roleId], references: [id], onDelete: SetNull)
   hourlyRate            Decimal?         @map("hourly_rate") @db.Decimal(10, 2)
+  otHourlyRate          Decimal?         @map("ot_hourly_rate") @db.Decimal(10, 2)
+  payDayOfMonth         Int?             @map("pay_day_of_month")
+  defaultShiftTemplateId String?         @map("default_shift_template_id") @db.Uuid
+  defaultShiftTemplate  ShiftTemplate?   @relation("EmployeeDefaultShift", fields: [defaultShiftTemplateId], references: [id], onDelete: SetNull)
   isActive              Boolean          @default(true) @map("is_active")
   mustResetPassword     Boolean          @default(false) @map("must_reset_password")
   shifts                WorkShift[]
   workSchedules         WorkSchedule[]
   attendanceRecords     AttendanceRecord[]
+  attendanceEvents      AttendanceEvent[]
   attendanceAdjustments AttendanceAdjustment[] @relation("AdjustmentRequester")
   attendanceReviews     AttendanceAdjustment[] @relation("AdjustmentReviewer")
   attendanceLocks       AttendancePeriod[]     @relation("AttendancePeriodLocker")
@@ -661,22 +666,26 @@ model Employee {
   @@index([employmentType])
   @@index([departmentId])
   @@index([positionId])
+  @@index([defaultShiftTemplateId])
   @@map("employees")
 }
 
 model ShiftTemplate {
-  id                String         @id @default(uuid()) @db.Uuid
-  code              String?        @unique
-  name              String
-  startMinutes      Int            @map("start_minutes")
-  endMinutes        Int            @map("end_minutes")
-  breakMinutes      Int            @default(0) @map("break_minutes")
-  requiredHeadcount Int            @default(1) @map("required_headcount")
-  color             String?
-  isActive          Boolean        @default(true) @map("is_active")
-  schedules         WorkSchedule[]
-  createdAt         DateTime       @default(now()) @map("created_at")
-  updatedAt         DateTime       @updatedAt @map("updated_at")
+  id                   String         @id @default(uuid()) @db.Uuid
+  code                 String?        @unique
+  name                 String
+  startMinutes         Int            @map("start_minutes")
+  endMinutes           Int            @map("end_minutes")
+  breakMinutes         Int            @default(0) @map("break_minutes")
+  lateGraceMinutes     Int            @default(0) @map("late_grace_minutes")
+  earlyLeaveGraceMinutes Int          @default(0) @map("early_leave_grace_minutes")
+  requiredHeadcount    Int            @default(1) @map("required_headcount")
+  color                String?
+  isActive             Boolean        @default(true) @map("is_active")
+  schedules            WorkSchedule[]
+  defaultForEmployees  Employee[]     @relation("EmployeeDefaultShift")
+  createdAt            DateTime       @default(now()) @map("created_at")
+  updatedAt            DateTime       @updatedAt @map("updated_at")
 
   @@index([isActive, name])
   @@map("shift_templates")
@@ -694,6 +703,7 @@ model WorkSchedule {
   workDate        DateTime           @map("work_date") @db.Date
   startsAt        DateTime           @map("starts_at")
   endsAt          DateTime           @map("ends_at")
+  isDayOff        Boolean            @default(false) @map("is_day_off")
   notes           String?
   status          WorkScheduleStatus @default(ASSIGNED)
   employee        Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
@@ -707,6 +717,46 @@ model WorkSchedule {
   @@index([shiftTemplateId, workDate])
   @@index([startsAt, endsAt])
   @@map("work_schedules")
+}
+
+enum AttendanceEventType {
+  CHECK_IN
+  CHECK_OUT
+}
+
+model AttendanceEvent {
+  id                 String              @id @default(uuid()) @db.Uuid
+  employeeId         String              @map("employee_id") @db.Uuid
+  attendanceRecordId String?             @map("attendance_record_id") @db.Uuid
+  type               AttendanceEventType
+  occurredAt         DateTime            @map("occurred_at")
+  latitude           Decimal             @db.Decimal(10, 7)
+  longitude          Decimal             @db.Decimal(10, 7)
+  distanceMeters     Decimal             @map("distance_meters") @db.Decimal(10, 2)
+  accuracyMeters     Decimal?            @map("accuracy_meters") @db.Decimal(10, 2)
+  userAgent          String?             @map("user_agent")
+  note               String?
+  employee           Employee            @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  attendanceRecord   AttendanceRecord?   @relation(fields: [attendanceRecordId], references: [id], onDelete: SetNull)
+  createdAt          DateTime            @default(now()) @map("created_at")
+
+  @@index([employeeId, occurredAt])
+  @@index([attendanceRecordId, type])
+  @@map("attendance_events")
+}
+
+model HrAttendanceSetting {
+  id                        String   @id @default("default")
+  latitude                  Decimal  @db.Decimal(10, 7)
+  longitude                 Decimal  @db.Decimal(10, 7)
+  radiusMeters              Int      @default(50) @map("radius_meters")
+  maxAccuracyMeters         Int      @default(80) @map("max_accuracy_meters")
+  timezone                  String   @default("Asia/Bangkok")
+  allowClockWithoutSchedule Boolean  @default(false) @map("allow_clock_without_schedule")
+  updatedAt                 DateTime @updatedAt @map("updated_at")
+  createdAt                 DateTime @default(now()) @map("created_at")
+
+  @@map("hr_attendance_settings")
 }
 
 enum AttendanceStatus {
@@ -752,6 +802,7 @@ model AttendanceRecord {
   employee           Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   workSchedule       WorkSchedule?      @relation(fields: [workScheduleId], references: [id], onDelete: SetNull)
   adjustments        AttendanceAdjustment[]
+  events             AttendanceEvent[]
   createdAt          DateTime           @default(now()) @map("created_at")
   updatedAt          DateTime           @updatedAt @map("updated_at")
 
