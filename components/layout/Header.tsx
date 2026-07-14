@@ -10,6 +10,14 @@ export default function Header({ onMenuClick }: { onMenuClick: () => void }) {
         <button type="button" aria-label="เปิดเมนู" onClick={onMenuClick} className="rounded-xl p-2 text-muted-foreground hover:bg-muted">
           <Menu size={22} />
         </button>
+        <Image
+          src="/logo.png"
+          alt="Resident"
+          width={32}
+          height={32}
+          className="size-8 rounded-lg"
+          priority
+        />
         <span className="font-semibold">Resident</span>
       </div>
       <Image className="rounded-full" src="/images/person.svg" alt="ผู้ใช้งาน" width={34} height={34} />

@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { summarizeTodayOps } from "@/lib/dashboard/today-ops";
+import {
+  addDaysToOpsDateKey,
+  resolveOpsDateKey,
+  summarizeTodayOps,
+} from "@/lib/dashboard/today-ops";
 
 describe("summarizeTodayOps", () => {
   it("counts rooms, groups, rafts, guests and food for today", () => {
@@ -74,5 +78,18 @@ describe("summarizeTodayOps", () => {
     assert.equal(summary.roomsInHouse, 2);
     assert.equal(summary.foodPortionsToday, 4);
     assert.equal(summary.inHouseBookingCount, 1);
+  });
+});
+
+describe("ops date navigation helpers", () => {
+  it("resolves valid date keys and falls back for invalid ones", () => {
+    assert.equal(resolveOpsDateKey("2026-07-15", "2026-07-14"), "2026-07-15");
+    assert.equal(resolveOpsDateKey("2026-02-31", "2026-07-14"), "2026-07-14");
+    assert.equal(resolveOpsDateKey("bad", "2026-07-14"), "2026-07-14");
+  });
+
+  it("adds days from the currently displayed date key", () => {
+    assert.equal(addDaysToOpsDateKey("2026-07-14", 1), "2026-07-15");
+    assert.equal(addDaysToOpsDateKey("2026-07-31", 1), "2026-08-01");
   });
 });

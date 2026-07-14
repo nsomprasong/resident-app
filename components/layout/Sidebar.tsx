@@ -13,6 +13,7 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 
 import { canAccessPageWithPermissions } from "@/lib/auth/authorization";
@@ -32,7 +33,7 @@ const opsMenuItems = [
   { text: "รายการจอง", icon: BedDouble, path: "/booking" },
   { text: "สั่งอาหาร", icon: Utensils, path: "/foodOrder" },
   { text: "ครัว", icon: CookingPot, path: "/kitchen" },
-  { text: "แม่บ้านและมินิบาร์", icon: House, path: "/houseKeeperMinibar" },
+  { text: "แม่บ้านและตรวจสอบห้องพัก", icon: House, path: "/houseKeeperMinibar" },
   { text: "บัญชีและแดชบอร์ด", icon: BarChart3, path: "/dashboard" },
   { text: "ตั้งค่าข้อมูลหลัก", icon: Settings, path: "/settings" },
   { text: "ล้างข้อมูลเริ่มต้นใหม่", icon: Eraser, path: "/system/data-reset" },
@@ -116,9 +117,19 @@ export default function Sidebar({
         }`}
       >
         <div className="flex h-16 items-center justify-between border-b border-border px-5">
-          <div>
-            <p className="text-lg font-semibold text-primary">Resident</p>
-            <p className="text-xs text-muted-foreground">Hotel management</p>
+          <div className="flex min-w-0 items-center gap-3">
+            <Image
+              src="/logo.png"
+              alt="Resident"
+              width={40}
+              height={40}
+              className="size-10 shrink-0 rounded-xl"
+              priority
+            />
+            <div className="min-w-0">
+              <p className="text-lg font-semibold text-primary">Resident</p>
+              <p className="text-xs text-muted-foreground">Hotel management</p>
+            </div>
           </div>
           <button
             aria-label="ปิดเมนู"

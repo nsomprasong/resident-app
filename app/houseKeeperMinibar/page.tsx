@@ -159,7 +159,7 @@ export default function HousekeepingPage() {
         <PageHeader
           icon={<House size={24} />}
           eyebrow="งานประจำวัน"
-          title="แม่บ้านและมินิบาร์"
+          title="แม่บ้านและตรวจสอบห้องพัก"
           description="ห้องรอตรวจหลังเช็กเอาต์ — เลือกรายการจากราคากลางแล้วระบุจำนวน"
         />
       {error && !selected && (

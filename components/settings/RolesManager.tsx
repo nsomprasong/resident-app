@@ -1,9 +1,10 @@
 "use client";
 
 import { KeyRound, Pencil, Plus } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useConfirmDialog } from "@/hooks/useConfirmDialog";
+import { groupPermissionsByMenu } from "@/lib/auth/permission-menu-groups";
 import { resolvePermissionThaiLabel } from "@/lib/auth/permission-labels";
 import type {
   PermissionRecord,
@@ -48,6 +49,10 @@ export function RolesManager() {
   const [permissionLoading, setPermissionLoading] = useState(false);
   const [permissionError, setPermissionError] = useState("");
   const [permissionSaving, setPermissionSaving] = useState(false);
+  const permissionGroups = useMemo(
+    () => groupPermissionsByMenu(catalog),
+    [catalog],
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -492,45 +497,74 @@ export function RolesManager() {
           aria-modal="true"
           aria-labelledby="role-permissions-title"
         >
-          <div className="flex max-h-[90vh] w-full max-w-lg flex-col rounded-2xl bg-surface p-5 shadow-xl">
+          <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-2xl bg-surface p-5 shadow-xl">
             <h3
               id="role-permissions-title"
               className="text-lg font-semibold text-foreground"
             >
               สิทธิ์ของ {permissionRole.displayName}
             </h3>
-            <p className="mt-1 font-mono text-xs text-muted-foreground">
+            <p className="mt-1 text-sm text-muted-foreground">
+              จัดกลุ่มตามเมนูจริง — จัดการก่อน ดูข้อมูลทีหลัง
+            </p>
+            <p className="mt-0.5 font-mono text-xs text-muted-foreground">
               {permissionRole.code}
             </p>
 
             {permissionLoading ? (
               <p className="mt-4 text-sm text-muted-foreground">กำลังโหลดสิทธิ์...</p>
             ) : (
-              <div className="mt-4 max-h-[50vh] space-y-2 overflow-y-auto pr-1">
-                {catalog.map((permission) => {
-                  const checked = selectedCodes.has(permission.code);
+              <div className="mt-4 max-h-[55vh] space-y-5 overflow-y-auto pr-1">
+                {permissionGroups.map((group, index) => {
+                  const showSection =
+                    index === 0 ||
+                    permissionGroups[index - 1]?.sectionTitle !==
+                      group.sectionTitle;
                   return (
-                    <label
-                      key={permission.id}
-                      className="flex cursor-pointer items-start gap-3 rounded-xl border border-border px-3 py-2 hover:bg-surface-muted"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => togglePermission(permission.code)}
-                        className="mt-1"
-                      />
-                      <span>
-                        <span className="block text-sm font-medium text-foreground">
-                          {resolvePermissionThaiLabel(permission.code) ??
-                            permission.description ??
-                            permission.code}
-                        </span>
-                        <span className="mt-0.5 block font-mono text-xs text-muted-foreground">
-                          {permission.code}
-                        </span>
-                      </span>
-                    </label>
+                    <section key={group.id} className="space-y-2">
+                      {showSection ? (
+                        <h4 className="sticky top-0 z-10 bg-surface py-1 text-xs font-semibold uppercase tracking-wide text-primary">
+                          {group.sectionTitle}
+                        </h4>
+                      ) : null}
+                      <div className="rounded-2xl border border-border bg-background/60 p-3">
+                        <p className="mb-2 text-sm font-medium text-foreground">
+                          {group.title}
+                        </p>
+                        <div className="space-y-2">
+                          {group.items.map((permission) => {
+                            const checked = selectedCodes.has(permission.code);
+                            return (
+                              <label
+                                key={`${group.id}:${permission.id}`}
+                                className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-surface px-3 py-2 hover:bg-surface-muted"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() =>
+                                    togglePermission(permission.code)
+                                  }
+                                  className="mt-1"
+                                />
+                                <span>
+                                  <span className="block text-sm font-medium text-foreground">
+                                    {resolvePermissionThaiLabel(
+                                      permission.code,
+                                    ) ??
+                                      permission.description ??
+                                      permission.code}
+                                  </span>
+                                  <span className="mt-0.5 block font-mono text-xs text-muted-foreground">
+                                    {permission.code}
+                                  </span>
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </section>
                   );
                 })}
                 {!catalog.length ? (

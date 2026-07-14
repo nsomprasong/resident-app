@@ -75,9 +75,9 @@ export async function POST(
         include: {
           charges: true,
           payments: {
-            where: { status: PaymentStatus.PAID },
             orderBy: { createdAt: "asc" },
           },
+          paymentRefunds: { select: { amount: true } },
           orders: {
             where: { status: { not: "CANCELLED" } },
             include: { items: true },
@@ -90,11 +90,18 @@ export async function POST(
         charges: booking.charges,
         orders: booking.orders,
         payments: booking.payments,
+        paymentRefunds: booking.paymentRefunds,
       });
       const outstanding = summary.outstandingTotal;
       if (outstanding <= 0) throw new Error("ALREADY_PAID");
       if (amount > outstanding) throw new Error("OVERPAY");
-      const installment = booking.payments.length + 1;
+      const paidInstallmentCount = booking.payments.filter(
+        (item) =>
+          item.status === PaymentStatus.PAID ||
+          item.status === PaymentStatus.VERIFIED ||
+          item.status === PaymentStatus.PARTIALLY_REFUNDED,
+      ).length;
+      const installment = paidInstallmentCount + 1;
       const created = await tx.payment.create({
         data: {
           bookingId,
@@ -127,6 +134,7 @@ export async function POST(
         charges: booking.charges,
         orders: booking.orders.filter((order) => order.status === "DELIVERED"),
         payments: paymentsAfterPay,
+        paymentRefunds: booking.paymentRefunds,
       });
       if (
         booking.status === BookingStatus.CHECKED_OUT &&

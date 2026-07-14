@@ -1,12 +1,15 @@
 import TodayOpsBoard, {
   type TodayOpsCardData,
 } from "@/components/dashboard/TodayOpsBoard";
+import TodayOpsDateNav from "@/components/dashboard/TodayOpsDateNav";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { activeBookingConflictStatuses } from "@/lib/bookings/availability";
 import {
+  addDaysToOpsDateKey,
   bangkokDateOnly,
   bangkokDayBounds,
   bangkokTodayKey,
+  resolveOpsDateKey,
   summarizeTodayOps,
 } from "@/lib/dashboard/today-ops";
 import { prisma } from "@/lib/prisma";
@@ -18,8 +21,8 @@ function formatNumber(value: number) {
   return new Intl.NumberFormat("th-TH").format(value);
 }
 
-function formatThaiDate(todayKey: string) {
-  const date = new Date(`${todayKey}T12:00:00+07:00`);
+function formatThaiDate(dateKey: string) {
+  const date = new Date(`${dateKey}T12:00:00+07:00`);
   return new Intl.DateTimeFormat("th-TH", {
     timeZone: "Asia/Bangkok",
     weekday: "long",
@@ -44,16 +47,24 @@ function dateKeyUtc(value: Date) {
   return value.toISOString().slice(0, 10);
 }
 
-export default async function TodayOpsPage() {
-  const todayKey = bangkokTodayKey();
-  const todayDate = bangkokDateOnly(todayKey);
-  const { start, end } = bangkokDayBounds(todayKey);
+type TodayOpsPageProps = {
+  searchParams: Promise<{ date?: string }>;
+};
+
+export default async function TodayOpsPage({ searchParams }: TodayOpsPageProps) {
+  const params = await searchParams;
+  const actualTodayKey = bangkokTodayKey();
+  const selectedKey = resolveOpsDateKey(params.date, actualTodayKey);
+  const selectedDate = bangkokDateOnly(selectedKey);
+  const nextKey = addDaysToOpsDateKey(selectedKey, 1);
+  const { start, end } = bangkokDayBounds(selectedKey);
+  const dayLabel = selectedKey === actualTodayKey ? "วันนี้" : "วันที่เลือก";
 
   const currentBookingWhere = {
     status: { in: activeBookingConflictStatuses },
     closedAt: null,
-    checkIn: { lte: todayDate },
-    checkOut: { gt: todayDate },
+    checkIn: { lte: selectedDate },
+    checkOut: { gt: selectedDate },
   };
 
   const bookings = await prisma.booking.findMany({
@@ -118,7 +129,7 @@ export default async function TodayOpsPage() {
         });
 
   const summary = summarizeTodayOps({
-    todayKey,
+    todayKey: selectedKey,
     bookings: bookings.map((booking) => ({
       checkIn: booking.checkIn,
       checkOut: booking.checkOut,
@@ -137,7 +148,7 @@ export default async function TodayOpsPage() {
   });
 
   const checkInBookings = bookings.filter(
-    (booking) => dateKeyUtc(booking.checkIn) === todayKey,
+    (booking) => dateKeyUtc(booking.checkIn) === selectedKey,
   );
 
   const roomRows = checkInBookings.flatMap((booking) =>
@@ -236,20 +247,20 @@ export default async function TodayOpsPage() {
   const foodRows = [...foodAgg.entries()].map(([id, item]) => ({
     id,
     title: item.name,
-    subtitle: item.notes.slice(0, 2).join(" | ") || "ออเดอร์วันนี้",
+    subtitle: item.notes.slice(0, 2).join(" | ") || `ออเดอร์${dayLabel}`,
     meta: `x${formatNumber(item.quantity)}`,
   }));
   const minibarRows = [...minibarAgg.entries()].map(([id, item]) => ({
     id,
     title: item.name,
-    subtitle: item.notes.slice(0, 2).join(" | ") || "ออเดอร์วันนี้",
+    subtitle: item.notes.slice(0, 2).join(" | ") || `ออเดอร์${dayLabel}`,
     meta: `x${formatNumber(item.quantity)}`,
   }));
 
   const cards: TodayOpsCardData[] = [
     {
       key: "rooms",
-      title: "ห้องเช็กอินวันนี้",
+      title: `ห้องเช็กอิน${dayLabel}`,
       value: formatNumber(summary.roomsCheckInToday),
       helper: `กำลังเข้าพักรวม ${formatNumber(summary.roomsInHouse)} ห้อง`,
       accent: "primary",
@@ -257,7 +268,7 @@ export default async function TodayOpsPage() {
     },
     {
       key: "groups",
-      title: "กรุ๊ปทัวร์วันนี้",
+      title: `กรุ๊ปทัวร์${dayLabel}`,
       value: formatNumber(summary.tourGroupsToday),
       helper: `จากการจองเข้าพัก ${formatNumber(summary.inHouseBookingCount)} รายการ`,
       accent: "secondary",
@@ -265,7 +276,7 @@ export default async function TodayOpsPage() {
     },
     {
       key: "rafts",
-      title: "แพที่ใช้งานวันนี้",
+      title: `แพที่ใช้งาน${dayLabel}`,
       value: formatNumber(summary.raftsToday),
       helper: "นับจากแพที่ผูกกับการจองที่เข้าพักและยังไม่ปิดงาน",
       accent: "primary",
@@ -273,7 +284,7 @@ export default async function TodayOpsPage() {
     },
     {
       key: "guests",
-      title: "ลูกค้าทั้งหมดวันนี้",
+      title: `ลูกค้าทั้งหมด${dayLabel}`,
       value: formatNumber(summary.guestsToday),
       helper: "รวมจำนวนผู้เข้าพักจากการจองที่ยังเปิดอยู่",
       accent: "secondary",
@@ -281,7 +292,7 @@ export default async function TodayOpsPage() {
     },
     {
       key: "food",
-      title: "อาหารที่สั่งวันนี้",
+      title: `อาหารที่สั่ง${dayLabel}`,
       value: formatNumber(summary.foodPortionsToday),
       helper: `${formatNumber(summary.foodKindsToday)} รายการเมนู · จากกรุ๊ปที่ยังเปิดอยู่`,
       accent: "primary",
@@ -289,7 +300,7 @@ export default async function TodayOpsPage() {
     },
     {
       key: "minibar",
-      title: "มินิบาร์วันนี้",
+      title: `มินิบาร์${dayLabel}`,
       value: formatNumber(summary.minibarPortionsToday),
       helper: "มินิบาร์ของกรุ๊ปที่เข้าพักและยังไม่ปิดงาน",
       accent: "secondary",
@@ -302,18 +313,25 @@ export default async function TodayOpsPage() {
       <PageHeader
         icon={<CalendarCheck2 size={24} />}
         eyebrow="งานประจำวัน"
-        title={formatThaiDate(todayKey)}
+        title={formatThaiDate(selectedKey)}
         description="แสดงเฉพาะกรุ๊ป/การจองที่เข้าพักอยู่และยังไม่ปิดงาน — แตะการ์ดเพื่อดูรายละเอียด"
         actions={
-          <div className="rounded-2xl border border-border bg-surface px-4 py-3 text-sm shadow-sm">
-            <p className="text-muted-foreground">การจองวันนี้</p>
-            <p className="text-2xl font-semibold text-foreground">
-              {formatNumber(summary.checkInBookingCount)}
-              <span className="ml-2 text-sm font-normal text-muted-foreground">
-                รายการเช็กอิน
-              </span>
-            </p>
-          </div>
+          <>
+            <TodayOpsDateNav
+              selectedKey={selectedKey}
+              todayKey={actualTodayKey}
+              nextKey={nextKey}
+            />
+            <div className="rounded-2xl border border-border bg-surface px-4 py-3 text-sm shadow-sm">
+              <p className="text-muted-foreground">การจอง{dayLabel}</p>
+              <p className="text-2xl font-semibold text-foreground">
+                {formatNumber(summary.checkInBookingCount)}
+                <span className="ml-2 text-sm font-normal text-muted-foreground">
+                  รายการเช็กอิน
+                </span>
+              </p>
+            </div>
+          </>
         }
       />
 

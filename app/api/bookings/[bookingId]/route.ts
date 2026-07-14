@@ -230,7 +230,8 @@ export async function PATCH(
           include: {
             rooms: { include: { inspection: true } },
             charges: true,
-            payments: { where: { status: { in: ["PAID", "REFUNDED"] } } },
+            payments: true,
+            paymentRefunds: { select: { amount: true } },
             orders: {
               where: { status: { not: "CANCELLED" } },
               include: { items: true },
@@ -244,6 +245,7 @@ export async function PATCH(
           charges: booking.charges,
           orders: booking.orders,
           payments: booking.payments,
+          paymentRefunds: booking.paymentRefunds,
         });
         if (financialSummary.outstandingTotal > 0)
           throw new Error("PAYMENT_OUTSTANDING");

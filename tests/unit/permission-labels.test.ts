@@ -17,6 +17,10 @@ describe("permissionThaiLabels", () => {
   it("resolves Thai labels without changing codes", () => {
     assert.equal(resolvePermissionThaiLabel("booking.read"), "ดูการจอง");
     assert.equal(
+      resolvePermissionThaiLabel("report.read"),
+      "เปิดเมนูบัญชี แดชบอร์ด และรายงานรวม",
+    );
+    assert.equal(
       resolvePermissionThaiLabel("authorization.manage"),
       "แก้ไขชุดสิทธิ์ของบทบาท",
     );

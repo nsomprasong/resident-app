@@ -1,4 +1,3 @@
-import Link from "next/link";
 import {
   ArrowRight,
   BedDouble,
@@ -13,6 +12,8 @@ import {
   Utensils,
   type LucideIcon,
 } from "lucide-react";
+import Image from "next/image";
+import Link from "next/link";
 
 import { canAccessPageWithPermissions } from "@/lib/auth/authorization";
 import { getCurrentUser } from "@/lib/auth/current-user";
@@ -49,7 +50,7 @@ const cards: Array<{
     icon: CookingPot,
   },
   {
-    title: "แม่บ้านและมินิบาร์",
+    title: "แม่บ้านและตรวจสอบห้องพัก",
     description: "ตรวจห้องและบันทึกมินิบาร์",
     href: "/houseKeeperMinibar",
     icon: House,
@@ -101,15 +102,27 @@ export default async function Home() {
   return (
     <div className="mx-auto max-w-6xl p-4 sm:p-8">
       <div className="mb-8 rounded-3xl bg-gradient-to-br from-primary to-secondary p-7 text-primary-foreground shadow-lg sm:p-10">
-        <p className="text-sm text-primary-foreground/80">
-          RESIDENT HOTEL MANAGEMENT
-        </p>
-        <h1 className="mt-2 text-3xl font-semibold sm:text-4xl">
-          จัดการงานโรงแรมในที่เดียว
-        </h1>
-        <p className="mt-3 max-w-xl text-primary-foreground/80">
-          ติดตามห้องพัก การจอง อาหาร มินิบาร์ และค่าใช้จ่ายประจำวัน
-        </p>
+        <div className="flex items-start gap-4">
+          <Image
+            src="/logo.png"
+            alt="Resident"
+            width={64}
+            height={64}
+            className="size-16 shrink-0 rounded-2xl bg-surface/10 shadow-sm ring-1 ring-primary-foreground/20"
+            priority
+          />
+          <div className="min-w-0">
+            <p className="text-sm text-primary-foreground/80">
+              RESIDENT HOTEL MANAGEMENT
+            </p>
+            <h1 className="mt-2 text-3xl font-semibold sm:text-4xl">
+              จัดการงานโรงแรมในที่เดียว
+            </h1>
+            <p className="mt-3 max-w-xl text-primary-foreground/80">
+              ติดตามห้องพัก การจอง อาหาร มินิบาร์ และค่าใช้จ่ายประจำวัน
+            </p>
+          </div>
+        </div>
       </div>
       {visibleCards.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface p-8 text-center shadow-sm">

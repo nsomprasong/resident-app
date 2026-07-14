@@ -108,3 +108,26 @@ export function bangkokDayBounds(todayKey: string) {
 export function bangkokDateOnly(todayKey: string) {
   return new Date(`${todayKey}T00:00:00.000Z`);
 }
+
+const DATE_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Normalize ops date query; invalid values fall back to Bangkok today. */
+export function resolveOpsDateKey(raw: string | undefined | null, todayKey = bangkokTodayKey()) {
+  if (!raw || !DATE_KEY_PATTERN.test(raw)) return todayKey;
+  const [year, month, day] = raw.split("-").map(Number);
+  const utc = new Date(Date.UTC(year, month - 1, day));
+  if (
+    utc.getUTCFullYear() !== year ||
+    utc.getUTCMonth() !== month - 1 ||
+    utc.getUTCDate() !== day
+  ) {
+    return todayKey;
+  }
+  return raw;
+}
+
+export function addDaysToOpsDateKey(dateKey: string, days: number) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const next = new Date(Date.UTC(year, month - 1, day + days));
+  return next.toISOString().slice(0, 10);
+}
