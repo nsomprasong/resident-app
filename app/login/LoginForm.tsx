@@ -99,19 +99,19 @@ export default function LoginForm() {
         <form action={formAction} className="space-y-5">
           <div>
             <label
-              htmlFor="email"
+              htmlFor="identifier"
               className="mb-2 block text-sm font-medium text-foreground"
             >
-              อีเมล
+              ชื่อผู้ใช้ เบอร์โทรศัพท์ หรืออีเมล
             </label>
             <input
-              id="email"
-              name="email"
-              type="email"
-              autoComplete="email"
+              id="identifier"
+              name="identifier"
+              type="text"
+              autoComplete="username"
               required
               className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-ring/30"
-              placeholder="name@example.com"
+              placeholder="username / 08xxxxxxxx / name@example.com"
             />
           </div>
           <div>
@@ -130,7 +130,7 @@ export default function LoginForm() {
               placeholder="••••••••"
             />
             <p className="mt-1.5 text-xs text-muted-foreground">
-              หากผู้ดูแลรีเซ็ตรหัสผ่าน ให้ใส่อีเมลแล้วกดเข้าสู่ระบบได้เลย โดยไม่ต้องใส่รหัสผ่าน
+              บัญชีเดิมที่ถูกรีเซ็ตรหัสผ่าน: ใส่อีเมลแล้วกดเข้าสู่ระบบได้โดยไม่ต้องใส่รหัสผ่าน
             </p>
           </div>
           {state.error ? (

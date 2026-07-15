@@ -14,7 +14,11 @@ import {
 } from "@/lib/auth/support-account";
 import { prisma } from "@/lib/prisma";
 import { parseEmployeeInput, serializeEmployee } from "@/lib/settings/employees";
-import { resolveAuthUserIdForEmail } from "@/lib/supabase/admin";
+import {
+  createAuthUserWithPhone,
+  deleteAuthUserById,
+  resolveAuthUserIdForEmail,
+} from "@/lib/supabase/admin";
 import { Prisma } from "@/generated/prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -74,6 +78,30 @@ async function assertRoleAssignable(
   return { ok: true as const };
 }
 
+function uniqueConstraintResponse(error: Prisma.PrismaClientKnownRequestError) {
+  const target = Array.isArray(error.meta?.target)
+    ? error.meta.target.join(",")
+    : String(error.meta?.target ?? "");
+  if (target.includes("email")) {
+    return validationErrorResponse("อีเมลนี้ถูกใช้โดยพนักงานอื่นแล้ว", [
+      { path: "email", message: "อีเมลซ้ำ" },
+    ]);
+  }
+  if (target.includes("username")) {
+    return validationErrorResponse("Username นี้ถูกใช้แล้ว", [
+      { path: "username", message: "Username ซ้ำ" },
+    ]);
+  }
+  if (target.includes("phone")) {
+    return validationErrorResponse("เบอร์โทรนี้ถูกใช้แล้ว", [
+      { path: "phone", message: "เบอร์โทรซ้ำ" },
+    ]);
+  }
+  return validationErrorResponse("authUserId นี้ถูกผูกกับพนักงานอื่นแล้ว", [
+    { path: "authUserId", message: "authUserId ซ้ำ" },
+  ]);
+}
+
 export async function GET() {
   try {
     const currentUser = await getCurrentUser();
@@ -98,6 +126,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  let createdAuthUserId: string | null = null;
   try {
     const currentUser = await getCurrentUser();
     const parsed = await readJsonObject(request);
@@ -111,27 +140,42 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { name, phone, email, roleId } = validated.data;
-    if (!name || !email) {
+    const { name, phone, email, username, password, roleId } = validated.data;
+    if (!name) {
       return validationErrorResponse("กรุณาตรวจสอบข้อมูลพนักงาน", [
         { path: "body", message: "ข้อมูลไม่ครบ" },
       ]);
     }
 
-    if (
-      isProtectedSupportEmail(email) &&
-      !canActorAccessSupportEmployee(currentUser?.user.email, email)
-    ) {
-      const existingSupport = await prisma.employee.findFirst({
-        where: { email: { equals: email, mode: "insensitive" } },
-        select: { id: true },
-      });
-      if (existingSupport) {
-        return apiErrorResponse(
-          supportAccountForbiddenResponseMessage(),
-          403,
-          "SUPPORT_ACCOUNT_PROTECTED",
-        );
+    const phoneAuth = Boolean(username && phone && password);
+    const emailAuth = Boolean(email) && !phoneAuth;
+
+    if (!phoneAuth && !emailAuth) {
+      return validationErrorResponse("กรุณาตรวจสอบข้อมูลพนักงาน", [
+        {
+          path: "body",
+          message:
+            "ต้องระบุ Username + เบอร์โทร + รหัสผ่าน หรืออีเมลสำหรับบัญชีเดิม",
+        },
+      ]);
+    }
+
+    if (emailAuth && email) {
+      if (
+        isProtectedSupportEmail(email) &&
+        !canActorAccessSupportEmployee(currentUser?.user.email, email)
+      ) {
+        const existingSupport = await prisma.employee.findFirst({
+          where: { email: { equals: email, mode: "insensitive" } },
+          select: { id: true },
+        });
+        if (existingSupport) {
+          return apiErrorResponse(
+            supportAccountForbiddenResponseMessage(),
+            403,
+            "SUPPORT_ACCOUNT_PROTECTED",
+          );
+        }
       }
     }
 
@@ -140,6 +184,100 @@ export async function POST(request: NextRequest) {
       currentUser?.user.email,
     );
     if (!roleCheck.ok) return roleCheck.response;
+
+    if (phoneAuth && username && phone && password) {
+      const usernameOwner = await prisma.employee.findUnique({
+        where: { username },
+        select: { id: true },
+      });
+      if (usernameOwner) {
+        return validationErrorResponse("Username นี้ถูกใช้แล้ว", [
+          { path: "username", message: "Username ซ้ำ" },
+        ]);
+      }
+
+      const phoneOwner = await prisma.employee.findUnique({
+        where: { phone },
+        select: { id: true },
+      });
+      if (phoneOwner) {
+        return validationErrorResponse("เบอร์โทรนี้ถูกใช้แล้ว", [
+          { path: "phone", message: "เบอร์โทรซ้ำ" },
+        ]);
+      }
+
+      const authResolved = await createAuthUserWithPhone({ phone, password });
+      if (!authResolved.ok) {
+        return apiErrorResponse(
+          authResolved.message,
+          502,
+          "AUTH_PROVISION_FAILED",
+        );
+      }
+      createdAuthUserId = authResolved.authUserId;
+
+      const authOwner = await prisma.employee.findUnique({
+        where: { authUserId: authResolved.authUserId },
+        select: { id: true, name: true },
+      });
+      if (authOwner) {
+        await deleteAuthUserById(authResolved.authUserId);
+        createdAuthUserId = null;
+        return validationErrorResponse(
+          "Auth user นี้ถูกผูกกับพนักงานอื่นแล้ว",
+          [{ path: "phone", message: "authUserId ซ้ำ" }],
+        );
+      }
+
+      try {
+        const employee = await prisma.employee.create({
+          data: {
+            name,
+            username,
+            phone,
+            email: null,
+            authUserId: authResolved.authUserId,
+            roleId: roleId ?? null,
+            mustResetPassword: true,
+          },
+          include: employeeInclude,
+        });
+
+        await recordAuditLog({
+          actor: {
+            employeeId: currentUser?.employee?.id,
+            authUserId: currentUser?.user.id,
+          },
+          action: "EMPLOYEE_CREATED",
+          entityType: "EMPLOYEE",
+          entityId: employee.id,
+          metadata: {
+            name: employee.name,
+            username: employee.username,
+            phone: employee.phone,
+            roleId: employee.roleId,
+            authMode: "phone",
+            hasAuthMapping: Boolean(employee.authUserId),
+            authUserCreated: true,
+            mustResetPassword: true,
+          },
+        });
+
+        createdAuthUserId = null;
+        return NextResponse.json(serializeEmployee(employee), { status: 201 });
+      } catch (createError) {
+        await deleteAuthUserById(authResolved.authUserId);
+        createdAuthUserId = null;
+        throw createError;
+      }
+    }
+
+    // Legacy email Auth path (existing employees / compatibility).
+    if (!email) {
+      return validationErrorResponse("กรุณาตรวจสอบข้อมูลพนักงาน", [
+        { path: "email", message: "ต้องระบุอีเมล" },
+      ]);
+    }
 
     const emailOwner = await prisma.employee.findUnique({
       where: { email },
@@ -155,63 +293,75 @@ export async function POST(request: NextRequest) {
     if (!authResolved.ok) {
       return apiErrorResponse(authResolved.message, 502, "AUTH_PROVISION_FAILED");
     }
+    if (authResolved.created) {
+      createdAuthUserId = authResolved.authUserId;
+    }
 
     const authOwner = await prisma.employee.findUnique({
       where: { authUserId: authResolved.authUserId },
       select: { id: true, name: true },
     });
     if (authOwner) {
+      if (authResolved.created) {
+        await deleteAuthUserById(authResolved.authUserId);
+        createdAuthUserId = null;
+      }
       return validationErrorResponse(
         "Auth user นี้ถูกผูกกับพนักงานอื่นแล้ว",
         [{ path: "email", message: "authUserId ซ้ำ" }],
       );
     }
 
-    const employee = await prisma.employee.create({
-      data: {
-        name,
-        email,
-        phone: phone ?? null,
-        authUserId: authResolved.authUserId,
-        roleId: roleId ?? null,
-      },
-      include: employeeInclude,
-    });
+    try {
+      const employee = await prisma.employee.create({
+        data: {
+          name,
+          email,
+          phone: phone ?? null,
+          username: username ?? null,
+          authUserId: authResolved.authUserId,
+          roleId: roleId ?? null,
+          mustResetPassword: false,
+        },
+        include: employeeInclude,
+      });
 
-    await recordAuditLog({
-      actor: {
-        employeeId: currentUser?.employee?.id,
-        authUserId: currentUser?.user.id,
-      },
-      action: "EMPLOYEE_CREATED",
-      entityType: "EMPLOYEE",
-      entityId: employee.id,
-      metadata: {
-        name: employee.name,
-        email: employee.email,
-        roleId: employee.roleId,
-        hasAuthMapping: Boolean(employee.authUserId),
-        authUserCreated: authResolved.created,
-      },
-    });
+      await recordAuditLog({
+        actor: {
+          employeeId: currentUser?.employee?.id,
+          authUserId: currentUser?.user.id,
+        },
+        action: "EMPLOYEE_CREATED",
+        entityType: "EMPLOYEE",
+        entityId: employee.id,
+        metadata: {
+          name: employee.name,
+          email: employee.email,
+          roleId: employee.roleId,
+          authMode: "email",
+          hasAuthMapping: Boolean(employee.authUserId),
+          authUserCreated: authResolved.created,
+        },
+      });
 
-    return NextResponse.json(serializeEmployee(employee), { status: 201 });
+      createdAuthUserId = null;
+      return NextResponse.json(serializeEmployee(employee), { status: 201 });
+    } catch (createError) {
+      if (authResolved.created) {
+        await deleteAuthUserById(authResolved.authUserId);
+        createdAuthUserId = null;
+      }
+      throw createError;
+    }
   } catch (error) {
+    if (createdAuthUserId) {
+      await deleteAuthUserById(createdAuthUserId);
+    }
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2002"
     ) {
-      const target = Array.isArray(error.meta?.target)
-        ? error.meta.target.join(",")
-        : String(error.meta?.target ?? "");
-      if (target.includes("email")) {
-        return validationErrorResponse("อีเมลนี้ถูกใช้โดยพนักงานอื่นแล้ว", [
-          { path: "email", message: "อีเมลซ้ำ" },
-        ]);
-      }
-      return validationErrorResponse("authUserId นี้ถูกผูกกับพนักงานอื่นแล้ว", [
-        { path: "authUserId", message: "authUserId ซ้ำ" },
-      ]);
+      return uniqueConstraintResponse(error);
     }
     console.error("POST /api/employees failed", error);
     return apiErrorResponse("เพิ่มพนักงานไม่สำเร็จ", 500, "INTERNAL_ERROR");

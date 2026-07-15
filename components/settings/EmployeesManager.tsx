@@ -10,15 +10,21 @@ import type { RoleRecord } from "@/lib/settings/roles-shared";
 
 type FormState = {
   name: string;
+  username: string;
   email: string;
   phone: string;
+  password: string;
+  passwordConfirm: string;
   roleId: string;
 };
 
 const emptyForm: FormState = {
   name: "",
+  username: "",
   email: "",
   phone: "",
+  password: "",
+  passwordConfirm: "",
   roleId: "",
 };
 
@@ -95,8 +101,11 @@ export function EmployeesManager() {
     setEditingId(item.id);
     setForm({
       name: item.name,
+      username: item.username ?? "",
       email: item.email ?? "",
       phone: item.phone ?? "",
+      password: "",
+      passwordConfirm: "",
       roleId: item.roleId ?? "",
     });
     setFormError("");
@@ -113,12 +122,25 @@ export function EmployeesManager() {
     setSaving(true);
     setFormError("");
     try {
-      const payload = {
-        name: form.name.trim(),
-        email: form.email.trim() || null,
-        phone: form.phone.trim() || null,
-        roleId: form.roleId.trim() || null,
-      };
+      const payload = editingId
+        ? {
+            name: form.name.trim(),
+            username: form.username.trim() || null,
+            phone: form.phone.trim() || null,
+            roleId: form.roleId.trim() || null,
+            // email omitted on edit for phone accounts; legacy email remains untouched
+            ...(form.email.trim() && !form.username.trim()
+              ? { email: form.email.trim() }
+              : {}),
+          }
+        : {
+            name: form.name.trim(),
+            username: form.username.trim(),
+            phone: form.phone.trim(),
+            password: form.password,
+            passwordConfirm: form.passwordConfirm,
+            roleId: form.roleId.trim() || null,
+          };
 
       const response = await fetch(
         editingId ? `/api/employees/${editingId}` : "/api/employees",
@@ -195,15 +217,16 @@ export function EmployeesManager() {
       setError("พนักงานยังไม่มีบัญชี Auth");
       return;
     }
-    if (!item.email) {
-      setError("พนักงานยังไม่มีอีเมล");
+    if (!item.email && !item.phone) {
+      setError("พนักงานยังไม่มีอีเมลหรือเบอร์โทรสำหรับรีเซ็ตรหัสผ่าน");
       return;
     }
     if (
       !(await confirm({
         title: `รีเซ็ตรหัสผ่านของ ${item.name}?`,
-        description:
-          "ครั้งถัดไปที่ใส่อีเมลแล้วกดเข้าสู่ระบบ จะถูกพาไปตั้งรหัสผ่านใหม่โดยไม่ต้องใส่รหัสเดิม",
+        description: item.email
+          ? "ครั้งถัดไปที่ใส่อีเมลแล้วกดเข้าสู่ระบบ จะถูกพาไปตั้งรหัสผ่านใหม่โดยไม่ต้องใส่รหัสเดิม"
+          : "ระบบจะสร้างรหัสผ่านชั่วคราวให้ส่งต่อพนักงาน (ยังไม่รองรับ SMS OTP)",
         confirmLabel: "รีเซ็ตรหัสผ่าน",
         tone: "warning",
       }))
@@ -218,9 +241,16 @@ export function EmployeesManager() {
         `/api/employees/${item.id}/reset-password`,
         { method: "POST" },
       );
-      const body = (await response.json()) as ApiErrorBody;
+      const body = (await response.json()) as ApiErrorBody & {
+        temporaryPassword?: string;
+      };
       if (!response.ok) {
         throw new Error(body.message ?? "รีเซ็ตรหัสผ่านไม่สำเร็จ");
+      }
+      if (body.temporaryPassword) {
+        window.alert(
+          `รหัสผ่านชั่วคราว (แสดงครั้งเดียว):\n${body.temporaryPassword}`,
+        );
       }
       await loadItems();
     } catch (reason) {
@@ -294,6 +324,7 @@ export function EmployeesManager() {
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   {[
                     employee.roleDisplayName ?? "ยังไม่มี role",
+                    employee.username ? `@${employee.username}` : null,
                     employee.phone || null,
                   ]
                     .filter(Boolean)
@@ -384,34 +415,117 @@ export function EmployeesManager() {
                   className="mt-1 w-full rounded-xl border border-border px-3 py-2"
                 />
               </label>
-              <label className="block text-sm">
-                อีเมล (Supabase Auth)
-                <input
-                  required={!editingId}
-                  type="email"
-                  value={form.email}
-                  onChange={(e) =>
-                    setForm((current) => ({
-                      ...current,
-                      email: e.target.value,
-                    }))
-                  }
-                  className="mt-1 w-full rounded-xl border border-border px-3 py-2"
-                />
-              </label>
-              <label className="block text-sm">
-                เบอร์โทร
-                <input
-                  value={form.phone}
-                  onChange={(e) =>
-                    setForm((current) => ({
-                      ...current,
-                      phone: e.target.value,
-                    }))
-                  }
-                  className="mt-1 w-full rounded-xl border border-border px-3 py-2"
-                />
-              </label>
+              {!editingId ? (
+                <>
+                  <label className="block text-sm">
+                    Username
+                    <input
+                      required
+                      value={form.username}
+                      onChange={(e) =>
+                        setForm((current) => ({
+                          ...current,
+                          username: e.target.value,
+                        }))
+                      }
+                      className="mt-1 w-full rounded-xl border border-border px-3 py-2"
+                      placeholder="เช่น somchai.w"
+                    />
+                  </label>
+                  <label className="block text-sm">
+                    เบอร์โทรศัพท์
+                    <input
+                      required
+                      value={form.phone}
+                      onChange={(e) =>
+                        setForm((current) => ({
+                          ...current,
+                          phone: e.target.value,
+                        }))
+                      }
+                      className="mt-1 w-full rounded-xl border border-border px-3 py-2"
+                      placeholder="08xxxxxxxx"
+                    />
+                  </label>
+                  <label className="block text-sm">
+                    รหัสผ่านเริ่มต้น
+                    <input
+                      required
+                      type="password"
+                      value={form.password}
+                      onChange={(e) =>
+                        setForm((current) => ({
+                          ...current,
+                          password: e.target.value,
+                        }))
+                      }
+                      className="mt-1 w-full rounded-xl border border-border px-3 py-2"
+                      minLength={8}
+                    />
+                  </label>
+                  <label className="block text-sm">
+                    ยืนยันรหัสผ่าน
+                    <input
+                      required
+                      type="password"
+                      value={form.passwordConfirm}
+                      onChange={(e) =>
+                        setForm((current) => ({
+                          ...current,
+                          passwordConfirm: e.target.value,
+                        }))
+                      }
+                      className="mt-1 w-full rounded-xl border border-border px-3 py-2"
+                      minLength={8}
+                    />
+                  </label>
+                </>
+              ) : (
+                <>
+                  <label className="block text-sm">
+                    Username
+                    <input
+                      value={form.username}
+                      onChange={(e) =>
+                        setForm((current) => ({
+                          ...current,
+                          username: e.target.value,
+                        }))
+                      }
+                      className="mt-1 w-full rounded-xl border border-border px-3 py-2"
+                      placeholder="เพิ่มภายหลังได้"
+                    />
+                  </label>
+                  <label className="block text-sm">
+                    เบอร์โทรศัพท์
+                    <input
+                      value={form.phone}
+                      onChange={(e) =>
+                        setForm((current) => ({
+                          ...current,
+                          phone: e.target.value,
+                        }))
+                      }
+                      className="mt-1 w-full rounded-xl border border-border px-3 py-2"
+                      placeholder="08xxxxxxxx"
+                    />
+                  </label>
+                  {form.email ? (
+                    <label className="block text-sm">
+                      อีเมล
+                      <input
+                        type="email"
+                        value={form.email}
+                        readOnly
+                        className="mt-1 w-full rounded-xl border border-border bg-muted px-3 py-2 text-muted-foreground"
+                      />
+                      <span className="mt-1 block text-xs text-muted-foreground">
+                        บัญชีเดิมนี้ยังใช้ Email สำหรับเข้าสู่ระบบ
+                      </span>
+                    </label>
+                  ) : null}
+                </>
+              )}
               <label className="block text-sm">
                 Role
                 <select
@@ -433,9 +547,9 @@ export function EmployeesManager() {
                 </select>
               </label>
               <p className="text-xs text-muted-foreground">
-                ระบบจะค้นหาหรือสร้าง Supabase Auth user จากอีเมล แล้วบันทึก UUID
-                ลง Employee อัตโนมัติ (รหัสผ่านชั่วคราว — ตั้งใหม่ผ่าน Supabase
-                recovery)
+                {editingId
+                  ? "พนักงานเดิมที่ใช้อีเมลยัง Login ด้วยอีเมลได้ตามปกติ — สามารถเพิ่ม Username/เบอร์โทรเป็นข้อมูลเพิ่มได้"
+                  : "พนักงานใหม่ใช้ Username + เบอร์โทร + รหัสผ่าน (ไม่ใช้อีเมล) และต้องเปลี่ยนรหัสผ่านเมื่อเข้าสู่ระบบครั้งแรก"}
               </p>
               {formError ? (
                 <p className="text-sm text-destructive" role="alert">

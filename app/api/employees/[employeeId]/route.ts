@@ -20,7 +20,10 @@ import {
   parseEmployeeInput,
   serializeEmployee,
 } from "@/lib/settings/employees";
-import { resolveAuthUserIdForEmail } from "@/lib/supabase/admin";
+import {
+  resolveAuthUserIdForEmail,
+  updateAuthUserPhone,
+} from "@/lib/supabase/admin";
 import { NextRequest, NextResponse } from "next/server";
 
 type RouteContext = {
@@ -194,16 +197,81 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       );
     }
 
+    const fieldsToUpdate: {
+      name?: string;
+      email?: string | null;
+      username?: string | null;
+      phone?: string | null;
+      roleId?: string | null;
+      isActive?: boolean;
+    } = {};
+    if (validated.data.name !== undefined) fieldsToUpdate.name = validated.data.name;
+    if (validated.data.email !== undefined) fieldsToUpdate.email = validated.data.email;
+    if (validated.data.username !== undefined) {
+      fieldsToUpdate.username = validated.data.username;
+    }
+    if (validated.data.phone !== undefined) fieldsToUpdate.phone = validated.data.phone;
+    if (validated.data.roleId !== undefined) fieldsToUpdate.roleId = validated.data.roleId;
+    if (validated.data.isActive !== undefined) {
+      fieldsToUpdate.isActive = validated.data.isActive;
+    }
+
     const updateData: {
       name?: string;
       email?: string | null;
+      username?: string | null;
       phone?: string | null;
       authUserId?: string;
       roleId?: string | null;
       isActive?: boolean;
-    } = { ...validated.data };
+    } = { ...fieldsToUpdate };
 
     let authUserCreated = false;
+
+    if ("username" in validated.data && validated.data.username) {
+      const usernameOwner = await prisma.employee.findFirst({
+        where: {
+          username: validated.data.username,
+          id: { not: employeeId },
+        },
+        select: { id: true },
+      });
+      if (usernameOwner) {
+        return validationErrorResponse("Username นี้ถูกใช้แล้ว", [
+          { path: "username", message: "Username ซ้ำ" },
+        ]);
+      }
+    }
+
+    if ("phone" in validated.data && validated.data.phone) {
+      const phoneOwner = await prisma.employee.findFirst({
+        where: {
+          phone: validated.data.phone,
+          id: { not: employeeId },
+        },
+        select: { id: true },
+      });
+      if (phoneOwner) {
+        return validationErrorResponse("เบอร์โทรนี้ถูกใช้แล้ว", [
+          { path: "phone", message: "เบอร์โทรซ้ำ" },
+        ]);
+      }
+
+      // Phone-auth employees may update Auth phone; email-auth keep phone as contact only.
+      if (existing.authUserId && existing.username && !existing.email) {
+        const phoneUpdate = await updateAuthUserPhone({
+          authUserId: existing.authUserId,
+          phone: validated.data.phone,
+        });
+        if (!phoneUpdate.ok) {
+          return apiErrorResponse(
+            phoneUpdate.message,
+            502,
+            "AUTH_PHONE_UPDATE_FAILED",
+          );
+        }
+      }
+    }
 
     if ("email" in validated.data && validated.data.email) {
       const email = validated.data.email;
@@ -215,6 +283,14 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         return validationErrorResponse("อีเมลนี้ถูกใช้โดยพนักงานอื่นแล้ว", [
           { path: "email", message: "อีเมลซ้ำ" },
         ]);
+      }
+
+      // Phone-auth employees must not switch identity via email automatically.
+      if (existing.username && !existing.email) {
+        return validationErrorResponse(
+          "บัญชี Phone Auth ไม่สามารถตั้งอีเมลเพื่อเปลี่ยน Identity ในเฟสนี้",
+          [{ path: "email", message: "ห้ามตั้งอีเมลบนบัญชี Phone Auth" }],
+        );
       }
 
       const authResolved = await resolveAuthUserIdForEmail(email);
@@ -262,6 +338,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       metadata: {
         name: employee.name,
         email: employee.email,
+        username: employee.username,
+        phone: employee.phone,
         roleId: employee.roleId,
         hasAuthMapping: Boolean(employee.authUserId),
         isActive: employee.isActive,
@@ -281,6 +359,16 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       if (target.includes("email")) {
         return validationErrorResponse("อีเมลนี้ถูกใช้โดยพนักงานอื่นแล้ว", [
           { path: "email", message: "อีเมลซ้ำ" },
+        ]);
+      }
+      if (target.includes("username")) {
+        return validationErrorResponse("Username นี้ถูกใช้แล้ว", [
+          { path: "username", message: "Username ซ้ำ" },
+        ]);
+      }
+      if (target.includes("phone")) {
+        return validationErrorResponse("เบอร์โทรนี้ถูกใช้แล้ว", [
+          { path: "phone", message: "เบอร์โทรซ้ำ" },
         ]);
       }
       return validationErrorResponse("authUserId นี้ถูกผูกกับพนักงานอื่นแล้ว", [

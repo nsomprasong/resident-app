@@ -2,7 +2,7 @@
 
 ## Task
 
-แสดงวันที่ทั้งโปรเจกต์เป็น format วว/ดด/ปปปป
+ปรับระบบ Login พนักงานรองรับ Username / Phone โดยไม่กระทบ Email Auth เดิม
 
 ## Status
 
@@ -10,14 +10,19 @@ COMPLETED
 
 ## Objective
 
-วันที่ใน UI ใช้ `DD/MM/YYYY` แบบไทย (พ.ศ.) ผ่าน helper กลาง + DateSelector สำหรับช่องเลือกวันที่
+พนักงานใหม่: Username + Phone + Password (Supabase Phone Auth)
+พนักงานเดิม: Login ด้วย Email ได้ตามปกติ
+ใช้ `mustResetPassword` ที่มีอยู่แล้วแทนการสร้าง field `mustChangePassword` ใหม่
 
 ## Evidence
 
-- `lib/format/date.ts` — format วว/ดด/ปปปป
-- เมนูเวลาและค่าจ้าง: เปลี่ยน `input type=date` → `DateSelector` ใน Attendance / Leave / OT / สรุปค่าแรง
-- API ยังใช้ `YYYY-MM-DD`
+- Migration `20260715100000_employee_username_phone_login` applied (username + unique phone)
+- Dual login: email / phone / username → `app/login/actions.ts`
+- Create phone Auth + cleanup: `lib/supabase/admin.ts`, `POST /api/employees`
+- `/api/auth/me` additive fields; RBAC/middleware เดิมคงไว้
+- Readiness: `scripts/check-employee-auth-readiness.ts`
+- Verify: prisma validate/generate, tsc, lint, build, `npm run test:unit` ผ่าน
 
 ## Next Task
 
-ตาม MASTER_PLAN / คำสั่งผู้ใช้
+ตาม MASTER_PLAN / คำสั่งผู้ใช้ — ยังไม่ควรลบ email login / register / email reset จนกว่าจะย้ายบัญชีเก่าครบ

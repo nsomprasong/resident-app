@@ -1,6 +1,11 @@
 import type { Employee, Role } from "@/generated/prisma/client";
 
 import type { ValidationIssue } from "@/lib/api/validation";
+import {
+  isValidUsername,
+  normalizeThaiPhone,
+  normalizeUsername,
+} from "@/lib/auth/login-identifier";
 import { displayEmployeeName } from "@/lib/hr/employees";
 import type { EmployeeRecord } from "@/lib/settings/employees-shared";
 
@@ -15,6 +20,7 @@ export function serializeEmployee(employee: EmployeeWithRole): EmployeeRecord {
     id: employee.id,
     name: displayEmployeeName(employee),
     email: employee.email,
+    username: employee.username,
     phone: employee.phone,
     authUserId: employee.authUserId,
     roleId: employee.roleRecord?.id ?? employee.roleId,
@@ -23,6 +29,7 @@ export function serializeEmployee(employee: EmployeeWithRole): EmployeeRecord {
     roleIsActive: employee.roleRecord?.isActive ?? null,
     isActive: employee.isActive,
     mustResetPassword: employee.mustResetPassword,
+    usesEmailLogin: Boolean(employee.email),
   };
 }
 
@@ -65,7 +72,10 @@ export function isUuid(value: string): boolean {
 export type ParsedEmployeeInput = {
   name?: string;
   email?: string | null;
+  username?: string | null;
   phone?: string | null;
+  password?: string;
+  passwordConfirm?: string;
   roleId?: string | null;
   isActive?: boolean;
 };
@@ -90,15 +100,39 @@ export function parseEmployeeInput(
     }
   }
 
+  if (mode === "create" || "username" in body) {
+    const usernameRaw = readTrimmedString(body, "username");
+    if (mode === "create") {
+      if (usernameRaw) {
+        const username = normalizeUsername(usernameRaw);
+        if (!isValidUsername(username)) {
+          issues.push({
+            path: "username",
+            message: "Username ต้องเป็น a-z 0-9 . _ - ความยาว 3–40 ตัว",
+          });
+        } else {
+          data.username = username;
+        }
+      }
+    } else if (usernameRaw === undefined || usernameRaw === "") {
+      data.username = null;
+    } else {
+      const username = normalizeUsername(usernameRaw);
+      if (!isValidUsername(username)) {
+        issues.push({
+          path: "username",
+          message: "Username ต้องเป็น a-z 0-9 . _ - ความยาว 3–40 ตัว",
+        });
+      } else {
+        data.username = username;
+      }
+    }
+  }
+
   if (mode === "create" || "email" in body) {
     const emailRaw = readTrimmedString(body, "email");
     if (mode === "create") {
-      if (!emailRaw) {
-        issues.push({
-          path: "email",
-          message: "กรุณาระบุอีเมลสำหรับเชื่อม Supabase Auth",
-        });
-      } else {
+      if (emailRaw) {
         const email = normalizeEmployeeEmail(emailRaw);
         if (!isValidEmployeeEmail(email)) {
           issues.push({ path: "email", message: "รูปแบบอีเมลไม่ถูกต้อง" });
@@ -118,23 +152,78 @@ export function parseEmployeeInput(
     }
   }
 
-  if ("phone" in body) {
-    const phone = readTrimmedString(body, "phone");
-    if (phone === undefined) {
+  if (mode === "create" || "phone" in body) {
+    const phoneRaw = readTrimmedString(body, "phone");
+    if (mode === "create") {
+      if (phoneRaw) {
+        const phone = normalizeThaiPhone(phoneRaw);
+        if (!phone) {
+          issues.push({ path: "phone", message: "รูปแบบเบอร์โทรไม่ถูกต้อง" });
+        } else {
+          data.phone = phone;
+        }
+      }
+    } else if (phoneRaw === undefined || phoneRaw === "") {
       data.phone = null;
-    } else if (phone === "") {
-      data.phone = null;
-    } else if (phone.length > 40) {
-      issues.push({ path: "phone", message: "เบอร์โทรยาวเกินไป" });
     } else {
-      data.phone = phone;
+      const phone = normalizeThaiPhone(phoneRaw);
+      if (!phone) {
+        issues.push({ path: "phone", message: "รูปแบบเบอร์โทรไม่ถูกต้อง" });
+      } else {
+        data.phone = phone;
+      }
+    }
+  }
+
+  if (mode === "create" || "password" in body) {
+    const password = readTrimmedString(body, "password");
+    const passwordConfirm = readTrimmedString(body, "passwordConfirm");
+    if (password) {
+      if (password.length < 8) {
+        issues.push({
+          path: "password",
+          message: "รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร",
+        });
+      } else {
+        data.password = password;
+      }
+      if (passwordConfirm !== undefined && passwordConfirm !== password) {
+        issues.push({
+          path: "passwordConfirm",
+          message: "รหัสผ่านยืนยันไม่ตรงกัน",
+        });
+      } else if (passwordConfirm) {
+        data.passwordConfirm = passwordConfirm;
+      }
+    }
+  }
+
+  if (mode === "create") {
+    const phoneAuth =
+      Boolean(data.username) && Boolean(data.phone) && Boolean(data.password);
+    const emailAuth = Boolean(data.email);
+
+    if (!phoneAuth && !emailAuth) {
+      issues.push({
+        path: "body",
+        message:
+          "ต้องระบุ Username + เบอร์โทร + รหัสผ่าน (พนักงานใหม่) หรืออีเมล (บัญชีเดิม)",
+      });
+    }
+
+    if (phoneAuth && data.email) {
+      issues.push({
+        path: "email",
+        message: "พนักงานใหม่แบบ Username/Phone ไม่ต้องใส่อีเมล",
+      });
     }
   }
 
   if ("authUserId" in body) {
     issues.push({
       path: "authUserId",
-      message: "ไม่รองรับการตั้งหรือถอด authUserId โดยตรง — ใช้การผูกผ่านอีเมล",
+      message:
+        "ไม่รองรับการตั้งหรือถอด authUserId โดยตรง — ใช้การผูกผ่านเบอร์โทรหรืออีเมล",
     });
   }
 

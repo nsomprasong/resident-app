@@ -198,15 +198,15 @@ model TourGroup {
 }
 
 model Booking {
-  id             String        @id @default(uuid()) @db.Uuid
-  reference      String        @unique
-  status         BookingStatus @default(PENDING)
-  checkIn        DateTime      @map("check_in") @db.Date
-  checkOut       DateTime      @map("check_out") @db.Date
-  guestId        String?       @map("guest_id") @db.Uuid
-  tourGroupId    String?       @map("tour_group_id") @db.Uuid
-  guest          Guest?        @relation(fields: [guestId], references: [id])
-  tourGroup      TourGroup?    @relation(fields: [tourGroupId], references: [id])
+  id             String          @id @default(uuid()) @db.Uuid
+  reference      String          @unique
+  status         BookingStatus   @default(PENDING)
+  checkIn        DateTime        @map("check_in") @db.Date
+  checkOut       DateTime        @map("check_out") @db.Date
+  guestId        String?         @map("guest_id") @db.Uuid
+  tourGroupId    String?         @map("tour_group_id") @db.Uuid
+  guest          Guest?          @relation(fields: [guestId], references: [id])
+  tourGroup      TourGroup?      @relation(fields: [tourGroupId], references: [id])
   rooms          BookingRoom[]
   rafts          BookingRaft[]
   charges        Charge[]
@@ -215,11 +215,11 @@ model Booking {
   orders         Order[]
   posSales       PosSale[]
   notes          String?
-  guestCount     Int?          @map("guest_count")
-  pricePerPerson Decimal?      @map("price_per_person") @db.Decimal(10, 2)
-  closedAt       DateTime?     @map("closed_at")
-  createdAt      DateTime      @default(now()) @map("created_at")
-  updatedAt      DateTime      @updatedAt @map("updated_at")
+  guestCount     Int?            @map("guest_count")
+  pricePerPerson Decimal?        @map("price_per_person") @db.Decimal(10, 2)
+  closedAt       DateTime?       @map("closed_at")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
 
   @@index([checkIn, checkOut, status])
   @@map("bookings")
@@ -329,20 +329,20 @@ model ProductType {
 }
 
 model Product {
-  id          String         @id @default(uuid()) @db.Uuid
+  id          String        @id @default(uuid()) @db.Uuid
   name        String
   description String?
-  price       Decimal        @db.Decimal(10, 2)
-  typeId      String         @map("type_id") @db.Uuid
-  type        ProductType    @relation(fields: [typeId], references: [id])
-  categoryId  String?        @map("category_id") @db.Uuid
-  category    FoodCategory?  @relation(fields: [categoryId], references: [id])
-  isMinibar   Boolean        @default(false) @map("is_minibar")
-  imageUrl    String?        @map("image_url")
-  isActive    Boolean        @default(true) @map("is_active")
+  price       Decimal       @db.Decimal(10, 2)
+  typeId      String        @map("type_id") @db.Uuid
+  type        ProductType   @relation(fields: [typeId], references: [id])
+  categoryId  String?       @map("category_id") @db.Uuid
+  category    FoodCategory? @relation(fields: [categoryId], references: [id])
+  isMinibar   Boolean       @default(false) @map("is_minibar")
+  imageUrl    String?       @map("image_url")
+  isActive    Boolean       @default(true) @map("is_active")
   orderItems  OrderItem[]
-  createdAt   DateTime       @default(now()) @map("created_at")
-  updatedAt   DateTime       @updatedAt @map("updated_at")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
 
   @@index([typeId, isActive])
   @@index([isMinibar, isActive])
@@ -382,17 +382,17 @@ model OrderItem {
 }
 
 model Charge {
-  id             String          @id @default(uuid()) @db.Uuid
-  bookingId      String          @map("booking_id") @db.Uuid
-  inspectionId   String?         @unique @map("inspection_id") @db.Uuid
-  type           ChargeType
-  description    String
-  amount         Decimal         @db.Decimal(10, 2)
-  sourceType     String?         @map("source_type")
-  sourceId       String?         @map("source_id")
-  booking        Booking         @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  inspection     RoomInspection? @relation(fields: [inspectionId], references: [id], onDelete: SetNull)
-  createdAt      DateTime        @default(now()) @map("created_at")
+  id           String          @id @default(uuid()) @db.Uuid
+  bookingId    String          @map("booking_id") @db.Uuid
+  inspectionId String?         @unique @map("inspection_id") @db.Uuid
+  type         ChargeType
+  description  String
+  amount       Decimal         @db.Decimal(10, 2)
+  sourceType   String?         @map("source_type")
+  sourceId     String?         @map("source_id")
+  booking      Booking         @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  inspection   RoomInspection? @relation(fields: [inspectionId], references: [id], onDelete: SetNull)
+  createdAt    DateTime        @default(now()) @map("created_at")
 
   @@unique([sourceType, sourceId])
   @@index([bookingId, type])
@@ -400,41 +400,41 @@ model Charge {
 }
 
 model Payment {
-  id                           String           @id @default(uuid()) @db.Uuid
-  paymentNumber                String?          @unique @map("payment_number")
-  bookingId                    String           @map("booking_id") @db.Uuid
-  amount                       Decimal          @db.Decimal(10, 2)
-  currency                     String           @default("THB")
+  id                           String                 @id @default(uuid()) @db.Uuid
+  paymentNumber                String?                @unique @map("payment_number")
+  bookingId                    String                 @map("booking_id") @db.Uuid
+  amount                       Decimal                @db.Decimal(10, 2)
+  currency                     String                 @default("THB")
   method                       PaymentMethod
   purpose                      PaymentPurpose?
-  status                       PaymentStatus    @default(PENDING)
+  status                       PaymentStatus          @default(PENDING)
   reference                    String?
-  channelId                    String?          @map("channel_id") @db.Uuid
-  promptpayAccountId           String?          @map("promptpay_account_id") @db.Uuid
-  promptpayAccountNameSnapshot String?          @map("promptpay_account_name_snapshot")
-  promptpayIdentifierMasked    String?          @map("promptpay_identifier_masked")
-  paidAt                       DateTime?        @map("paid_at")
-  submittedAt                  DateTime?        @map("submitted_at")
-  verifiedAt                   DateTime?        @map("verified_at")
-  verifiedById                 String?          @map("verified_by_id") @db.Uuid
-  createdById                  String?          @map("created_by_id") @db.Uuid
-  slipStorageBucket            String?          @map("slip_storage_bucket")
-  slipStoragePath              String?          @map("slip_storage_path")
-  slipFileName                 String?          @map("slip_file_name")
-  slipContentType              String?          @map("slip_content_type")
-  slipSizeBytes                Int?             @map("slip_size_bytes")
+  channelId                    String?                @map("channel_id") @db.Uuid
+  promptpayAccountId           String?                @map("promptpay_account_id") @db.Uuid
+  promptpayAccountNameSnapshot String?                @map("promptpay_account_name_snapshot")
+  promptpayIdentifierMasked    String?                @map("promptpay_identifier_masked")
+  paidAt                       DateTime?              @map("paid_at")
+  submittedAt                  DateTime?              @map("submitted_at")
+  verifiedAt                   DateTime?              @map("verified_at")
+  verifiedById                 String?                @map("verified_by_id") @db.Uuid
+  createdById                  String?                @map("created_by_id") @db.Uuid
+  slipStorageBucket            String?                @map("slip_storage_bucket")
+  slipStoragePath              String?                @map("slip_storage_path")
+  slipFileName                 String?                @map("slip_file_name")
+  slipContentType              String?                @map("slip_content_type")
+  slipSizeBytes                Int?                   @map("slip_size_bytes")
   note                         String?
-  cancelledAt                  DateTime?        @map("cancelled_at")
-  cancelReason                 String?          @map("cancel_reason")
-  booking                      Booking          @relation(fields: [bookingId], references: [id])
-  channel                      PaymentChannel?  @relation(fields: [channelId], references: [id], onDelete: SetNull)
-  promptpayAccount             PromptPayAccount? @relation(fields: [promptpayAccountId], references: [id], onDelete: Restrict)
-  verifiedBy                   Employee?        @relation("PaymentVerifier", fields: [verifiedById], references: [id], onDelete: SetNull)
-  createdBy                    Employee?        @relation("PaymentCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  cancelledAt                  DateTime?              @map("cancelled_at")
+  cancelReason                 String?                @map("cancel_reason")
+  booking                      Booking                @relation(fields: [bookingId], references: [id])
+  channel                      PaymentChannel?        @relation(fields: [channelId], references: [id], onDelete: SetNull)
+  promptpayAccount             PromptPayAccount?      @relation(fields: [promptpayAccountId], references: [id], onDelete: Restrict)
+  verifiedBy                   Employee?              @relation("PaymentVerifier", fields: [verifiedById], references: [id], onDelete: SetNull)
+  createdBy                    Employee?              @relation("PaymentCreator", fields: [createdById], references: [id], onDelete: SetNull)
   statusHistory                PaymentStatusHistory[]
   refunds                      PaymentRefund[]
-  createdAt                    DateTime         @default(now()) @map("created_at")
-  updatedAt                    DateTime         @updatedAt @map("updated_at")
+  createdAt                    DateTime               @default(now()) @map("created_at")
+  updatedAt                    DateTime               @updatedAt @map("updated_at")
 
   @@index([bookingId, status])
   @@index([status, createdAt])
@@ -456,22 +456,22 @@ model PaymentChannel {
 }
 
 model PromptPayAccount {
-  id           String          @id @default(uuid()) @db.Uuid
-  displayName  String          @map("display_name")
-  idType       PromptPayIdType @map("id_type")
-  identifier   String
-  accountName  String          @map("account_name")
-  bankName     String?         @map("bank_name")
-  isActive     Boolean         @default(true) @map("is_active")
-  isPrimary    Boolean         @default(false) @map("is_primary")
-  notes        String?
-  createdById  String?         @map("created_by_id") @db.Uuid
-  updatedById  String?         @map("updated_by_id") @db.Uuid
-  createdBy    Employee?       @relation("PromptPayAccountCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  updatedBy    Employee?       @relation("PromptPayAccountUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
-  payments     Payment[]
-  createdAt    DateTime        @default(now()) @map("created_at")
-  updatedAt    DateTime        @updatedAt @map("updated_at")
+  id          String          @id @default(uuid()) @db.Uuid
+  displayName String          @map("display_name")
+  idType      PromptPayIdType @map("id_type")
+  identifier  String
+  accountName String          @map("account_name")
+  bankName    String?         @map("bank_name")
+  isActive    Boolean         @default(true) @map("is_active")
+  isPrimary   Boolean         @default(false) @map("is_primary")
+  notes       String?
+  createdById String?         @map("created_by_id") @db.Uuid
+  updatedById String?         @map("updated_by_id") @db.Uuid
+  createdBy   Employee?       @relation("PromptPayAccountCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy   Employee?       @relation("PromptPayAccountUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  payments    Payment[]
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
 
   @@index([isActive, isPrimary])
   @@index([idType])
@@ -494,16 +494,16 @@ model PaymentStatusHistory {
 }
 
 model PaymentRefund {
-  id          String   @id @default(uuid()) @db.Uuid
-  paymentId   String   @map("payment_id") @db.Uuid
-  bookingId   String   @map("booking_id") @db.Uuid
-  amount      Decimal  @db.Decimal(10, 2)
+  id          String    @id @default(uuid()) @db.Uuid
+  paymentId   String    @map("payment_id") @db.Uuid
+  bookingId   String    @map("booking_id") @db.Uuid
+  amount      Decimal   @db.Decimal(10, 2)
   reason      String?
-  createdById String?  @map("created_by_id") @db.Uuid
-  payment     Payment  @relation(fields: [paymentId], references: [id], onDelete: Restrict)
-  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  createdById String?   @map("created_by_id") @db.Uuid
+  payment     Payment   @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  booking     Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   createdBy   Employee? @relation("PaymentRefundCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt   DateTime @default(now()) @map("created_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
 
   @@index([paymentId])
   @@index([bookingId, createdAt])
@@ -575,90 +575,91 @@ model RolePermission {
 }
 
 model Employee {
-  id                    String           @id @default(uuid()) @db.Uuid
-  authUserId            String?          @unique @map("auth_user_id") @db.Uuid
-  email                 String?          @unique
-  name                  String
-  employeeCode          String?          @unique @map("employee_code")
-  firstName             String?          @map("first_name")
-  lastName              String?          @map("last_name")
-  nickname              String?
-  photoUrl              String?          @map("photo_url")
-  birthDate             DateTime?        @map("birth_date") @db.Date
-  nationalId            String?          @map("national_id")
-  phone                 String?
-  address               String?
-  emergencyContactName  String?          @map("emergency_contact_name")
-  emergencyContactPhone String?          @map("emergency_contact_phone")
-  employmentType        EmploymentType   @default(MONTHLY) @map("employment_type")
-  departmentId          String?          @map("department_id") @db.Uuid
-  department            Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  positionId            String?          @map("position_id") @db.Uuid
-  position              Position?        @relation(fields: [positionId], references: [id], onDelete: SetNull)
-  managerEmployeeId     String?          @map("manager_employee_id") @db.Uuid
-  manager               Employee?        @relation("EmployeeManager", fields: [managerEmployeeId], references: [id], onDelete: SetNull)
-  directReports         Employee[]       @relation("EmployeeManager")
-  branchName            String?          @map("branch_name")
-  hiredAt               DateTime?        @map("hired_at") @db.Date
-  probationEndsAt       DateTime?        @map("probation_ends_at") @db.Date
-  endedAt               DateTime?        @map("ended_at") @db.Date
-  hrStatus              EmployeeHrStatus @default(ACTIVE) @map("hr_status")
-  bankAccountName       String?          @map("bank_account_name")
-  bankAccountNumber     String?          @map("bank_account_number")
-  bankName              String?          @map("bank_name")
-  promptPay             String?          @map("prompt_pay")
-  notes                 String?
-  roleId                String?          @map("role_id") @db.Uuid
-  roleRecord            Role?            @relation(fields: [roleId], references: [id], onDelete: SetNull)
-  hourlyRate            Decimal?         @map("hourly_rate") @db.Decimal(10, 2)
-  otHourlyRate          Decimal?         @map("ot_hourly_rate") @db.Decimal(10, 2)
-  payDayOfMonth         Int?             @map("pay_day_of_month")
-  defaultShiftTemplateId String?         @map("default_shift_template_id") @db.Uuid
-  defaultShiftTemplate  ShiftTemplate?   @relation("EmployeeDefaultShift", fields: [defaultShiftTemplateId], references: [id], onDelete: SetNull)
-  isActive              Boolean          @default(true) @map("is_active")
-  mustResetPassword     Boolean          @default(false) @map("must_reset_password")
-  shifts                WorkShift[]
-  workSchedules         WorkSchedule[]
-  attendanceRecords     AttendanceRecord[]
-  attendanceEvents      AttendanceEvent[]
-  attendanceAdjustments AttendanceAdjustment[] @relation("AdjustmentRequester")
-  attendanceReviews     AttendanceAdjustment[] @relation("AdjustmentReviewer")
-  attendanceLocks       AttendancePeriod[]     @relation("AttendancePeriodLocker")
-  leaveBalances         LeaveBalance[]
-  leaveRequests         LeaveRequest[]         @relation("LeaveRequestEmployee")
-  leaveRequestsCreated  LeaveRequest[]         @relation("LeaveRequestRequester")
-  leaveReviews          LeaveRequest[]         @relation("LeaveRequestReviewer")
-  compensations         EmployeeCompensation[]
-  payrollEntries        PayrollEntry[]
-  payrollAdjustments    PayrollAdjustment[]    @relation("PayrollAdjustmentEmployee")
-  payrollAdjustmentsCreated PayrollAdjustment[] @relation("PayrollAdjustmentCreator")
-  payrollPeriodsCalc    PayrollPeriod[]        @relation("PayrollPeriodCalculator")
-  payrollPeriodsReview  PayrollPeriod[]        @relation("PayrollPeriodReviewer")
-  payrollPeriodsApprove PayrollPeriod[]        @relation("PayrollPeriodApprover")
-  payrollPeriodsPaid    PayrollPeriod[]        @relation("PayrollPeriodPayer")
-  payslips              PayrollPayslip[]
-  documents             EmployeeDocument[]
-  documentsUploaded     EmployeeDocument[]     @relation("DocumentUploader")
-  auditLogs             AuditLog[]
-  promptPayAccountsCreated PromptPayAccount[]  @relation("PromptPayAccountCreator")
-  promptPayAccountsUpdated PromptPayAccount[]  @relation("PromptPayAccountUpdater")
-  paymentsCreated       Payment[]              @relation("PaymentCreator")
-  paymentsVerified      Payment[]              @relation("PaymentVerifier")
-  paymentStatusActions  PaymentStatusHistory[] @relation("PaymentStatusActor")
-  paymentRefundsCreated PaymentRefund[]        @relation("PaymentRefundCreator")
-  roomInspectionsCompleted RoomInspection[]    @relation("RoomInspectionCompleter")
-  posShiftsOpened          PosShift[]          @relation("PosShiftOpener")
-  posShiftsClosed          PosShift[]          @relation("PosShiftCloser")
-  posShiftsApproved        PosShift[]          @relation("PosShiftApprover")
-  posCashMovements         PosCashMovement[]
-  posSalesSold             PosSale[]           @relation("PosSaleSeller")
-  posSalesVoided           PosSale[]           @relation("PosSaleVoider")
-  posHolds                 PosHold[]
-  posRefunds               PosRefund[]
-  posStockMovements        PosStockMovement[]
-  posStockCounts           PosStockCount[]
-  createdAt             DateTime         @default(now()) @map("created_at")
-  updatedAt             DateTime         @updatedAt @map("updated_at")
+  id                        String                 @id @default(uuid()) @db.Uuid
+  authUserId                String?                @unique @map("auth_user_id") @db.Uuid
+  email                     String?                @unique
+  username                  String?                @unique
+  name                      String
+  employeeCode              String?                @unique @map("employee_code")
+  firstName                 String?                @map("first_name")
+  lastName                  String?                @map("last_name")
+  nickname                  String?
+  photoUrl                  String?                @map("photo_url")
+  birthDate                 DateTime?              @map("birth_date") @db.Date
+  nationalId                String?                @map("national_id")
+  phone                     String?                @unique
+  address                   String?
+  emergencyContactName      String?                @map("emergency_contact_name")
+  emergencyContactPhone     String?                @map("emergency_contact_phone")
+  employmentType            EmploymentType         @default(MONTHLY) @map("employment_type")
+  departmentId              String?                @map("department_id") @db.Uuid
+  department                Department?            @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  positionId                String?                @map("position_id") @db.Uuid
+  position                  Position?              @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  managerEmployeeId         String?                @map("manager_employee_id") @db.Uuid
+  manager                   Employee?              @relation("EmployeeManager", fields: [managerEmployeeId], references: [id], onDelete: SetNull)
+  directReports             Employee[]             @relation("EmployeeManager")
+  branchName                String?                @map("branch_name")
+  hiredAt                   DateTime?              @map("hired_at") @db.Date
+  probationEndsAt           DateTime?              @map("probation_ends_at") @db.Date
+  endedAt                   DateTime?              @map("ended_at") @db.Date
+  hrStatus                  EmployeeHrStatus       @default(ACTIVE) @map("hr_status")
+  bankAccountName           String?                @map("bank_account_name")
+  bankAccountNumber         String?                @map("bank_account_number")
+  bankName                  String?                @map("bank_name")
+  promptPay                 String?                @map("prompt_pay")
+  notes                     String?
+  roleId                    String?                @map("role_id") @db.Uuid
+  roleRecord                Role?                  @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  hourlyRate                Decimal?               @map("hourly_rate") @db.Decimal(10, 2)
+  otHourlyRate              Decimal?               @map("ot_hourly_rate") @db.Decimal(10, 2)
+  payDayOfMonth             Int?                   @map("pay_day_of_month")
+  defaultShiftTemplateId    String?                @map("default_shift_template_id") @db.Uuid
+  defaultShiftTemplate      ShiftTemplate?         @relation("EmployeeDefaultShift", fields: [defaultShiftTemplateId], references: [id], onDelete: SetNull)
+  isActive                  Boolean                @default(true) @map("is_active")
+  mustResetPassword         Boolean                @default(false) @map("must_reset_password")
+  shifts                    WorkShift[]
+  workSchedules             WorkSchedule[]
+  attendanceRecords         AttendanceRecord[]
+  attendanceEvents          AttendanceEvent[]
+  attendanceAdjustments     AttendanceAdjustment[] @relation("AdjustmentRequester")
+  attendanceReviews         AttendanceAdjustment[] @relation("AdjustmentReviewer")
+  attendanceLocks           AttendancePeriod[]     @relation("AttendancePeriodLocker")
+  leaveBalances             LeaveBalance[]
+  leaveRequests             LeaveRequest[]         @relation("LeaveRequestEmployee")
+  leaveRequestsCreated      LeaveRequest[]         @relation("LeaveRequestRequester")
+  leaveReviews              LeaveRequest[]         @relation("LeaveRequestReviewer")
+  compensations             EmployeeCompensation[]
+  payrollEntries            PayrollEntry[]
+  payrollAdjustments        PayrollAdjustment[]    @relation("PayrollAdjustmentEmployee")
+  payrollAdjustmentsCreated PayrollAdjustment[]    @relation("PayrollAdjustmentCreator")
+  payrollPeriodsCalc        PayrollPeriod[]        @relation("PayrollPeriodCalculator")
+  payrollPeriodsReview      PayrollPeriod[]        @relation("PayrollPeriodReviewer")
+  payrollPeriodsApprove     PayrollPeriod[]        @relation("PayrollPeriodApprover")
+  payrollPeriodsPaid        PayrollPeriod[]        @relation("PayrollPeriodPayer")
+  payslips                  PayrollPayslip[]
+  documents                 EmployeeDocument[]
+  documentsUploaded         EmployeeDocument[]     @relation("DocumentUploader")
+  auditLogs                 AuditLog[]
+  promptPayAccountsCreated  PromptPayAccount[]     @relation("PromptPayAccountCreator")
+  promptPayAccountsUpdated  PromptPayAccount[]     @relation("PromptPayAccountUpdater")
+  paymentsCreated           Payment[]              @relation("PaymentCreator")
+  paymentsVerified          Payment[]              @relation("PaymentVerifier")
+  paymentStatusActions      PaymentStatusHistory[] @relation("PaymentStatusActor")
+  paymentRefundsCreated     PaymentRefund[]        @relation("PaymentRefundCreator")
+  roomInspectionsCompleted  RoomInspection[]       @relation("RoomInspectionCompleter")
+  posShiftsOpened           PosShift[]             @relation("PosShiftOpener")
+  posShiftsClosed           PosShift[]             @relation("PosShiftCloser")
+  posShiftsApproved         PosShift[]             @relation("PosShiftApprover")
+  posCashMovements          PosCashMovement[]
+  posSalesSold              PosSale[]              @relation("PosSaleSeller")
+  posSalesVoided            PosSale[]              @relation("PosSaleVoider")
+  posHolds                  PosHold[]
+  posRefunds                PosRefund[]
+  posStockMovements         PosStockMovement[]
+  posStockCounts            PosStockCount[]
+  createdAt                 DateTime               @default(now()) @map("created_at")
+  updatedAt                 DateTime               @updatedAt @map("updated_at")
 
   @@index([roleId])
   @@index([isActive])
@@ -671,21 +672,21 @@ model Employee {
 }
 
 model ShiftTemplate {
-  id                   String         @id @default(uuid()) @db.Uuid
-  code                 String?        @unique
-  name                 String
-  startMinutes         Int            @map("start_minutes")
-  endMinutes           Int            @map("end_minutes")
-  breakMinutes         Int            @default(0) @map("break_minutes")
-  lateGraceMinutes     Int            @default(0) @map("late_grace_minutes")
-  earlyLeaveGraceMinutes Int          @default(0) @map("early_leave_grace_minutes")
-  requiredHeadcount    Int            @default(1) @map("required_headcount")
-  color                String?
-  isActive             Boolean        @default(true) @map("is_active")
-  schedules            WorkSchedule[]
-  defaultForEmployees  Employee[]     @relation("EmployeeDefaultShift")
-  createdAt            DateTime       @default(now()) @map("created_at")
-  updatedAt            DateTime       @updatedAt @map("updated_at")
+  id                     String         @id @default(uuid()) @db.Uuid
+  code                   String?        @unique
+  name                   String
+  startMinutes           Int            @map("start_minutes")
+  endMinutes             Int            @map("end_minutes")
+  breakMinutes           Int            @default(0) @map("break_minutes")
+  lateGraceMinutes       Int            @default(0) @map("late_grace_minutes")
+  earlyLeaveGraceMinutes Int            @default(0) @map("early_leave_grace_minutes")
+  requiredHeadcount      Int            @default(1) @map("required_headcount")
+  color                  String?
+  isActive               Boolean        @default(true) @map("is_active")
+  schedules              WorkSchedule[]
+  defaultForEmployees    Employee[]     @relation("EmployeeDefaultShift")
+  createdAt              DateTime       @default(now()) @map("created_at")
+  updatedAt              DateTime       @updatedAt @map("updated_at")
 
   @@index([isActive, name])
   @@map("shift_templates")
@@ -697,20 +698,20 @@ enum WorkScheduleStatus {
 }
 
 model WorkSchedule {
-  id              String             @id @default(uuid()) @db.Uuid
-  employeeId      String             @map("employee_id") @db.Uuid
-  shiftTemplateId String?            @map("shift_template_id") @db.Uuid
-  workDate        DateTime           @map("work_date") @db.Date
-  startsAt        DateTime           @map("starts_at")
-  endsAt          DateTime           @map("ends_at")
-  isDayOff        Boolean            @default(false) @map("is_day_off")
-  notes           String?
-  status          WorkScheduleStatus @default(ASSIGNED)
-  employee        Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  shiftTemplate   ShiftTemplate?     @relation(fields: [shiftTemplateId], references: [id], onDelete: SetNull)
+  id                String             @id @default(uuid()) @db.Uuid
+  employeeId        String             @map("employee_id") @db.Uuid
+  shiftTemplateId   String?            @map("shift_template_id") @db.Uuid
+  workDate          DateTime           @map("work_date") @db.Date
+  startsAt          DateTime           @map("starts_at")
+  endsAt            DateTime           @map("ends_at")
+  isDayOff          Boolean            @default(false) @map("is_day_off")
+  notes             String?
+  status            WorkScheduleStatus @default(ASSIGNED)
+  employee          Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  shiftTemplate     ShiftTemplate?     @relation(fields: [shiftTemplateId], references: [id], onDelete: SetNull)
   attendanceRecords AttendanceRecord[]
-  createdAt       DateTime           @default(now()) @map("created_at")
-  updatedAt       DateTime           @updatedAt @map("updated_at")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
 
   @@index([employeeId, workDate])
   @@index([workDate, status])
@@ -780,31 +781,31 @@ enum AttendanceAdjustmentStatus {
 }
 
 model AttendanceRecord {
-  id                 String             @id @default(uuid()) @db.Uuid
-  employeeId         String             @map("employee_id") @db.Uuid
-  workScheduleId     String?            @map("work_schedule_id") @db.Uuid
-  workDate           DateTime           @map("work_date") @db.Date
-  clockIn            DateTime?          @map("clock_in")
-  clockOut           DateTime?          @map("clock_out")
-  breakStart         DateTime?          @map("break_start")
-  breakEnd           DateTime?          @map("break_end")
-  scheduledStart     DateTime?          @map("scheduled_start")
-  scheduledEnd       DateTime?          @map("scheduled_end")
-  workedMinutes      Int                @default(0) @map("worked_minutes")
-  breakMinutes       Int                @default(0) @map("break_minutes")
-  lateMinutes        Int                @default(0) @map("late_minutes")
-  earlyLeaveMinutes  Int                @default(0) @map("early_leave_minutes")
-  otMinutes          Int                @default(0) @map("ot_minutes")
-  otApprovedMinutes  Int                @default(0) @map("ot_approved_minutes")
-  isHolidayWork      Boolean            @default(false) @map("is_holiday_work")
-  status             AttendanceStatus   @default(OPEN)
-  notes              String?
-  employee           Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  workSchedule       WorkSchedule?      @relation(fields: [workScheduleId], references: [id], onDelete: SetNull)
-  adjustments        AttendanceAdjustment[]
-  events             AttendanceEvent[]
-  createdAt          DateTime           @default(now()) @map("created_at")
-  updatedAt          DateTime           @updatedAt @map("updated_at")
+  id                String                 @id @default(uuid()) @db.Uuid
+  employeeId        String                 @map("employee_id") @db.Uuid
+  workScheduleId    String?                @map("work_schedule_id") @db.Uuid
+  workDate          DateTime               @map("work_date") @db.Date
+  clockIn           DateTime?              @map("clock_in")
+  clockOut          DateTime?              @map("clock_out")
+  breakStart        DateTime?              @map("break_start")
+  breakEnd          DateTime?              @map("break_end")
+  scheduledStart    DateTime?              @map("scheduled_start")
+  scheduledEnd      DateTime?              @map("scheduled_end")
+  workedMinutes     Int                    @default(0) @map("worked_minutes")
+  breakMinutes      Int                    @default(0) @map("break_minutes")
+  lateMinutes       Int                    @default(0) @map("late_minutes")
+  earlyLeaveMinutes Int                    @default(0) @map("early_leave_minutes")
+  otMinutes         Int                    @default(0) @map("ot_minutes")
+  otApprovedMinutes Int                    @default(0) @map("ot_approved_minutes")
+  isHolidayWork     Boolean                @default(false) @map("is_holiday_work")
+  status            AttendanceStatus       @default(OPEN)
+  notes             String?
+  employee          Employee               @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  workSchedule      WorkSchedule?          @relation(fields: [workScheduleId], references: [id], onDelete: SetNull)
+  adjustments       AttendanceAdjustment[]
+  events            AttendanceEvent[]
+  createdAt         DateTime               @default(now()) @map("created_at")
+  updatedAt         DateTime               @updatedAt @map("updated_at")
 
   @@unique([employeeId, workDate, workScheduleId])
   @@index([workDate, status])
@@ -813,25 +814,25 @@ model AttendanceRecord {
 }
 
 model AttendanceAdjustment {
-  id                   String                      @id @default(uuid()) @db.Uuid
-  attendanceRecordId   String                      @map("attendance_record_id") @db.Uuid
-  type                 AttendanceAdjustmentType
-  status               AttendanceAdjustmentStatus  @default(PENDING)
-  reason               String
-  proposedClockIn      DateTime?                   @map("proposed_clock_in")
-  proposedClockOut     DateTime?                   @map("proposed_clock_out")
-  proposedBreakStart   DateTime?                   @map("proposed_break_start")
-  proposedBreakEnd     DateTime?                   @map("proposed_break_end")
-  proposedOtMinutes    Int?                        @map("proposed_ot_minutes")
-  requestedById        String                      @map("requested_by_id") @db.Uuid
-  reviewedById         String?                     @map("reviewed_by_id") @db.Uuid
-  reviewedAt           DateTime?                   @map("reviewed_at")
-  reviewNote           String?                     @map("review_note")
-  attendanceRecord     AttendanceRecord            @relation(fields: [attendanceRecordId], references: [id], onDelete: Cascade)
-  requestedBy          Employee                    @relation("AdjustmentRequester", fields: [requestedById], references: [id], onDelete: Cascade)
-  reviewedBy           Employee?                   @relation("AdjustmentReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
-  createdAt            DateTime                    @default(now()) @map("created_at")
-  updatedAt            DateTime                    @updatedAt @map("updated_at")
+  id                 String                     @id @default(uuid()) @db.Uuid
+  attendanceRecordId String                     @map("attendance_record_id") @db.Uuid
+  type               AttendanceAdjustmentType
+  status             AttendanceAdjustmentStatus @default(PENDING)
+  reason             String
+  proposedClockIn    DateTime?                  @map("proposed_clock_in")
+  proposedClockOut   DateTime?                  @map("proposed_clock_out")
+  proposedBreakStart DateTime?                  @map("proposed_break_start")
+  proposedBreakEnd   DateTime?                  @map("proposed_break_end")
+  proposedOtMinutes  Int?                       @map("proposed_ot_minutes")
+  requestedById      String                     @map("requested_by_id") @db.Uuid
+  reviewedById       String?                    @map("reviewed_by_id") @db.Uuid
+  reviewedAt         DateTime?                  @map("reviewed_at")
+  reviewNote         String?                    @map("review_note")
+  attendanceRecord   AttendanceRecord           @relation(fields: [attendanceRecordId], references: [id], onDelete: Cascade)
+  requestedBy        Employee                   @relation("AdjustmentRequester", fields: [requestedById], references: [id], onDelete: Cascade)
+  reviewedBy         Employee?                  @relation("AdjustmentReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  createdAt          DateTime                   @default(now()) @map("created_at")
+  updatedAt          DateTime                   @updatedAt @map("updated_at")
 
   @@index([attendanceRecordId, status])
   @@index([status, createdAt])
@@ -839,14 +840,14 @@ model AttendanceAdjustment {
 }
 
 model AttendancePeriod {
-  id               String    @id @default(uuid()) @db.Uuid
-  periodStart      DateTime  @map("period_start") @db.Date
-  periodEnd        DateTime  @map("period_end") @db.Date
-  lockedAt         DateTime? @map("locked_at")
-  lockedById       String?   @map("locked_by_id") @db.Uuid
-  lockedBy         Employee? @relation("AttendancePeriodLocker", fields: [lockedById], references: [id], onDelete: SetNull)
-  createdAt        DateTime  @default(now()) @map("created_at")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
+  id          String    @id @default(uuid()) @db.Uuid
+  periodStart DateTime  @map("period_start") @db.Date
+  periodEnd   DateTime  @map("period_end") @db.Date
+  lockedAt    DateTime? @map("locked_at")
+  lockedById  String?   @map("locked_by_id") @db.Uuid
+  lockedBy    Employee? @relation("AttendancePeriodLocker", fields: [lockedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
 
   @@unique([periodStart, periodEnd])
   @@index([periodStart, periodEnd])
@@ -918,27 +919,27 @@ model LeaveBalance {
 }
 
 model LeaveRequest {
-  id               String             @id @default(uuid()) @db.Uuid
-  employeeId       String             @map("employee_id") @db.Uuid
-  leaveTypeId      String             @map("leave_type_id") @db.Uuid
-  startDate        DateTime           @map("start_date") @db.Date
-  endDate          DateTime           @map("end_date") @db.Date
-  duration         LeaveDuration      @default(FULL_DAY)
-  daysRequested    Decimal            @map("days_requested") @db.Decimal(8, 2)
-  reason           String?
-  attachmentUrl    String?            @map("attachment_url")
-  attachmentName   String?            @map("attachment_name")
-  status           LeaveRequestStatus @default(PENDING)
-  requestedById    String             @map("requested_by_id") @db.Uuid
-  reviewedById     String?            @map("reviewed_by_id") @db.Uuid
-  reviewedAt       DateTime?          @map("reviewed_at")
-  reviewNote       String?            @map("review_note")
-  employee         Employee           @relation("LeaveRequestEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
-  leaveType        LeaveType          @relation(fields: [leaveTypeId], references: [id], onDelete: Restrict)
-  requestedBy      Employee           @relation("LeaveRequestRequester", fields: [requestedById], references: [id], onDelete: Cascade)
-  reviewedBy       Employee?          @relation("LeaveRequestReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
-  createdAt        DateTime           @default(now()) @map("created_at")
-  updatedAt        DateTime           @updatedAt @map("updated_at")
+  id             String             @id @default(uuid()) @db.Uuid
+  employeeId     String             @map("employee_id") @db.Uuid
+  leaveTypeId    String             @map("leave_type_id") @db.Uuid
+  startDate      DateTime           @map("start_date") @db.Date
+  endDate        DateTime           @map("end_date") @db.Date
+  duration       LeaveDuration      @default(FULL_DAY)
+  daysRequested  Decimal            @map("days_requested") @db.Decimal(8, 2)
+  reason         String?
+  attachmentUrl  String?            @map("attachment_url")
+  attachmentName String?            @map("attachment_name")
+  status         LeaveRequestStatus @default(PENDING)
+  requestedById  String             @map("requested_by_id") @db.Uuid
+  reviewedById   String?            @map("reviewed_by_id") @db.Uuid
+  reviewedAt     DateTime?          @map("reviewed_at")
+  reviewNote     String?            @map("review_note")
+  employee       Employee           @relation("LeaveRequestEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType      LeaveType          @relation(fields: [leaveTypeId], references: [id], onDelete: Restrict)
+  requestedBy    Employee           @relation("LeaveRequestRequester", fields: [requestedById], references: [id], onDelete: Cascade)
+  reviewedBy     Employee?          @relation("LeaveRequestReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
 
   @@index([employeeId, startDate, endDate])
   @@index([status, createdAt])
@@ -998,31 +999,31 @@ enum PayrollPeriodStatus {
 }
 
 model PayrollPeriod {
-  id            String              @id @default(uuid()) @db.Uuid
-  name          String
-  periodType    PayrollPeriodType   @map("period_type")
-  periodStart   DateTime            @map("period_start") @db.Date
-  periodEnd     DateTime            @map("period_end") @db.Date
-  status        PayrollPeriodStatus @default(DRAFT)
-  lockedAt      DateTime?           @map("locked_at")
-  calculatedAt  DateTime?           @map("calculated_at")
-  reviewedAt    DateTime?           @map("reviewed_at")
-  approvedAt    DateTime?           @map("approved_at")
-  paidAt        DateTime?           @map("paid_at")
-  calculatedById String?            @map("calculated_by_id") @db.Uuid
-  reviewedById  String?             @map("reviewed_by_id") @db.Uuid
-  approvedById  String?             @map("approved_by_id") @db.Uuid
-  paidById      String?             @map("paid_by_id") @db.Uuid
-  notes         String?
-  calculatedBy  Employee?           @relation("PayrollPeriodCalculator", fields: [calculatedById], references: [id], onDelete: SetNull)
-  reviewedBy    Employee?           @relation("PayrollPeriodReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
-  approvedBy    Employee?           @relation("PayrollPeriodApprover", fields: [approvedById], references: [id], onDelete: SetNull)
-  paidBy        Employee?           @relation("PayrollPeriodPayer", fields: [paidById], references: [id], onDelete: SetNull)
-  entries       PayrollEntry[]
-  adjustments   PayrollAdjustment[]
-  payslips      PayrollPayslip[]
-  createdAt     DateTime            @default(now()) @map("created_at")
-  updatedAt     DateTime            @updatedAt @map("updated_at")
+  id             String              @id @default(uuid()) @db.Uuid
+  name           String
+  periodType     PayrollPeriodType   @map("period_type")
+  periodStart    DateTime            @map("period_start") @db.Date
+  periodEnd      DateTime            @map("period_end") @db.Date
+  status         PayrollPeriodStatus @default(DRAFT)
+  lockedAt       DateTime?           @map("locked_at")
+  calculatedAt   DateTime?           @map("calculated_at")
+  reviewedAt     DateTime?           @map("reviewed_at")
+  approvedAt     DateTime?           @map("approved_at")
+  paidAt         DateTime?           @map("paid_at")
+  calculatedById String?             @map("calculated_by_id") @db.Uuid
+  reviewedById   String?             @map("reviewed_by_id") @db.Uuid
+  approvedById   String?             @map("approved_by_id") @db.Uuid
+  paidById       String?             @map("paid_by_id") @db.Uuid
+  notes          String?
+  calculatedBy   Employee?           @relation("PayrollPeriodCalculator", fields: [calculatedById], references: [id], onDelete: SetNull)
+  reviewedBy     Employee?           @relation("PayrollPeriodReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  approvedBy     Employee?           @relation("PayrollPeriodApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  paidBy         Employee?           @relation("PayrollPeriodPayer", fields: [paidById], references: [id], onDelete: SetNull)
+  entries        PayrollEntry[]
+  adjustments    PayrollAdjustment[]
+  payslips       PayrollPayslip[]
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
 
   @@index([periodStart, periodEnd])
   @@index([status, periodStart])
@@ -1037,34 +1038,34 @@ enum PayrollAdjustmentType {
 }
 
 model PayrollEntry {
-  id                    String         @id @default(uuid()) @db.Uuid
-  periodId              String         @map("period_id") @db.Uuid
-  employeeId            String         @map("employee_id") @db.Uuid
-  employmentType        EmploymentType @map("employment_type")
-  basePay               Decimal        @default(0) @map("base_pay") @db.Decimal(12, 2)
-  otPay                 Decimal        @default(0) @map("ot_pay") @db.Decimal(12, 2)
-  holidayPay            Decimal        @default(0) @map("holiday_pay") @db.Decimal(12, 2)
-  allowances            Decimal        @default(0) @db.Decimal(12, 2)
-  bonuses               Decimal        @default(0) @db.Decimal(12, 2)
-  deductions            Decimal        @default(0) @db.Decimal(12, 2)
-  advances              Decimal        @default(0) @db.Decimal(12, 2)
-  unpaidLeaveDeduction  Decimal        @default(0) @map("unpaid_leave_deduction") @db.Decimal(12, 2)
-  absenceDeduction      Decimal        @default(0) @map("absence_deduction") @db.Decimal(12, 2)
-  lateDeduction         Decimal        @default(0) @map("late_deduction") @db.Decimal(12, 2)
-  grossPay              Decimal        @default(0) @map("gross_pay") @db.Decimal(12, 2)
-  netPay                Decimal        @default(0) @map("net_pay") @db.Decimal(12, 2)
-  workedMinutes         Int            @default(0) @map("worked_minutes")
-  otMinutes             Int            @default(0) @map("ot_minutes")
-  absentDays            Decimal        @default(0) @map("absent_days") @db.Decimal(8, 2)
-  unpaidLeaveDays       Decimal        @default(0) @map("unpaid_leave_days") @db.Decimal(8, 2)
-  lateMinutes           Int            @default(0) @map("late_minutes")
-  notes                 String?
-  period                PayrollPeriod  @relation(fields: [periodId], references: [id], onDelete: Cascade)
-  employee              Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  adjustments           PayrollAdjustment[]
-  payslip               PayrollPayslip?
-  createdAt             DateTime       @default(now()) @map("created_at")
-  updatedAt             DateTime       @updatedAt @map("updated_at")
+  id                   String              @id @default(uuid()) @db.Uuid
+  periodId             String              @map("period_id") @db.Uuid
+  employeeId           String              @map("employee_id") @db.Uuid
+  employmentType       EmploymentType      @map("employment_type")
+  basePay              Decimal             @default(0) @map("base_pay") @db.Decimal(12, 2)
+  otPay                Decimal             @default(0) @map("ot_pay") @db.Decimal(12, 2)
+  holidayPay           Decimal             @default(0) @map("holiday_pay") @db.Decimal(12, 2)
+  allowances           Decimal             @default(0) @db.Decimal(12, 2)
+  bonuses              Decimal             @default(0) @db.Decimal(12, 2)
+  deductions           Decimal             @default(0) @db.Decimal(12, 2)
+  advances             Decimal             @default(0) @db.Decimal(12, 2)
+  unpaidLeaveDeduction Decimal             @default(0) @map("unpaid_leave_deduction") @db.Decimal(12, 2)
+  absenceDeduction     Decimal             @default(0) @map("absence_deduction") @db.Decimal(12, 2)
+  lateDeduction        Decimal             @default(0) @map("late_deduction") @db.Decimal(12, 2)
+  grossPay             Decimal             @default(0) @map("gross_pay") @db.Decimal(12, 2)
+  netPay               Decimal             @default(0) @map("net_pay") @db.Decimal(12, 2)
+  workedMinutes        Int                 @default(0) @map("worked_minutes")
+  otMinutes            Int                 @default(0) @map("ot_minutes")
+  absentDays           Decimal             @default(0) @map("absent_days") @db.Decimal(8, 2)
+  unpaidLeaveDays      Decimal             @default(0) @map("unpaid_leave_days") @db.Decimal(8, 2)
+  lateMinutes          Int                 @default(0) @map("late_minutes")
+  notes                String?
+  period               PayrollPeriod       @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  employee             Employee            @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  adjustments          PayrollAdjustment[]
+  payslip              PayrollPayslip?
+  createdAt            DateTime            @default(now()) @map("created_at")
+  updatedAt            DateTime            @updatedAt @map("updated_at")
 
   @@unique([periodId, employeeId])
   @@index([employeeId, periodId])
@@ -1072,20 +1073,20 @@ model PayrollEntry {
 }
 
 model PayrollAdjustment {
-  id          String                 @id @default(uuid()) @db.Uuid
-  periodId    String                 @map("period_id") @db.Uuid
-  entryId     String?                @map("entry_id") @db.Uuid
-  employeeId  String                 @map("employee_id") @db.Uuid
+  id          String                @id @default(uuid()) @db.Uuid
+  periodId    String                @map("period_id") @db.Uuid
+  entryId     String?               @map("entry_id") @db.Uuid
+  employeeId  String                @map("employee_id") @db.Uuid
   type        PayrollAdjustmentType
-  amount      Decimal                @db.Decimal(12, 2)
+  amount      Decimal               @db.Decimal(12, 2)
   reason      String
-  createdById String                 @map("created_by_id") @db.Uuid
-  period      PayrollPeriod          @relation(fields: [periodId], references: [id], onDelete: Cascade)
-  entry       PayrollEntry?          @relation(fields: [entryId], references: [id], onDelete: SetNull)
-  employee    Employee               @relation("PayrollAdjustmentEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
-  createdBy   Employee               @relation("PayrollAdjustmentCreator", fields: [createdById], references: [id], onDelete: Cascade)
-  createdAt   DateTime               @default(now()) @map("created_at")
-  updatedAt   DateTime               @updatedAt @map("updated_at")
+  createdById String                @map("created_by_id") @db.Uuid
+  period      PayrollPeriod         @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  entry       PayrollEntry?         @relation(fields: [entryId], references: [id], onDelete: SetNull)
+  employee    Employee              @relation("PayrollAdjustmentEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
+  createdBy   Employee              @relation("PayrollAdjustmentCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt   DateTime              @default(now()) @map("created_at")
+  updatedAt   DateTime              @updatedAt @map("updated_at")
 
   @@index([periodId, employeeId])
   @@index([entryId])
@@ -1246,26 +1247,26 @@ model PosCategory {
 }
 
 model PosProduct {
-  id               String             @id @default(uuid()) @db.Uuid
-  sku              String             @unique
-  barcode          String?            @unique
-  name             String
-  categoryId       String             @map("category_id") @db.Uuid
-  category         PosCategory        @relation(fields: [categoryId], references: [id])
-  unit             String             @default("ชิ้น")
-  costPrice        Decimal            @map("cost_price") @db.Decimal(12, 2)
-  sellPrice        Decimal            @map("sell_price") @db.Decimal(12, 2)
-  quantityOnHand   Decimal            @default(0) @map("quantity_on_hand") @db.Decimal(12, 3)
-  lowStockThreshold Decimal           @default(0) @map("low_stock_threshold") @db.Decimal(12, 3)
-  imageUrl         String?            @map("image_url")
-  isActive         Boolean            @default(true) @map("is_active")
-  stockMovements   PosStockMovement[]
-  stockCountItems  PosStockCountItem[]
-  saleItems        PosSaleItem[]
-  holdItems        PosHoldItem[]
-  refundItems      PosRefundItem[]
-  createdAt        DateTime           @default(now()) @map("created_at")
-  updatedAt        DateTime           @updatedAt @map("updated_at")
+  id                String              @id @default(uuid()) @db.Uuid
+  sku               String              @unique
+  barcode           String?             @unique
+  name              String
+  categoryId        String              @map("category_id") @db.Uuid
+  category          PosCategory         @relation(fields: [categoryId], references: [id])
+  unit              String              @default("ชิ้น")
+  costPrice         Decimal             @map("cost_price") @db.Decimal(12, 2)
+  sellPrice         Decimal             @map("sell_price") @db.Decimal(12, 2)
+  quantityOnHand    Decimal             @default(0) @map("quantity_on_hand") @db.Decimal(12, 3)
+  lowStockThreshold Decimal             @default(0) @map("low_stock_threshold") @db.Decimal(12, 3)
+  imageUrl          String?             @map("image_url")
+  isActive          Boolean             @default(true) @map("is_active")
+  stockMovements    PosStockMovement[]
+  stockCountItems   PosStockCountItem[]
+  saleItems         PosSaleItem[]
+  holdItems         PosHoldItem[]
+  refundItems       PosRefundItem[]
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
 
   @@index([categoryId, isActive])
   @@index([name])
@@ -1297,53 +1298,53 @@ model PosStockMovement {
 }
 
 model PosStockCount {
-  id              String             @id @default(uuid()) @db.Uuid
-  documentNumber  String             @unique @map("document_number")
+  id              String              @id @default(uuid()) @db.Uuid
+  documentNumber  String              @unique @map("document_number")
   note            String?
-  countedAt       DateTime           @default(now()) @map("counted_at")
-  actorEmployeeId String             @map("actor_employee_id") @db.Uuid
-  actor           Employee           @relation(fields: [actorEmployeeId], references: [id])
+  countedAt       DateTime            @default(now()) @map("counted_at")
+  actorEmployeeId String              @map("actor_employee_id") @db.Uuid
+  actor           Employee            @relation(fields: [actorEmployeeId], references: [id])
   items           PosStockCountItem[]
-  createdAt       DateTime           @default(now()) @map("created_at")
+  createdAt       DateTime            @default(now()) @map("created_at")
 
   @@map("pos_stock_counts")
 }
 
 model PosStockCountItem {
-  id             String       @id @default(uuid()) @db.Uuid
-  countId        String       @map("count_id") @db.Uuid
-  count          PosStockCount @relation(fields: [countId], references: [id], onDelete: Cascade)
-  productId      String       @map("product_id") @db.Uuid
-  product        PosProduct   @relation(fields: [productId], references: [id])
-  systemQuantity Decimal      @map("system_quantity") @db.Decimal(12, 3)
-  countedQuantity Decimal     @map("counted_quantity") @db.Decimal(12, 3)
-  variance       Decimal      @db.Decimal(12, 3)
+  id              String        @id @default(uuid()) @db.Uuid
+  countId         String        @map("count_id") @db.Uuid
+  count           PosStockCount @relation(fields: [countId], references: [id], onDelete: Cascade)
+  productId       String        @map("product_id") @db.Uuid
+  product         PosProduct    @relation(fields: [productId], references: [id])
+  systemQuantity  Decimal       @map("system_quantity") @db.Decimal(12, 3)
+  countedQuantity Decimal       @map("counted_quantity") @db.Decimal(12, 3)
+  variance        Decimal       @db.Decimal(12, 3)
 
   @@unique([countId, productId])
   @@map("pos_stock_count_items")
 }
 
 model PosShift {
-  id                 String             @id @default(uuid()) @db.Uuid
-  status             PosShiftStatus     @default(OPEN)
-  openingFloat       Decimal            @map("opening_float") @db.Decimal(12, 2)
-  closingCashCounted Decimal?           @map("closing_cash_counted") @db.Decimal(12, 2)
-  expectedCash       Decimal?           @map("expected_cash") @db.Decimal(12, 2)
-  cashVariance       Decimal?           @map("cash_variance") @db.Decimal(12, 2)
-  openedById         String             @map("opened_by_id") @db.Uuid
-  openedBy           Employee           @relation("PosShiftOpener", fields: [openedById], references: [id])
-  closedById         String?            @map("closed_by_id") @db.Uuid
-  closedBy           Employee?          @relation("PosShiftCloser", fields: [closedById], references: [id])
-  approvedById       String?            @map("approved_by_id") @db.Uuid
-  approvedBy         Employee?          @relation("PosShiftApprover", fields: [approvedById], references: [id])
-  openedAt           DateTime           @default(now()) @map("opened_at")
-  closedAt           DateTime?          @map("closed_at")
-  approvedAt         DateTime?          @map("approved_at")
+  id                 String            @id @default(uuid()) @db.Uuid
+  status             PosShiftStatus    @default(OPEN)
+  openingFloat       Decimal           @map("opening_float") @db.Decimal(12, 2)
+  closingCashCounted Decimal?          @map("closing_cash_counted") @db.Decimal(12, 2)
+  expectedCash       Decimal?          @map("expected_cash") @db.Decimal(12, 2)
+  cashVariance       Decimal?          @map("cash_variance") @db.Decimal(12, 2)
+  openedById         String            @map("opened_by_id") @db.Uuid
+  openedBy           Employee          @relation("PosShiftOpener", fields: [openedById], references: [id])
+  closedById         String?           @map("closed_by_id") @db.Uuid
+  closedBy           Employee?         @relation("PosShiftCloser", fields: [closedById], references: [id])
+  approvedById       String?           @map("approved_by_id") @db.Uuid
+  approvedBy         Employee?         @relation("PosShiftApprover", fields: [approvedById], references: [id])
+  openedAt           DateTime          @default(now()) @map("opened_at")
+  closedAt           DateTime?         @map("closed_at")
+  approvedAt         DateTime?         @map("approved_at")
   note               String?
   cashMovements      PosCashMovement[]
   sales              PosSale[]
-  createdAt          DateTime           @default(now()) @map("created_at")
-  updatedAt          DateTime           @updatedAt @map("updated_at")
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
 
   @@index([status, openedAt])
   @@index([openedById, status])
@@ -1366,35 +1367,35 @@ model PosCashMovement {
 }
 
 model PosSale {
-  id                 String          @id @default(uuid()) @db.Uuid
-  receiptNumber      String          @unique @map("receipt_number")
-  idempotencyKey     String          @unique @map("idempotency_key")
-  status             PosSaleStatus   @default(COMPLETED)
-  shiftId            String          @map("shift_id") @db.Uuid
-  shift              PosShift        @relation(fields: [shiftId], references: [id])
-  soldById           String          @map("sold_by_id") @db.Uuid
-  soldBy             Employee        @relation("PosSaleSeller", fields: [soldById], references: [id])
-  voidedById         String?         @map("voided_by_id") @db.Uuid
-  voidedBy           Employee?       @relation("PosSaleVoider", fields: [voidedById], references: [id])
-  bookingId          String?         @map("booking_id") @db.Uuid
-  booking            Booking?        @relation(fields: [bookingId], references: [id], onDelete: SetNull)
-  subtotal           Decimal         @db.Decimal(12, 2)
-  itemDiscountTotal  Decimal         @default(0) @map("item_discount_total") @db.Decimal(12, 2)
-  billDiscount       Decimal         @default(0) @map("bill_discount") @db.Decimal(12, 2)
-  netTotal           Decimal         @map("net_total") @db.Decimal(12, 2)
-  costTotal          Decimal         @default(0) @map("cost_total") @db.Decimal(12, 2)
-  cashReceived       Decimal?        @map("cash_received") @db.Decimal(12, 2)
-  changeGiven        Decimal?        @map("change_given") @db.Decimal(12, 2)
-  note               String?
-  voidReason         String?         @map("void_reason")
-  soldAt             DateTime        @default(now()) @map("sold_at")
-  voidedAt           DateTime?       @map("voided_at")
-  items              PosSaleItem[]
-  payments           PosPayment[]
-  refunds            PosRefund[]
-  accountingEntries  PosAccountingEntry[]
-  createdAt          DateTime        @default(now()) @map("created_at")
-  updatedAt          DateTime        @updatedAt @map("updated_at")
+  id                String               @id @default(uuid()) @db.Uuid
+  receiptNumber     String               @unique @map("receipt_number")
+  idempotencyKey    String               @unique @map("idempotency_key")
+  status            PosSaleStatus        @default(COMPLETED)
+  shiftId           String               @map("shift_id") @db.Uuid
+  shift             PosShift             @relation(fields: [shiftId], references: [id])
+  soldById          String               @map("sold_by_id") @db.Uuid
+  soldBy            Employee             @relation("PosSaleSeller", fields: [soldById], references: [id])
+  voidedById        String?              @map("voided_by_id") @db.Uuid
+  voidedBy          Employee?            @relation("PosSaleVoider", fields: [voidedById], references: [id])
+  bookingId         String?              @map("booking_id") @db.Uuid
+  booking           Booking?             @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  subtotal          Decimal              @db.Decimal(12, 2)
+  itemDiscountTotal Decimal              @default(0) @map("item_discount_total") @db.Decimal(12, 2)
+  billDiscount      Decimal              @default(0) @map("bill_discount") @db.Decimal(12, 2)
+  netTotal          Decimal              @map("net_total") @db.Decimal(12, 2)
+  costTotal         Decimal              @default(0) @map("cost_total") @db.Decimal(12, 2)
+  cashReceived      Decimal?             @map("cash_received") @db.Decimal(12, 2)
+  changeGiven       Decimal?             @map("change_given") @db.Decimal(12, 2)
+  note              String?
+  voidReason        String?              @map("void_reason")
+  soldAt            DateTime             @default(now()) @map("sold_at")
+  voidedAt          DateTime?            @map("voided_at")
+  items             PosSaleItem[]
+  payments          PosPayment[]
+  refunds           PosRefund[]
+  accountingEntries PosAccountingEntry[]
+  createdAt         DateTime             @default(now()) @map("created_at")
+  updatedAt         DateTime             @updatedAt @map("updated_at")
 
   @@index([soldAt, status])
   @@index([shiftId, soldAt])
@@ -1403,19 +1404,19 @@ model PosSale {
 }
 
 model PosSaleItem {
-  id            String     @id @default(uuid()) @db.Uuid
-  saleId        String     @map("sale_id") @db.Uuid
-  sale          PosSale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  productId     String     @map("product_id") @db.Uuid
-  product       PosProduct @relation(fields: [productId], references: [id])
-  productName   String     @map("product_name")
-  sku           String
-  quantity      Decimal    @db.Decimal(12, 3)
-  unitPrice     Decimal    @map("unit_price") @db.Decimal(12, 2)
-  costPrice     Decimal    @map("cost_price") @db.Decimal(12, 2)
-  discount      Decimal    @default(0) @db.Decimal(12, 2)
-  lineTotal     Decimal    @map("line_total") @db.Decimal(12, 2)
-  refundItems   PosRefundItem[]
+  id          String          @id @default(uuid()) @db.Uuid
+  saleId      String          @map("sale_id") @db.Uuid
+  sale        PosSale         @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId   String          @map("product_id") @db.Uuid
+  product     PosProduct      @relation(fields: [productId], references: [id])
+  productName String          @map("product_name")
+  sku         String
+  quantity    Decimal         @db.Decimal(12, 3)
+  unitPrice   Decimal         @map("unit_price") @db.Decimal(12, 2)
+  costPrice   Decimal         @map("cost_price") @db.Decimal(12, 2)
+  discount    Decimal         @default(0) @db.Decimal(12, 2)
+  lineTotal   Decimal         @map("line_total") @db.Decimal(12, 2)
+  refundItems PosRefundItem[]
 
   @@index([saleId])
   @@index([productId])
@@ -1437,91 +1438,91 @@ model PosPayment {
 }
 
 model PosHold {
-  id              String        @id @default(uuid()) @db.Uuid
-  holdNumber      String        @unique @map("hold_number")
-  status          PosHoldStatus @default(OPEN)
-  shiftId         String?       @map("shift_id") @db.Uuid
-  heldById        String        @map("held_by_id") @db.Uuid
-  heldBy          Employee      @relation(fields: [heldById], references: [id])
-  billDiscount    Decimal       @default(0) @map("bill_discount") @db.Decimal(12, 2)
-  note            String?
-  payload         Json
-  items           PosHoldItem[]
-  createdAt       DateTime      @default(now()) @map("created_at")
-  updatedAt       DateTime      @updatedAt @map("updated_at")
-  resumedAt       DateTime?     @map("resumed_at")
+  id           String        @id @default(uuid()) @db.Uuid
+  holdNumber   String        @unique @map("hold_number")
+  status       PosHoldStatus @default(OPEN)
+  shiftId      String?       @map("shift_id") @db.Uuid
+  heldById     String        @map("held_by_id") @db.Uuid
+  heldBy       Employee      @relation(fields: [heldById], references: [id])
+  billDiscount Decimal       @default(0) @map("bill_discount") @db.Decimal(12, 2)
+  note         String?
+  payload      Json
+  items        PosHoldItem[]
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+  resumedAt    DateTime?     @map("resumed_at")
 
   @@index([status, createdAt])
   @@map("pos_holds")
 }
 
 model PosHoldItem {
-  id         String     @id @default(uuid()) @db.Uuid
-  holdId     String     @map("hold_id") @db.Uuid
-  hold       PosHold    @relation(fields: [holdId], references: [id], onDelete: Cascade)
-  productId  String     @map("product_id") @db.Uuid
-  product    PosProduct @relation(fields: [productId], references: [id])
-  quantity   Decimal    @db.Decimal(12, 3)
-  unitPrice  Decimal    @map("unit_price") @db.Decimal(12, 2)
-  discount   Decimal    @default(0) @db.Decimal(12, 2)
+  id        String     @id @default(uuid()) @db.Uuid
+  holdId    String     @map("hold_id") @db.Uuid
+  hold      PosHold    @relation(fields: [holdId], references: [id], onDelete: Cascade)
+  productId String     @map("product_id") @db.Uuid
+  product   PosProduct @relation(fields: [productId], references: [id])
+  quantity  Decimal    @db.Decimal(12, 3)
+  unitPrice Decimal    @map("unit_price") @db.Decimal(12, 2)
+  discount  Decimal    @default(0) @db.Decimal(12, 2)
 
   @@map("pos_hold_items")
 }
 
 model PosRefund {
-  id              String          @id @default(uuid()) @db.Uuid
-  refundNumber    String          @unique @map("refund_number")
-  saleId          String          @map("sale_id") @db.Uuid
-  sale            PosSale         @relation(fields: [saleId], references: [id])
+  id              String           @id @default(uuid()) @db.Uuid
+  refundNumber    String           @unique @map("refund_number")
+  saleId          String           @map("sale_id") @db.Uuid
+  sale            PosSale          @relation(fields: [saleId], references: [id])
   reason          String
-  restock         Boolean         @default(true)
-  refundTotal     Decimal         @map("refund_total") @db.Decimal(12, 2)
+  restock         Boolean          @default(true)
+  refundTotal     Decimal          @map("refund_total") @db.Decimal(12, 2)
   refundMethod    PosPaymentMethod @map("refund_method")
-  actorEmployeeId String          @map("actor_employee_id") @db.Uuid
-  actor           Employee        @relation(fields: [actorEmployeeId], references: [id])
+  actorEmployeeId String           @map("actor_employee_id") @db.Uuid
+  actor           Employee         @relation(fields: [actorEmployeeId], references: [id])
   items           PosRefundItem[]
-  createdAt       DateTime        @default(now()) @map("created_at")
+  createdAt       DateTime         @default(now()) @map("created_at")
 
   @@index([saleId, createdAt])
   @@map("pos_refunds")
 }
 
 model PosRefundItem {
-  id          String      @id @default(uuid()) @db.Uuid
-  refundId    String      @map("refund_id") @db.Uuid
-  refund      PosRefund   @relation(fields: [refundId], references: [id], onDelete: Cascade)
-  saleItemId  String      @map("sale_item_id") @db.Uuid
-  saleItem    PosSaleItem @relation(fields: [saleItemId], references: [id])
-  productId   String      @map("product_id") @db.Uuid
-  product     PosProduct  @relation(fields: [productId], references: [id])
-  quantity    Decimal     @db.Decimal(12, 3)
-  amount      Decimal     @db.Decimal(12, 2)
+  id         String      @id @default(uuid()) @db.Uuid
+  refundId   String      @map("refund_id") @db.Uuid
+  refund     PosRefund   @relation(fields: [refundId], references: [id], onDelete: Cascade)
+  saleItemId String      @map("sale_item_id") @db.Uuid
+  saleItem   PosSaleItem @relation(fields: [saleItemId], references: [id])
+  productId  String      @map("product_id") @db.Uuid
+  product    PosProduct  @relation(fields: [productId], references: [id])
+  quantity   Decimal     @db.Decimal(12, 3)
+  amount     Decimal     @db.Decimal(12, 2)
 
   @@map("pos_refund_items")
 }
 
 model PosSetting {
-  id                   String   @id @default(uuid()) @db.Uuid
-  key                  String   @unique
-  value                Json
-  updatedAt            DateTime @updatedAt @map("updated_at")
-  createdAt            DateTime @default(now()) @map("created_at")
+  id        String   @id @default(uuid()) @db.Uuid
+  key       String   @unique
+  value     Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@map("pos_settings")
 }
 
 model PosAccountingEntry {
-  id            String                 @id @default(uuid()) @db.Uuid
-  entryType     PosAccountingEntryType @map("entry_type")
-  amount        Decimal                @db.Decimal(12, 2)
-  occurredAt    DateTime               @map("occurred_at")
-  referenceType String                 @map("reference_type")
-  referenceId   String                 @map("reference_id")
-  saleId        String?                @map("sale_id") @db.Uuid
-  sale          PosSale?               @relation(fields: [saleId], references: [id], onDelete: SetNull)
-  description   String
-  idempotencyKey String                @unique @map("idempotency_key")
-  createdAt     DateTime               @default(now()) @map("created_at")
+  id             String                 @id @default(uuid()) @db.Uuid
+  entryType      PosAccountingEntryType @map("entry_type")
+  amount         Decimal                @db.Decimal(12, 2)
+  occurredAt     DateTime               @map("occurred_at")
+  referenceType  String                 @map("reference_type")
+  referenceId    String                 @map("reference_id")
+  saleId         String?                @map("sale_id") @db.Uuid
+  sale           PosSale?               @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  description    String
+  idempotencyKey String                 @unique @map("idempotency_key")
+  createdAt      DateTime               @default(now()) @map("created_at")
 
   @@index([occurredAt, entryType])
   @@index([referenceType, referenceId])

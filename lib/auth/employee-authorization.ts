@@ -11,6 +11,9 @@ export async function findEmployeeAuthorization(authUserId: string) {
       lastName: true,
       nickname: true,
       email: true,
+      username: true,
+      phone: true,
+      authUserId: true,
       employeeCode: true,
       isActive: true,
       mustResetPassword: true,
@@ -31,6 +34,12 @@ export async function findEmployeeAuthorization(authUserId: string) {
 
   return {
     id: employee.id,
+    authUserId: employee.authUserId,
+    username: employee.username,
+    phone: employee.phone,
+    email: employee.email,
+    firstName: employee.firstName,
+    lastName: employee.lastName,
     name: displayEmployeeName(employee),
     isActive: employee.isActive,
     mustResetPassword: employee.mustResetPassword,

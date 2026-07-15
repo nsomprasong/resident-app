@@ -8,16 +8,28 @@ import {
 } from "@/lib/settings/employees";
 
 describe("parseEmployeeInput", () => {
-  it("requires name and email on create", () => {
-    const result = parseEmployeeInput({}, "create");
-    assert.equal(result.ok, false);
-    if (!result.ok) {
-      assert.ok(result.issues.some((issue) => issue.path === "name"));
-      assert.ok(result.issues.some((issue) => issue.path === "email"));
+  it("accepts create with username + phone + password (new employees)", () => {
+    const result = parseEmployeeInput(
+      {
+        name: "Somchai",
+        username: "SomChai.W",
+        phone: "0812345678",
+        password: "Secret123",
+        passwordConfirm: "Secret123",
+        roleId: "00000000-0000-4000-8000-000000000001",
+      },
+      "create",
+    );
+    assert.equal(result.ok, true);
+    if (result.ok) {
+      assert.equal(result.data.username, "somchai.w");
+      assert.equal(result.data.phone, "+66812345678");
+      assert.equal(result.data.password, "Secret123");
+      assert.equal(result.data.email, undefined);
     }
   });
 
-  it("accepts create with email for auth linking", () => {
+  it("still accepts create with email for legacy path", () => {
     const result = parseEmployeeInput(
       {
         name: "  Alice ",
@@ -31,12 +43,37 @@ describe("parseEmployeeInput", () => {
     if (result.ok) {
       assert.equal(result.data.name, "Alice");
       assert.equal(result.data.email, "alice@example.com");
-      assert.equal(result.data.phone, "0812345678");
-      assert.equal(result.data.roleId, "00000000-0000-4000-8000-000000000001");
+      assert.equal(result.data.phone, "+66812345678");
     }
   });
 
-  it("rejects invalid email on create", () => {
+  it("rejects create without identity", () => {
+    const result = parseEmployeeInput({ name: "X" }, "create");
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.ok(result.issues.some((issue) => issue.path === "body"));
+    }
+  });
+
+  it("rejects phone-auth create that also sends email", () => {
+    const result = parseEmployeeInput(
+      {
+        name: "Somchai",
+        username: "somchai",
+        phone: "0812345678",
+        password: "Secret123",
+        passwordConfirm: "Secret123",
+        email: "a@b.com",
+      },
+      "create",
+    );
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.ok(result.issues.some((issue) => issue.path === "email"));
+    }
+  });
+
+  it("rejects invalid email on create when provided", () => {
     const result = parseEmployeeInput(
       { name: "Alice", email: "not-an-email" },
       "create",

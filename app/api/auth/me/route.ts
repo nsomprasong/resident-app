@@ -35,10 +35,19 @@ export async function GET() {
 
   return NextResponse.json({
     employee: {
+      id: currentUser.employee.id,
+      authUserId: currentUser.employee.authUserId,
+      username: currentUser.employee.username,
+      phone: currentUser.employee.phone,
+      email: currentUser.employee.email,
+      firstName: currentUser.employee.firstName,
+      lastName: currentUser.employee.lastName,
       name: currentUser.employee.name,
       role: currentUser.employee.role.code,
       roleDisplayName: currentUser.employee.role.displayName,
       permissions: currentUser.employee.role.permissions,
+      isActive: currentUser.employee.isActive,
+      mustResetPassword: currentUser.employee.mustResetPassword,
     },
   });
 }
