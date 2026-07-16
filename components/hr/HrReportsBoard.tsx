@@ -3,6 +3,7 @@
 import { Download } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
+import DateSelector from "@/components/ui/DateSelector";
 import {
   HR_REPORT_TYPE_LABELS,
   HR_REPORT_TYPES,
@@ -115,21 +116,11 @@ export function HrReportsBoard() {
           </label>
           <label className="text-sm">
             <span className="mb-1 block text-muted-foreground">จากวันที่</span>
-            <input
-              type="date"
-              value={from}
-              onChange={(event) => setFrom(event.target.value)}
-              className="w-full rounded-xl border border-border bg-background px-3 py-2"
-            />
+            <DateSelector date={from} setDate={setFrom} max={to} />
           </label>
           <label className="text-sm">
             <span className="mb-1 block text-muted-foreground">ถึงวันที่</span>
-            <input
-              type="date"
-              value={to}
-              onChange={(event) => setTo(event.target.value)}
-              className="w-full rounded-xl border border-border bg-background px-3 py-2"
-            />
+            <DateSelector date={to} setDate={setTo} min={from} />
           </label>
           <label className="text-sm">
             <span className="mb-1 block text-muted-foreground">แผนก</span>

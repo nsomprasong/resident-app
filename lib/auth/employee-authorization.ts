@@ -17,6 +17,7 @@ export async function findEmployeeAuthorization(authUserId: string) {
       employeeCode: true,
       isActive: true,
       mustResetPassword: true,
+      sessionEpoch: true,
       roleRecord: {
         select: {
           code: true,
@@ -43,6 +44,7 @@ export async function findEmployeeAuthorization(authUserId: string) {
     name: displayEmployeeName(employee),
     isActive: employee.isActive,
     mustResetPassword: employee.mustResetPassword,
+    sessionEpoch: employee.sessionEpoch,
     role: employee.roleRecord
       ? {
           code: employee.roleRecord.code,

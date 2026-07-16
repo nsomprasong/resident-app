@@ -13,8 +13,6 @@ type FormState = {
   username: string;
   email: string;
   phone: string;
-  password: string;
-  passwordConfirm: string;
   roleId: string;
 };
 
@@ -23,8 +21,6 @@ const emptyForm: FormState = {
   username: "",
   email: "",
   phone: "",
-  password: "",
-  passwordConfirm: "",
   roleId: "",
 };
 
@@ -104,8 +100,6 @@ export function EmployeesManager() {
       username: item.username ?? "",
       email: item.email ?? "",
       phone: item.phone ?? "",
-      password: "",
-      passwordConfirm: "",
       roleId: item.roleId ?? "",
     });
     setFormError("");
@@ -137,8 +131,7 @@ export function EmployeesManager() {
             name: form.name.trim(),
             username: form.username.trim(),
             phone: form.phone.trim(),
-            password: form.password,
-            passwordConfirm: form.passwordConfirm,
+            email: form.email.trim() || null,
             roleId: form.roleId.trim() || null,
           };
 
@@ -224,9 +217,8 @@ export function EmployeesManager() {
     if (
       !(await confirm({
         title: `รีเซ็ตรหัสผ่านของ ${item.name}?`,
-        description: item.email
-          ? "ครั้งถัดไปที่ใส่อีเมลแล้วกดเข้าสู่ระบบ จะถูกพาไปตั้งรหัสผ่านใหม่โดยไม่ต้องใส่รหัสเดิม"
-          : "ระบบจะสร้างรหัสผ่านชั่วคราวให้ส่งต่อพนักงาน (ยังไม่รองรับ SMS OTP)",
+        description:
+          "ครั้งถัดไปให้ใส่ Username เบอร์โทร หรืออีเมล แล้วกดเข้าสู่ระบบ โดยไม่ต้องใส่รหัสเดิม เพื่อไปตั้งรหัสผ่านใหม่",
         confirmLabel: "รีเซ็ตรหัสผ่าน",
         tone: "warning",
       }))
@@ -241,16 +233,9 @@ export function EmployeesManager() {
         `/api/employees/${item.id}/reset-password`,
         { method: "POST" },
       );
-      const body = (await response.json()) as ApiErrorBody & {
-        temporaryPassword?: string;
-      };
+      const body = (await response.json()) as ApiErrorBody;
       if (!response.ok) {
         throw new Error(body.message ?? "รีเซ็ตรหัสผ่านไม่สำเร็จ");
-      }
-      if (body.temporaryPassword) {
-        window.alert(
-          `รหัสผ่านชั่วคราว (แสดงครั้งเดียว):\n${body.temporaryPassword}`,
-        );
       }
       await loadItems();
     } catch (reason) {
@@ -401,156 +386,114 @@ export function EmployeesManager() {
               {editingId ? "แก้ไขพนักงาน" : "เพิ่มพนักงาน"}
             </h3>
             <form
-              className="mt-4 space-y-3"
+              className="mt-4 space-y-5"
               onSubmit={(e) => void submitForm(e)}
             >
-              <label className="block text-sm">
-                ชื่อ
-                <input
-                  required
-                  value={form.name}
-                  onChange={(e) =>
-                    setForm((current) => ({ ...current, name: e.target.value }))
-                  }
-                  className="mt-1 w-full rounded-xl border border-border px-3 py-2"
-                />
-              </label>
-              {!editingId ? (
-                <>
-                  <label className="block text-sm">
-                    Username
-                    <input
-                      required
-                      value={form.username}
-                      onChange={(e) =>
-                        setForm((current) => ({
-                          ...current,
-                          username: e.target.value,
-                        }))
-                      }
-                      className="mt-1 w-full rounded-xl border border-border px-3 py-2"
-                      placeholder="เช่น somchai.w"
-                    />
-                  </label>
-                  <label className="block text-sm">
-                    เบอร์โทรศัพท์
-                    <input
-                      required
-                      value={form.phone}
-                      onChange={(e) =>
-                        setForm((current) => ({
-                          ...current,
-                          phone: e.target.value,
-                        }))
-                      }
-                      className="mt-1 w-full rounded-xl border border-border px-3 py-2"
-                      placeholder="08xxxxxxxx"
-                    />
-                  </label>
-                  <label className="block text-sm">
-                    รหัสผ่านเริ่มต้น
-                    <input
-                      required
-                      type="password"
-                      value={form.password}
-                      onChange={(e) =>
-                        setForm((current) => ({
-                          ...current,
-                          password: e.target.value,
-                        }))
-                      }
-                      className="mt-1 w-full rounded-xl border border-border px-3 py-2"
-                      minLength={8}
-                    />
-                  </label>
-                  <label className="block text-sm">
-                    ยืนยันรหัสผ่าน
-                    <input
-                      required
-                      type="password"
-                      value={form.passwordConfirm}
-                      onChange={(e) =>
-                        setForm((current) => ({
-                          ...current,
-                          passwordConfirm: e.target.value,
-                        }))
-                      }
-                      className="mt-1 w-full rounded-xl border border-border px-3 py-2"
-                      minLength={8}
-                    />
-                  </label>
-                </>
-              ) : (
-                <>
-                  <label className="block text-sm">
-                    Username
-                    <input
-                      value={form.username}
-                      onChange={(e) =>
-                        setForm((current) => ({
-                          ...current,
-                          username: e.target.value,
-                        }))
-                      }
-                      className="mt-1 w-full rounded-xl border border-border px-3 py-2"
-                      placeholder="เพิ่มภายหลังได้"
-                    />
-                  </label>
-                  <label className="block text-sm">
-                    เบอร์โทรศัพท์
-                    <input
-                      value={form.phone}
-                      onChange={(e) =>
-                        setForm((current) => ({
-                          ...current,
-                          phone: e.target.value,
-                        }))
-                      }
-                      className="mt-1 w-full rounded-xl border border-border px-3 py-2"
-                      placeholder="08xxxxxxxx"
-                    />
-                  </label>
-                  {form.email ? (
-                    <label className="block text-sm">
-                      อีเมล
-                      <input
-                        type="email"
-                        value={form.email}
-                        readOnly
-                        className="mt-1 w-full rounded-xl border border-border bg-muted px-3 py-2 text-muted-foreground"
-                      />
-                      <span className="mt-1 block text-xs text-muted-foreground">
-                        บัญชีเดิมนี้ยังใช้ Email สำหรับเข้าสู่ระบบ
-                      </span>
-                    </label>
-                  ) : null}
-                </>
-              )}
-              <label className="block text-sm">
-                Role
-                <select
-                  value={form.roleId}
-                  onChange={(e) =>
-                    setForm((current) => ({
-                      ...current,
-                      roleId: e.target.value,
-                    }))
-                  }
-                  className="mt-1 w-full rounded-xl border border-border px-3 py-2"
-                >
-                  <option value="">ยังไม่กำหนด</option>
-                  {roles.map((role) => (
-                    <option key={role.id} value={role.id}>
-                      {role.displayName} ({role.code})
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <p className="text-xs text-muted-foreground">
-                {editingId
-                  ? "พนักงานเดิมที่ใช้อีเมลยัง Login ด้วยอีเมลได้ตามปกติ — สามารถเพิ่ม Username/เบอร์โทรเป็นข้อมูลเพิ่มได้"
-                  : "พนักงานใหม่ใช้ Username + เบอร์โทร + รหัสผ่าน (ไม่ใช้อีเมล) และต้องเปลี่ยนรหัสผ่านเมื่อเข้าสู่ระบบครั้งแรก"}
-              </p>
+              <section className="space-y-3">
+                <h4 className="text-sm font-semibold">1. ข้อมูลส่วนตัว</h4>
+                <label className="block text-sm">
+                  ชื่อ
+                  <input
+                    required
+                    value={form.name}
+                    onChange={(e) =>
+                      setForm((current) => ({ ...current, name: e.target.value }))
+                    }
+                    className="mt-1 w-full rounded-xl border border-border px-3 py-2"
+                  />
+                </label>
+              </section>
+
+              <section className="space-y-3">
+                <div>
+                  <h4 className="text-sm font-semibold">2. ข้อมูลเข้าสู่ระบบ</h4>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    พนักงานใหม่เข้าสู่ระบบด้วย Username หรือเบอร์โทรศัพท์ ส่วน Email
+                    ใช้เฉพาะบัญชีเดิมหรือข้อมูลติดต่อ และไม่บังคับกรอก
+                    {!editingId
+                      ? " — ครั้งแรกให้ใส่ Username/เบอร์โทรแล้วตั้งรหัสผ่านเอง"
+                      : ""}
+                  </p>
+                </div>
+                <label className="block text-sm">
+                  Username{editingId ? "" : " *"}
+                  <input
+                    required={!editingId}
+                    value={form.username}
+                    onChange={(e) =>
+                      setForm((current) => ({
+                        ...current,
+                        username: e.target.value,
+                      }))
+                    }
+                    className="mt-1 w-full rounded-xl border border-border px-3 py-2"
+                    placeholder="เช่น somchai.w"
+                  />
+                </label>
+                <label className="block text-sm">
+                  เบอร์โทรศัพท์{editingId ? "" : " *"}
+                  <input
+                    required={!editingId}
+                    value={form.phone}
+                    onChange={(e) =>
+                      setForm((current) => ({
+                        ...current,
+                        phone: e.target.value,
+                      }))
+                    }
+                    className="mt-1 w-full rounded-xl border border-border px-3 py-2"
+                    placeholder="08xxxxxxxx"
+                  />
+                </label>
+                <label className="block text-sm">
+                  อีเมล (ไม่บังคับ)
+                  <input
+                    type="email"
+                    value={form.email}
+                    readOnly={Boolean(editingId && form.email)}
+                    onChange={(e) =>
+                      setForm((current) => ({
+                        ...current,
+                        email: e.target.value,
+                      }))
+                    }
+                    className={`mt-1 w-full rounded-xl border border-border px-3 py-2 ${
+                      editingId && form.email
+                        ? "bg-muted text-muted-foreground"
+                        : ""
+                    }`}
+                  />
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    {editingId && form.email
+                      ? "บัญชีเดิมนี้ยังใช้ Email สำหรับเข้าสู่ระบบ"
+                      : "ใช้สำหรับบัญชีเดิมหรือข้อมูลติดต่อเท่านั้น พนักงานใหม่เข้าสู่ระบบด้วย Username หรือเบอร์โทรศัพท์"}
+                  </span>
+                </label>
+              </section>
+
+              <section className="space-y-3">
+                <h4 className="text-sm font-semibold">3. สิทธิ์และสถานะ</h4>
+                <label className="block text-sm">
+                  บทบาทเข้าใช้ระบบ
+                  <select
+                    value={form.roleId}
+                    onChange={(e) =>
+                      setForm((current) => ({
+                        ...current,
+                        roleId: e.target.value,
+                      }))
+                    }
+                    className="mt-1 w-full rounded-xl border border-border px-3 py-2"
+                  >
+                    <option value="">ยังไม่กำหนด</option>
+                    {roles.map((role) => (
+                      <option key={role.id} value={role.id}>
+                        {role.displayName} ({role.code})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </section>
               {formError ? (
                 <p className="text-sm text-destructive" role="alert">
                   {formError}

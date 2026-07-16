@@ -4,7 +4,10 @@ import {
   validationErrorResponse,
 } from "@/lib/api/validation";
 import { recordAuditLog } from "@/lib/audit/audit-log";
-import { verifyPasswordResetTicket } from "@/lib/auth/password-reset-ticket";
+import {
+  ticketMatchesEmployee,
+  verifyPasswordResetTicket,
+} from "@/lib/auth/password-reset-ticket";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/prisma";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -56,6 +59,7 @@ export async function POST(request: NextRequest) {
         select: {
           id: true,
           email: true,
+          phone: true,
           isActive: true,
           roleId: true,
           mustResetPassword: true,
@@ -69,7 +73,7 @@ export async function POST(request: NextRequest) {
         !employee.mustResetPassword ||
         !employee.authUserId ||
         employee.authUserId !== payload.authUserId ||
-        (employee.email?.trim().toLowerCase() ?? "") !== payload.email
+        !ticketMatchesEmployee(payload, employee)
       ) {
         return apiErrorResponse(
           "บัญชีนี้ไม่ต้องตั้งรหัสผ่านใหม่ หรือข้อมูลไม่ตรงกัน",

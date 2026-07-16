@@ -5,7 +5,9 @@ import {
   GENERIC_LOGIN_ERROR,
   resolveLoginIdentifier,
 } from "@/lib/auth/login-identifier";
+import { rotateEmployeeSessionEpoch } from "@/lib/auth/rotate-session-epoch";
 import { prisma } from "@/lib/prisma";
+import { ensureAuthLoginEmail } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 export type LoginState = {
@@ -19,8 +21,19 @@ type PendingResetEmployee = {
   roleId: string | null;
   authUserId: string | null;
   email: string | null;
+  phone: string | null;
   mustResetPassword: boolean;
 };
+
+const pendingSelect = {
+  id: true,
+  isActive: true,
+  roleId: true,
+  authUserId: true,
+  email: true,
+  phone: true,
+  mustResetPassword: true,
+} as const;
 
 async function findPendingResetByEmail(
   email: string,
@@ -31,14 +44,7 @@ async function findPendingResetByEmail(
       mustResetPassword: true,
       authUserId: { not: null },
     },
-    select: {
-      id: true,
-      isActive: true,
-      roleId: true,
-      authUserId: true,
-      email: true,
-      mustResetPassword: true,
-    },
+    select: pendingSelect,
   });
 }
 
@@ -51,14 +57,7 @@ async function findPendingResetByPhone(
       mustResetPassword: true,
       authUserId: { not: null },
     },
-    select: {
-      id: true,
-      isActive: true,
-      roleId: true,
-      authUserId: true,
-      email: true,
-      mustResetPassword: true,
-    },
+    select: pendingSelect,
   });
 }
 
@@ -71,14 +70,7 @@ async function findPendingResetByUsername(
       mustResetPassword: true,
       authUserId: { not: null },
     },
-    select: {
-      id: true,
-      isActive: true,
-      roleId: true,
-      authUserId: true,
-      email: true,
-      mustResetPassword: true,
-    },
+    select: pendingSelect,
   });
 }
 
@@ -94,25 +86,41 @@ function ticketRedirect(employee: PendingResetEmployee): LoginState {
       error: "บัญชียังไม่ได้กำหนดสิทธิ์ กรุณาติดต่อผู้ดูแลระบบ",
     };
   }
-
-  // Email-based ticket path (legacy). Phone-auth users without email go through
-  // session login + /set-password middleware instead.
-  if (employee.email) {
-    const ticket = createPasswordResetTicket({
-      employeeId: employee.id,
-      authUserId: employee.authUserId,
-      email: employee.email,
-    });
+  if (!employee.email && !employee.phone) {
     return {
-      error: null,
-      nextPath: `/set-password?ticket=${encodeURIComponent(ticket)}`,
+      error: "บัญชียังไม่มีช่องทางสำหรับตั้งรหัสผ่าน กรุณาติดต่อผู้ดูแลระบบ",
     };
   }
 
+  const ticket = createPasswordResetTicket({
+    employeeId: employee.id,
+    authUserId: employee.authUserId,
+    email: employee.email,
+    phone: employee.phone,
+  });
+
   return {
     error: null,
-    nextPath: "/set-password",
+    nextPath: `/set-password?ticket=${encodeURIComponent(ticket)}`,
   };
+}
+
+async function resolvePasswordLoginEmail(employee: {
+  username: string | null;
+  authUserId: string;
+  email: string | null;
+}): Promise<string | null> {
+  if (employee.username) {
+    const ensured = await ensureAuthLoginEmail({
+      authUserId: employee.authUserId,
+      username: employee.username,
+    });
+    if (ensured.ok) return ensured.email;
+  }
+
+  // Legacy employees that login with contact email Auth identity.
+  if (employee.email) return employee.email.toLowerCase();
+  return null;
 }
 
 export async function login(
@@ -145,8 +153,8 @@ export async function login(
     pendingReset = await findPendingResetByUsername(resolved.username);
   }
 
-  // Legacy email reset-ticket shortcut (no password required).
-  if (pendingReset?.email && resolved.kind === "email") {
+  // First login / forced reset: identifier alone is enough (set password next).
+  if (pendingReset) {
     return ticketRedirect(pendingReset);
   }
 
@@ -157,26 +165,23 @@ export async function login(
   }
 
   const supabase = await createClient();
-  let authCredential:
-    | { email: string; password: string }
-    | { phone: string; password: string };
+  let authEmail: string | null = null;
 
   if (resolved.kind === "email") {
-    authCredential = { email: resolved.email, password };
+    authEmail = resolved.email;
   } else if (resolved.kind === "phone") {
-    authCredential = { phone: resolved.phone, password };
-  } else {
-    const employee = await prisma.employee.findUnique({
-      where: { username: resolved.username },
+    const employee = await prisma.employee.findFirst({
+      where: { phone: resolved.phone },
       select: {
-        phone: true,
+        username: true,
+        email: true,
         isActive: true,
         roleId: true,
         authUserId: true,
       },
     });
 
-    if (!employee?.phone || !employee.authUserId) {
+    if (!employee?.authUserId) {
       return { error: GENERIC_LOGIN_ERROR };
     }
     if (!employee.isActive) {
@@ -191,13 +196,56 @@ export async function login(
       };
     }
 
-    authCredential = { phone: employee.phone, password };
+    authEmail = await resolvePasswordLoginEmail({
+      username: employee.username,
+      authUserId: employee.authUserId,
+      email: employee.email,
+    });
+  } else {
+    const employee = await prisma.employee.findUnique({
+      where: { username: resolved.username },
+      select: {
+        username: true,
+        email: true,
+        isActive: true,
+        roleId: true,
+        authUserId: true,
+      },
+    });
+
+    if (!employee?.authUserId) {
+      return { error: GENERIC_LOGIN_ERROR };
+    }
+    if (!employee.isActive) {
+      return {
+        error:
+          "บัญชีรอการเปิดใช้งานจากผู้ดูแลระบบ กรุณาติดต่อผู้จัดการเพื่อกำหนดสิทธิ์",
+      };
+    }
+    if (!employee.roleId) {
+      return {
+        error: "บัญชียังไม่ได้กำหนดสิทธิ์ กรุณาติดต่อผู้ดูแลระบบ",
+      };
+    }
+
+    authEmail = await resolvePasswordLoginEmail({
+      username: employee.username ?? resolved.username,
+      authUserId: employee.authUserId,
+      email: employee.email,
+    });
+  }
+
+  if (!authEmail) {
+    return { error: GENERIC_LOGIN_ERROR };
   }
 
   const {
     data: { user },
     error,
-  } = await supabase.auth.signInWithPassword(authCredential);
+  } = await supabase.auth.signInWithPassword({
+    email: authEmail,
+    password,
+  });
 
   if (error || !user) {
     return { error: GENERIC_LOGIN_ERROR };
@@ -231,6 +279,32 @@ export async function login(
     return {
       error: "บัญชียังไม่ได้กำหนดสิทธิ์ กรุณาติดต่อผู้ดูแลระบบ",
     };
+  }
+
+  // Single-device login: bump session epoch, stamp JWT, then revoke other devices.
+  const rotated = await rotateEmployeeSessionEpoch({
+    employeeId: employee.id,
+    authUserId: user.id,
+  });
+  if (!rotated.ok) {
+    console.error("rotateEmployeeSessionEpoch failed", rotated.message);
+    await supabase.auth.signOut();
+    return { error: "เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่" };
+  }
+
+  const { error: refreshError } = await supabase.auth.refreshSession();
+  if (refreshError) {
+    console.error("refreshSession after epoch rotate failed", refreshError);
+    await supabase.auth.signOut();
+    return { error: "เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่" };
+  }
+
+  const { error: othersError } = await supabase.auth.signOut({
+    scope: "others",
+  });
+  if (othersError) {
+    // Best-effort: epoch check still blocks stale access tokens.
+    console.warn("signOut(scope=others) failed", othersError.message);
   }
 
   return {

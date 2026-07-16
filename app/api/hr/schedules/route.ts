@@ -13,9 +13,10 @@ import {
   dateKeyUtc,
   eachDateKey,
   findEmployeeScheduleOverlaps,
-  findUnderstaffedShifts,
   parseDateKey,
 } from "@/lib/hr/schedules";
+import { understaffedFromMemberships } from "@/lib/hr/shift-memberships";
+import { resolveShiftTimesForDate } from "@/lib/hr/shift-time-periods";
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -115,6 +116,7 @@ export async function GET(request: NextRequest) {
       prisma.shiftTemplate.findMany({
         where: { isActive: true },
         orderBy: [{ startMinutes: "asc" }, { name: "asc" }],
+        include: { _count: { select: { memberships: true } } },
       }),
       prisma.holidayCalendar.findMany({
         where: { holidayDate: { gte: from, lte: to } },
@@ -132,18 +134,14 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
-    const understaffed = findUnderstaffedShifts({
-      templates,
-      schedules: schedules.map((item) => ({
-        id: item.id,
-        employeeId: item.employeeId,
-        shiftTemplateId: item.shiftTemplateId,
-        workDate: item.workDate,
-        startsAt: item.startsAt,
-        endsAt: item.endsAt,
-        status: item.status,
+    const understaffed = understaffedFromMemberships({
+      templates: templates.map((template) => ({
+        id: template.id,
+        name: template.name,
+        requiredHeadcount: template.requiredHeadcount,
+        isActive: template.isActive,
+        memberCount: template._count.memberships,
       })),
-      workDates: eachDateKey(fromKey, toKey),
     });
 
     const leaveMarkers: Array<{
@@ -256,10 +254,13 @@ async function createAssignment(input: AssignBody) {
   });
   if (!template) throw new Error("TEMPLATE_NOT_FOUND");
 
+  const times = await resolveShiftTimesForDate(template.id, workDate);
+  if (!times) throw new Error("INVALID_RANGE");
+
   const range = buildScheduleRange(
     workDate,
-    template.startMinutes,
-    template.endMinutes,
+    times.startMinutes,
+    times.endMinutes,
   );
   if (!range) throw new Error("INVALID_RANGE");
 

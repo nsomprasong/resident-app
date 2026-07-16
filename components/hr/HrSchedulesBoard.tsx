@@ -1,63 +1,12 @@
 "use client";
 
-import {
-  CalendarDays,
-  ChevronLeft,
-  ChevronRight,
-  Copy,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import { Pencil, Plus, Trash2, UserPlus, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useConfirmDialog } from "@/hooks/useConfirmDialog";
 import DateSelector from "@/components/ui/DateSelector";
-import { formatThaiDate, formatThaiTime } from "@/lib/format/date";
 import { displayEmployeeName } from "@/lib/hr/employees";
-import {
-  addDaysToDateKey,
-  monthRangeContaining,
-  weekRangeContaining,
-} from "@/lib/hr/schedules";
 import type { ShiftTemplateRecord } from "@/lib/hr/shift-templates";
-
-type ViewMode = "day" | "week" | "month";
-
-type ScheduleItem = {
-  id: string;
-  employeeId: string;
-  employeeName: string;
-  employeeCode: string | null;
-  shiftTemplateId: string | null;
-  shiftName: string;
-  shiftColor: string | null;
-  workDate: string;
-  startsAt: string;
-  endsAt: string;
-};
-
-type HolidayItem = {
-  id: string;
-  name: string;
-  holidayDate: string;
-  isDayOff: boolean;
-};
-
-type LeaveMarker = {
-  employeeId: string;
-  date: string;
-  label: string;
-  duration?: string;
-};
-
-type Understaffed = {
-  workDate: string;
-  shiftTemplateId: string;
-  shiftName: string;
-  requiredHeadcount: number;
-  assignedCount: number;
-  shortage: number;
-};
 
 type EmployeeOption = {
   id: string;
@@ -78,19 +27,16 @@ function todayKey() {
   return `${get("year")}-${get("month")}-${get("day")}`;
 }
 
-function formatTimeRange(startsAt: string, endsAt: string) {
-  return `${formatThaiTime(startsAt, { timeZone: "UTC" })}–${formatThaiTime(endsAt, { timeZone: "UTC" })}`;
+function addDaysKey(dateKey: string, days: number): string {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  date.setUTCDate(date.getUTCDate() + days);
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
 }
 
 export function HrSchedulesBoard() {
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
-  const [view, setView] = useState<ViewMode>("week");
-  const [anchor, setAnchor] = useState(todayKey);
   const [templates, setTemplates] = useState<ShiftTemplateRecord[]>([]);
-  const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
-  const [holidays, setHolidays] = useState<HolidayItem[]>([]);
-  const [leaveMarkers, setLeaveMarkers] = useState<LeaveMarker[]>([]);
-  const [understaffed, setUnderstaffed] = useState<Understaffed[]>([]);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -102,59 +48,62 @@ export function HrSchedulesBoard() {
     endTime: "17:00",
     breakMinutes: "60",
     requiredHeadcount: "1",
+    effectiveFrom: addDaysKey(todayKey(), 1),
   });
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(
+    null,
+  );
   const [assignForm, setAssignForm] = useState({
     employeeId: "",
     shiftTemplateId: "",
-    workDate: todayKey(),
   });
 
-  const range = useMemo(() => {
-    if (view === "day") return { from: anchor, to: anchor };
-    if (view === "week") return weekRangeContaining(anchor) ?? { from: anchor, to: anchor };
-    return monthRangeContaining(anchor) ?? { from: anchor, to: anchor };
-  }, [anchor, view]);
+  const emptyTemplateForm = {
+    name: "",
+    startTime: "08:00",
+    endTime: "17:00",
+    breakMinutes: "60",
+    requiredHeadcount: "1",
+    effectiveFrom: addDaysKey(todayKey(), 1),
+  };
 
-  const dateKeys = useMemo(() => {
-    const keys: string[] = [];
-    let cursor = range.from;
-    while (cursor && cursor <= range.to) {
-      keys.push(cursor);
-      cursor = addDaysToDateKey(cursor, 1) ?? "";
-      if (!cursor) break;
+  const assignedEmployeeIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const template of templates) {
+      for (const member of template.members ?? []) {
+        ids.add(member.employeeId);
+      }
     }
-    return keys;
-  }, [range]);
+    return ids;
+  }, [templates]);
+
+  const availableEmployees = useMemo(
+    () => employees.filter((employee) => !assignedEmployeeIds.has(employee.id)),
+    [assignedEmployeeIds, employees],
+  );
+
+  const understaffed = useMemo(
+    () =>
+      templates.filter(
+        (template) =>
+          template.isActive && template.memberCount < template.requiredHeadcount,
+      ),
+    [templates],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const [templateRes, scheduleRes, employeeRes] = await Promise.all([
+      const [templateRes, employeeRes] = await Promise.all([
         fetch("/api/hr/shift-templates", { cache: "no-store" }),
-        fetch(
-          `/api/hr/schedules?from=${range.from}&to=${range.to}`,
-          { cache: "no-store" },
-        ),
-        fetch("/api/hr/employees?pageSize=50", {
-          cache: "no-store",
-        }),
+        fetch("/api/hr/employees?pageSize=200", { cache: "no-store" }),
       ]);
-      if (!templateRes.ok || !scheduleRes.ok) {
-        throw new Error("โหลดตารางไม่สำเร็จ");
+      if (!templateRes.ok) {
+        throw new Error("โหลดกะไม่สำเร็จ");
       }
       const templateData = (await templateRes.json()) as ShiftTemplateRecord[];
-      const scheduleData = (await scheduleRes.json()) as {
-        schedules: ScheduleItem[];
-        holidays: HolidayItem[];
-        understaffed: Understaffed[];
-        leaveMarkers?: LeaveMarker[];
-      };
       setTemplates(templateData);
-      setSchedules(scheduleData.schedules);
-      setHolidays(scheduleData.holidays);
-      setLeaveMarkers(scheduleData.leaveMarkers ?? []);
-      setUnderstaffed(scheduleData.understaffed);
       if (employeeRes.ok) {
         const employeeData = (await employeeRes.json()) as {
           items: Array<{
@@ -170,8 +119,9 @@ export function HrSchedulesBoard() {
         };
         setEmployees(
           employeeData.items
-            .filter((item) =>
-              item.hrStatus === "ACTIVE" || item.hrStatus === "PROBATION",
+            .filter(
+              (item) =>
+                item.hrStatus === "ACTIVE" || item.hrStatus === "PROBATION",
             )
             .map((item) => ({
               id: item.id,
@@ -185,7 +135,7 @@ export function HrSchedulesBoard() {
     } finally {
       setLoading(false);
     }
-  }, [range.from, range.to]);
+  }, []);
 
   useEffect(() => {
     void load();
@@ -212,175 +162,185 @@ export function HrSchedulesBoard() {
       setError(body?.message ?? "สร้างกะไม่สำเร็จ");
       return;
     }
+    setTemplateForm(emptyTemplateForm);
+    setEditingTemplateId(null);
+    setMessage("สร้างกะแล้ว — ใช้ตลอดจนกว่าจะเปลี่ยน");
+    await load();
+  }
+
+  function startEditTemplate(template: ShiftTemplateRecord) {
+    setEditingTemplateId(template.id);
     setTemplateForm({
-      name: "",
-      startTime: "08:00",
-      endTime: "17:00",
-      breakMinutes: "60",
-      requiredHeadcount: "1",
+      name: template.name,
+      startTime: template.startTime,
+      endTime: template.endTime,
+      breakMinutes: String(template.breakMinutes),
+      requiredHeadcount: String(template.requiredHeadcount),
+      effectiveFrom: addDaysKey(todayKey(), 1),
     });
-    setMessage("สร้างกะแล้ว");
-    await load();
+    setError("");
+    setMessage("");
   }
 
-  async function assignOne() {
-    setMessage("");
+  function cancelEditTemplate() {
+    setEditingTemplateId(null);
+    setTemplateForm(emptyTemplateForm);
     setError("");
-    const response = await fetch("/api/hr/schedules", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        mode: "assign",
-        ...assignForm,
-      }),
-    });
-    const body = (await response.json().catch(() => null)) as {
-      message?: string;
-    } | null;
-    if (!response.ok) {
-      setError(body?.message ?? "จัดตารางไม่สำเร็จ");
-      return;
-    }
-    setMessage("จัดกะสำเร็จ");
-    await load();
   }
 
-  async function copyWeek() {
-    if (view !== "week") {
-      setError("คัดลอกได้เฉพาะมุมมองรายสัปดาห์");
+  async function saveTemplate() {
+    if (!editingTemplateId) {
+      await createTemplate();
       return;
     }
-    const targetFrom = addDaysToDateKey(range.from, 7);
-    if (!targetFrom) return;
     setMessage("");
     setError("");
-    const response = await fetch("/api/hr/schedules", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        mode: "copy",
-        sourceFrom: range.from,
-        sourceTo: range.to,
-        targetFrom,
-      }),
-    });
-    const body = (await response.json().catch(() => null)) as {
-      message?: string;
-      count?: number;
-      skipped?: number;
-    } | null;
-    if (!response.ok) {
-      setError(body?.message ?? "คัดลอกไม่สำเร็จ");
-      return;
+
+    const current = templates.find((item) => item.id === editingTemplateId);
+    const timesChanged =
+      !current ||
+      current.startTime !== templateForm.startTime ||
+      current.endTime !== templateForm.endTime ||
+      String(current.breakMinutes) !== templateForm.breakMinutes;
+
+    const payload: Record<string, unknown> = {
+      name: templateForm.name,
+      requiredHeadcount: Number(templateForm.requiredHeadcount),
+    };
+    if (timesChanged) {
+      payload.startTime = templateForm.startTime;
+      payload.endTime = templateForm.endTime;
+      payload.breakMinutes = Number(templateForm.breakMinutes);
+      payload.effectiveFrom = templateForm.effectiveFrom;
     }
-    setMessage(
-      `คัดลอกไปสัปดาห์ถัดไปแล้ว ${body?.count ?? 0} รายการ (ข้ามซ้อน ${body?.skipped ?? 0})`,
+
+    const response = await fetch(
+      `/api/hr/shift-templates/${editingTemplateId}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
     );
-    setAnchor(targetFrom);
+    const body = (await response.json().catch(() => null)) as {
+      message?: string;
+    } | null;
+    if (!response.ok) {
+      setError(body?.message ?? "บันทึกกะไม่สำเร็จ");
+      return;
+    }
+    setEditingTemplateId(null);
+    setTemplateForm(emptyTemplateForm);
+    setMessage(
+      timesChanged
+        ? `อัปเดตกะแล้ว — เวลามีผลตั้งแต่วันที่ ${templateForm.effectiveFrom} (อดีตไม่เปลี่ยน)`
+        : "อัปเดตกะแล้ว",
+    );
+    await load();
   }
 
-  async function cancelSchedule(id: string) {
+  async function deleteTemplate(template: ShiftTemplateRecord) {
+    if (template.memberCount > 0) {
+      setError(
+        `ลบกะ “${template.name}” ไม่ได้ — มีสมาชิก ${template.memberCount} คน ถอดสมาชิกออกก่อน`,
+      );
+      return;
+    }
     if (
       !(await confirm({
-        title: "ยกเลิกกะนี้?",
-        description: "กะที่เลือกจะถูกยกเลิกจากตารางงาน",
-        confirmLabel: "ยกเลิกกะ",
+        title: `ลบกะ “${template.name}”?`,
+        description: "กะที่ไม่มีสมาชิกแล้วจะถูกลบถาวร",
+        confirmLabel: "ลบกะ",
+        tone: "danger",
+      }))
+    ) {
+      return;
+    }
+
+    setMessage("");
+    setError("");
+    const response = await fetch(`/api/hr/shift-templates/${template.id}`, {
+      method: "DELETE",
+    });
+    const body = (await response.json().catch(() => null)) as {
+      message?: string;
+    } | null;
+    if (!response.ok) {
+      setError(body?.message ?? "ลบกะไม่สำเร็จ");
+      return;
+    }
+    if (editingTemplateId === template.id) {
+      cancelEditTemplate();
+    }
+    setMessage(`ลบกะ “${template.name}” แล้ว`);
+    await load();
+  }
+
+  async function assignMember() {
+    setMessage("");
+    setError("");
+    if (!assignForm.employeeId || !assignForm.shiftTemplateId) {
+      setError("เลือกพนักงานและกะก่อน");
+      return;
+    }
+    const response = await fetch(
+      `/api/hr/shift-templates/${assignForm.shiftTemplateId}/members`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ employeeId: assignForm.employeeId }),
+      },
+    );
+    const body = (await response.json().catch(() => null)) as {
+      message?: string;
+    } | null;
+    if (!response.ok) {
+      setError(body?.message ?? "จัดพนักงานลงกะไม่สำเร็จ");
+      return;
+    }
+    setAssignForm({
+      employeeId: "",
+      shiftTemplateId: assignForm.shiftTemplateId,
+    });
+    setMessage("จัดพนักงานลงกะแล้ว — ใช้ตลอดจนกว่าจะเปลี่ยน");
+    await load();
+  }
+
+  async function removeMember(
+    templateId: string,
+    employeeId: string,
+    name: string,
+  ) {
+    if (
+      !(await confirm({
+        title: `ถอด “${name}” ออกจากกะ?`,
+        description: "พนักงานคนนี้จะไม่ได้อยู่ในกะนี้อีก จนกว่าจะจัดใหม่",
+        confirmLabel: "ถอดออก",
         tone: "warning",
       }))
     ) {
       return;
     }
-    const response = await fetch("/api/hr/schedules", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mode: "cancel", scheduleId: id }),
-    });
+    setMessage("");
+    setError("");
+    const response = await fetch(
+      `/api/hr/shift-templates/${templateId}/members/${employeeId}`,
+      { method: "DELETE" },
+    );
+    const body = (await response.json().catch(() => null)) as {
+      message?: string;
+    } | null;
     if (!response.ok) {
-      const body = (await response.json().catch(() => null)) as {
-        message?: string;
-      } | null;
-      setError(body?.message ?? "ยกเลิกไม่สำเร็จ");
+      setError(body?.message ?? "ถอดสมาชิกไม่สำเร็จ");
       return;
     }
+    setMessage(`ถอด “${name}” ออกจากกะแล้ว`);
     await load();
-  }
-
-  async function addHoliday(date: string) {
-    const name = window.prompt("ชื่อวันหยุด", "วันหยุด");
-    if (!name) return;
-    const response = await fetch("/api/hr/holidays", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, holidayDate: date, isDayOff: true }),
-    });
-    if (!response.ok) {
-      const body = (await response.json().catch(() => null)) as {
-        message?: string;
-      } | null;
-      setError(body?.message ?? "บันทึกวันหยุดไม่สำเร็จ");
-      return;
-    }
-    await load();
-  }
-
-  function shiftAnchor(delta: number) {
-    const step = view === "day" ? 1 : view === "week" ? 7 : 30;
-    const next = addDaysToDateKey(anchor, delta * step);
-    if (next) setAnchor(next);
   }
 
   return (
     <div className="space-y-4">
       {confirmDialog}
-      <div className="flex flex-col gap-3 rounded-3xl border border-border bg-surface p-4 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
-          {(["day", "week", "month"] as const).map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              onClick={() => setView(mode)}
-              className={`rounded-xl px-3 py-2 text-sm ${
-                view === mode
-                  ? "bg-primary text-primary-foreground"
-                  : "border border-border hover:bg-muted"
-              }`}
-            >
-              {mode === "day" ? "รายวัน" : mode === "week" ? "รายสัปดาห์" : "รายเดือน"}
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => shiftAnchor(-1)}
-            className="rounded-lg border border-border p-2 hover:bg-muted"
-            aria-label="ก่อนหน้า"
-          >
-            <ChevronLeft size={16} />
-          </button>
-          <DateSelector
-            date={anchor}
-            setDate={setAnchor}
-            className="min-w-[12rem]"
-          />
-          <button
-            type="button"
-            onClick={() => shiftAnchor(1)}
-            className="rounded-lg border border-border p-2 hover:bg-muted"
-            aria-label="ถัดไป"
-          >
-            <ChevronRight size={16} />
-          </button>
-          <button
-            type="button"
-            onClick={() => void copyWeek()}
-            className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm hover:bg-muted"
-          >
-            <Copy size={16} />
-            คัดลอกสัปดาห์
-          </button>
-        </div>
-      </div>
 
       {error ? (
         <p className="rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
@@ -393,10 +353,29 @@ export function HrSchedulesBoard() {
         </p>
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
+      <div className="grid gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
         <section className="space-y-4">
           <div className="rounded-3xl border border-border bg-surface p-4 shadow-sm">
-            <h2 className="font-semibold text-foreground">ตั้งค่ากะ</h2>
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h2 className="font-semibold text-foreground">ตั้งค่ากะ</h2>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {editingTemplateId
+                    ? "แก้เวลาต้องระบุวันที่มีผล — อดีตไม่เปลี่ยน และตั้งล่วงหน้าได้"
+                    : "สร้างกะแล้วจัดพนักงานลงกะถาวร ไม่มีวันหมดอายุ"}
+                </p>
+              </div>
+              {editingTemplateId ? (
+                <button
+                  type="button"
+                  onClick={cancelEditTemplate}
+                  className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
+                >
+                  <X size={14} />
+                  ยกเลิก
+                </button>
+              ) : null}
+            </div>
             <div className="mt-3 space-y-3">
               <label className="block text-sm text-foreground">
                 ชื่อกะ
@@ -472,33 +451,51 @@ export function HrSchedulesBoard() {
                   />
                 </label>
               </div>
+              {editingTemplateId ? (
+                <label className="block text-sm text-foreground">
+                  เวลามีผลตั้งแต่วันที่
+                  <div className="mt-1">
+                    <DateSelector
+                      date={templateForm.effectiveFrom}
+                      setDate={(effectiveFrom) =>
+                        setTemplateForm((current) => ({
+                          ...current,
+                          effectiveFrom,
+                        }))
+                      }
+                      className="w-full"
+                    />
+                  </div>
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    ค่าเริ่มต้น = พรุ่งนี้ · วันก่อนหน้านี้ไม่ถูกแก้ตาม
+                  </span>
+                </label>
+              ) : null}
               <button
                 type="button"
-                onClick={() => void createTemplate()}
+                onClick={() => void saveTemplate()}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2.5 text-sm font-medium text-primary-foreground"
               >
-                <Plus size={16} />
-                เพิ่มกะ
+                {editingTemplateId ? (
+                  <>
+                    <Pencil size={16} />
+                    บันทึกการแก้ไข
+                  </>
+                ) : (
+                  <>
+                    <Plus size={16} />
+                    เพิ่มกะ
+                  </>
+                )}
               </button>
             </div>
-            <ul className="mt-4 space-y-2">
-              {templates.map((template) => (
-                <li
-                  key={template.id}
-                  className="rounded-2xl border border-border bg-background px-3 py-2 text-sm"
-                >
-                  <p className="font-medium">{template.name}</p>
-                  <p className="text-muted-foreground">
-                    {template.startTime}–{template.endTime} · ต้องการ{" "}
-                    {template.requiredHeadcount} คน
-                  </p>
-                </li>
-              ))}
-            </ul>
           </div>
 
           <div className="rounded-3xl border border-border bg-surface p-4 shadow-sm">
             <h2 className="font-semibold text-foreground">จัดพนักงานลงกะ</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              ไม่ระบุวัน — อยู่กะทุกวันจนกว่าจะถอดออก
+            </p>
             <div className="mt-3 space-y-2">
               <select
                 value={assignForm.employeeId}
@@ -511,13 +508,18 @@ export function HrSchedulesBoard() {
                 className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm"
               >
                 <option value="">เลือกพนักงาน</option>
-                {employees.map((employee) => (
+                {availableEmployees.map((employee) => (
                   <option key={employee.id} value={employee.id}>
                     {employee.employeeCode ? `${employee.employeeCode} · ` : ""}
                     {employee.name}
                   </option>
                 ))}
               </select>
+              {availableEmployees.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  พนักงาน Active ถูกจัดลงกะครบแล้ว หรือยังไม่มีพนักงานว่าง
+                </p>
+              ) : null}
               <select
                 value={assignForm.shiftTemplateId}
                 onChange={(event) =>
@@ -533,29 +535,17 @@ export function HrSchedulesBoard() {
                   .filter((template) => template.isActive)
                   .map((template) => (
                     <option key={template.id} value={template.id}>
-                      {template.name}
+                      {template.name} ({template.startTime}–{template.endTime})
                     </option>
                   ))}
               </select>
-              <label className="block text-sm text-foreground">
-                วันที่ทำงาน
-                <div className="mt-1">
-                  <DateSelector
-                    date={assignForm.workDate}
-                    setDate={(workDate) =>
-                      setAssignForm((current) => ({ ...current, workDate }))
-                    }
-                    className="w-full"
-                  />
-                </div>
-              </label>
               <button
                 type="button"
-                onClick={() => void assignOne()}
+                onClick={() => void assignMember()}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-border px-3 py-2.5 text-sm hover:bg-muted"
               >
-                <CalendarDays size={16} />
-                จัดลงตาราง
+                <UserPlus size={16} />
+                จัดลงกะ
               </button>
             </div>
           </div>
@@ -564,13 +554,14 @@ export function HrSchedulesBoard() {
         <section className="space-y-4">
           {understaffed.length > 0 ? (
             <div className="rounded-3xl border border-warning/40 bg-warning/10 p-4 text-sm text-warning">
-              <p className="font-semibold">กะที่ขาดคน ({understaffed.length})</p>
+              <p className="font-semibold">
+                กะที่ขาดคน ({understaffed.length})
+              </p>
               <ul className="mt-2 space-y-1">
-                {understaffed.slice(0, 8).map((item) => (
-                  <li key={`${item.workDate}-${item.shiftTemplateId}`}>
-                    {formatThaiDate(item.workDate)} · {item.shiftName} ขาด{" "}
-                    {item.shortage} คน
-                    (มี {item.assignedCount}/{item.requiredHeadcount})
+                {understaffed.map((item) => (
+                  <li key={item.id}>
+                    {item.name} ขาด {item.requiredHeadcount - item.memberCount}{" "}
+                    คน (มี {item.memberCount}/{item.requiredHeadcount})
                   </li>
                 ))}
               </ul>
@@ -579,99 +570,107 @@ export function HrSchedulesBoard() {
 
           <div className="overflow-hidden rounded-3xl border border-border bg-surface shadow-sm">
             {loading ? (
-              <p className="p-6 text-sm text-muted-foreground">กำลังโหลดตาราง...</p>
+              <p className="p-6 text-sm text-muted-foreground">กำลังโหลดกะ...</p>
+            ) : templates.length === 0 ? (
+              <p className="p-6 text-sm text-muted-foreground">ยังไม่มีกะ</p>
             ) : (
-              <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
-                {dateKeys.map((dateKey) => {
-                  const daySchedules = schedules.filter(
-                    (item) => item.workDate === dateKey,
-                  );
-                  const dayHolidays = holidays.filter(
-                    (item) => item.holidayDate === dateKey,
-                  );
-                  const dayLeaves = leaveMarkers.filter(
-                    (item) => item.date === dateKey,
-                  );
+              <ul className="divide-y divide-border">
+                {templates.map((template) => {
+                  const shortage =
+                    template.requiredHeadcount - template.memberCount;
                   return (
-                    <div
-                      key={dateKey}
-                      className="rounded-2xl border border-border bg-background p-3"
-                    >
-                      <div className="flex items-start justify-between gap-2">
+                    <li key={template.id} className="p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
-                          <p className="font-medium text-foreground">
-                            {formatThaiDate(dateKey)}
+                          <p className="font-semibold text-foreground">
+                            {template.name}
+                            {!template.isActive ? (
+                              <span className="ml-2 text-xs font-normal text-muted-foreground">
+                                (ปิดใช้งาน)
+                              </span>
+                            ) : null}
                           </p>
-                          {dayHolidays.map((holiday) => (
-                            <p
-                              key={holiday.id}
-                              className="text-xs text-secondary"
-                            >
-                              วันหยุด: {holiday.name}
+                          <p className="text-sm text-muted-foreground">
+                            {template.startTime}–{template.endTime} · ต้องการ{" "}
+                            {template.requiredHeadcount} คน
+                          </p>
+                          {template.pendingChange ? (
+                            <p className="mt-1 text-xs text-primary">
+                              จาก {template.pendingChange.effectiveFrom}:{" "}
+                              {template.pendingChange.startTime}–
+                              {template.pendingChange.endTime}
                             </p>
-                          ))}
-                          {dayLeaves.map((leave) => (
-                            <p
-                              key={`${leave.employeeId}-${leave.date}-${leave.label}`}
-                              className="text-xs text-muted-foreground"
-                            >
-                              ลา: {leave.label}
-                              {leave.duration && leave.duration !== "FULL_DAY"
-                                ? ` (${leave.duration})`
-                                : ""}
+                          ) : null}
+                          {shortage > 0 ? (
+                            <p className="mt-1 text-xs text-warning">
+                              ขาดอีก {shortage} คน
                             </p>
-                          ))}
+                          ) : null}
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => void addHoliday(dateKey)}
-                          className="text-xs text-muted-foreground hover:text-foreground"
-                        >
-                          +วันหยุด
-                        </button>
+                        <div className="flex flex-wrap gap-1">
+                          <button
+                            type="button"
+                            onClick={() => startEditTemplate(template)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs hover:bg-muted"
+                          >
+                            <Pencil size={14} />
+                            แก้ไข
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void deleteTemplate(template)}
+                            disabled={template.memberCount > 0}
+                            title={
+                              template.memberCount > 0
+                                ? "มีสมาชิกอยู่ — ถอดสมาชิกก่อนจึงลบได้"
+                                : undefined
+                            }
+                            className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs text-destructive hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            <Trash2 size={14} />
+                            ลบ
+                          </button>
+                        </div>
                       </div>
-                      <ul className="mt-3 space-y-2">
-                        {daySchedules.length === 0 ? (
-                          <li className="text-xs text-muted-foreground">
-                            ยังไม่มีกะ
+                      <ul className="mt-3 space-y-1.5">
+                        {(template.members ?? []).length === 0 ? (
+                          <li className="rounded-xl border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+                            ยังไม่มีสมาชิกในกะนี้
                           </li>
                         ) : (
-                          daySchedules.map((item) => (
+                          (template.members ?? []).map((member) => (
                             <li
-                              key={item.id}
-                              className="rounded-xl border border-border px-2.5 py-2 text-xs"
-                              style={{
-                                borderLeftColor: item.shiftColor ?? undefined,
-                                borderLeftWidth: item.shiftColor ? 4 : undefined,
-                              }}
+                              key={member.id}
+                              className="flex items-center justify-between gap-2 rounded-xl border border-border bg-background px-3 py-2 text-sm"
                             >
-                              <div className="flex items-start justify-between gap-2">
-                                <div>
-                                  <p className="font-medium text-foreground">
-                                    {item.employeeName}
-                                  </p>
-                                  <p className="text-muted-foreground">
-                                    {item.shiftName} ·{" "}
-                                    {formatTimeRange(item.startsAt, item.endsAt)}
-                                  </p>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => void cancelSchedule(item.id)}
-                                  className="rounded-lg p-1 hover:bg-muted"
-                                  aria-label="ยกเลิกกะ"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </div>
+                              <span>
+                                {member.employeeCode
+                                  ? `${member.employeeCode} · `
+                                  : ""}
+                                {member.employeeName}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  void removeMember(
+                                    template.id,
+                                    member.employeeId,
+                                    member.employeeName,
+                                  )
+                                }
+                                className="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-destructive"
+                                aria-label={`ถอด ${member.employeeName}`}
+                              >
+                                <Trash2 size={14} />
+                              </button>
                             </li>
                           ))
                         )}
                       </ul>
-                    </div>
+                    </li>
                   );
                 })}
-              </div>
+              </ul>
             )}
           </div>
         </section>

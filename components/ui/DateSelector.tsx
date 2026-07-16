@@ -36,13 +36,6 @@ function startWeekday(year: number, month: number) {
   return new Date(year, month - 1, 1).getDay();
 }
 
-function monthLabel(year: number, month: number) {
-  return new Intl.DateTimeFormat("th-TH", {
-    month: "long",
-    year: "numeric",
-  }).format(new Date(year, month - 1, 1));
-}
-
 function isBefore(a: string, b: string) {
   return a < b;
 }
@@ -52,6 +45,31 @@ function isAfter(a: string, b: string) {
 }
 
 const WEEKDAYS = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
+
+const THAI_MONTHS = [
+  "มกราคม",
+  "กุมภาพันธ์",
+  "มีนาคม",
+  "เมษายน",
+  "พฤษภาคม",
+  "มิถุนายน",
+  "กรกฎาคม",
+  "สิงหาคม",
+  "กันยายน",
+  "ตุลาคม",
+  "พฤศจิกายน",
+  "ธันวาคม",
+] as const;
+
+function yearOptions(centerYear: number, min?: string, max?: string) {
+  const minYear = min ? parseKey(min).year : centerYear - 20;
+  const maxYear = max ? parseKey(max).year : centerYear + 20;
+  const from = Math.min(minYear, centerYear - 5);
+  const to = Math.max(maxYear, centerYear + 10);
+  const years: number[] = [];
+  for (let year = from; year <= to; year += 1) years.push(year);
+  return years;
+}
 
 export default function DateSelector({
   date,
@@ -85,6 +103,10 @@ export default function DateSelector({
   const parsed = parseKey(selected);
   const [viewYear, setViewYear] = useState(parsed.year);
   const [viewMonth, setViewMonth] = useState(parsed.month);
+  const years = useMemo(
+    () => yearOptions(viewYear || new Date().getFullYear(), min, max),
+    [max, min, viewYear],
+  );
 
   useEffect(() => {
     setMounted(true);
@@ -109,7 +131,7 @@ export default function DateSelector({
         window.innerWidth - width - 8,
       );
       const below = rect.bottom + 8;
-      const panelHeight = 320;
+      const panelHeight = 360;
       const top =
         below + panelHeight > window.innerHeight
           ? Math.max(8, rect.top - panelHeight - 8)
@@ -193,18 +215,49 @@ export default function DateSelector({
                 type="button"
                 aria-label="เดือนก่อนหน้า"
                 onClick={() => shiftMonth(-1)}
-                className="grid h-8 w-8 place-items-center rounded-full hover:bg-muted"
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-muted"
               >
                 <ChevronLeft size={18} />
               </button>
-              <p className="text-sm font-medium text-foreground">
-                {monthLabel(viewYear, viewMonth)}
-              </p>
+              <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                <label className="sr-only" htmlFor={`${inputId}-month`}>
+                  เดือน
+                </label>
+                <select
+                  id={`${inputId}-month`}
+                  value={viewMonth}
+                  aria-label="เลือกเดือน"
+                  onChange={(event) => setViewMonth(Number(event.target.value))}
+                  className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2 py-1.5 text-sm text-foreground"
+                >
+                  {THAI_MONTHS.map((label, index) => (
+                    <option key={label} value={index + 1}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                <label className="sr-only" htmlFor={`${inputId}-year`}>
+                  ปี
+                </label>
+                <select
+                  id={`${inputId}-year`}
+                  value={viewYear}
+                  aria-label="เลือกปี"
+                  onChange={(event) => setViewYear(Number(event.target.value))}
+                  className="w-[5.75rem] shrink-0 rounded-lg border border-border bg-background px-2 py-1.5 text-sm text-foreground"
+                >
+                  {years.map((year) => (
+                    <option key={year} value={year}>
+                      {year + 543}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <button
                 type="button"
                 aria-label="เดือนถัดไป"
                 onClick={() => shiftMonth(1)}
-                className="grid h-8 w-8 place-items-center rounded-full hover:bg-muted"
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-muted"
               >
                 <ChevronRight size={18} />
               </button>

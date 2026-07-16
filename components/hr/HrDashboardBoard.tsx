@@ -10,6 +10,8 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import DateSelector from "@/components/ui/DateSelector";
+
 type DayMetrics = {
   totalEmployees: number;
   dailyEmployees: number;
@@ -65,7 +67,7 @@ export function HrDashboardBoard() {
   const [monthSummary, setMonthSummary] = useState<MonthSummary | null>(null);
   const [quickActions, setQuickActions] = useState<QuickAction[]>([]);
   const [understaffed, setUnderstaffed] = useState<
-    Array<{ workDate: string; shiftName: string; shortage: number }>
+    Array<{ shiftName: string; shortage: number }>
   >([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -88,7 +90,6 @@ export function HrDashboardBoard() {
         monthSummary: MonthSummary;
         quickActions: QuickAction[];
         understaffed: Array<{
-          workDate: string;
           shiftName: string;
           shortage: number;
         }>;
@@ -136,14 +137,9 @@ export function HrDashboardBoard() {
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 rounded-3xl border border-border bg-surface p-4 shadow-sm sm:flex-row sm:items-end sm:justify-between">
-        <label className="text-sm">
+        <label className="min-w-[12rem] text-sm">
           <span className="mb-1 block text-muted-foreground">วันที่</span>
-          <input
-            type="date"
-            value={date}
-            onChange={(event) => setDate(event.target.value)}
-            className="rounded-xl border border-border bg-background px-3 py-2"
-          />
+          <DateSelector date={date} setDate={setDate} />
         </label>
         <div className="flex flex-wrap gap-2">
           {quickActions.map((action) => (
@@ -232,7 +228,7 @@ export function HrDashboardBoard() {
               <p className="font-semibold">กะที่ขาดคนวันนี้</p>
               <ul className="mt-2 space-y-1">
                 {understaffed.map((item) => (
-                  <li key={`${item.workDate}-${item.shiftName}`}>
+                  <li key={item.shiftName}>
                     {item.shiftName} ขาด {item.shortage} คน
                   </li>
                 ))}

@@ -2,7 +2,7 @@
 
 ## Task
 
-ปรับระบบ Login พนักงานรองรับ Username / Phone โดยไม่กระทบ Email Auth เดิม
+แก้เวลากะแบบมีวันที่มีผล (อดีตไม่เปลี่ยน / ตั้งล่วงหน้าได้)
 
 ## Status
 
@@ -10,19 +10,18 @@ COMPLETED
 
 ## Objective
 
-พนักงานใหม่: Username + Phone + Password (Supabase Phone Auth)
-พนักงานเดิม: Login ด้วย Email ได้ตามปกติ
-ใช้ `mustResetPassword` ที่มีอยู่แล้วแทนการสร้าง field `mustChangePassword` ใหม่
+- แกเวลาไม่ย้อนแก้เมื่อวาน
+- ระบุ effectiveFrom เช่น พรุ่งนี้ ค่าวันนี้ยังใช้ของเดิม
+- WorkSchedule ที่ materialize แล้วของวันก่อน effectiveFrom ไม่ถูก overwrite
 
 ## Evidence
 
-- Migration `20260715100000_employee_username_phone_login` applied (username + unique phone)
-- Dual login: email / phone / username → `app/login/actions.ts`
-- Create phone Auth + cleanup: `lib/supabase/admin.ts`, `POST /api/employees`
-- `/api/auth/me` additive fields; RBAC/middleware เดิมคงไว้
-- Readiness: `scripts/check-employee-auth-readiness.ts`
-- Verify: prisma validate/generate, tsc, lint, build, `npm run test:unit` ผ่าน
+- `ShiftTemplateTimePeriod` + migration `20260715170000_shift_template_time_periods`
+- PATCH รับ `effectiveFrom`; rematerialize เฉพาะ `workDate >= effectiveFrom`
+- `ensureWorkScheduleFromMembership` ไม่ sync ทับแถวเดิม
+- UI: ฟิลด์ “เวลามีผลตั้งแต่วันที่” (default พรุ่งนี้) + แสดง pending change
+- unit test resolve + `tsc` ผ่าน; migrate deploy แล้ว
 
 ## Next Task
 
-ตาม MASTER_PLAN / คำสั่งผู้ใช้ — ยังไม่ควรลบ email login / register / email reset จนกว่าจะย้ายบัญชีเก่าครบ
+ตาม MASTER_PLAN / คำสั่งผู้ใช้

@@ -618,8 +618,11 @@ model Employee {
   defaultShiftTemplate      ShiftTemplate?         @relation("EmployeeDefaultShift", fields: [defaultShiftTemplateId], references: [id], onDelete: SetNull)
   isActive                  Boolean                @default(true) @map("is_active")
   mustResetPassword         Boolean                @default(false) @map("must_reset_password")
+  /** Bumped on each successful login; JWT app_metadata.session_epoch must match. */
+  sessionEpoch              Int                    @default(0) @map("session_epoch")
   shifts                    WorkShift[]
   workSchedules             WorkSchedule[]
+  shiftMemberships          ShiftMembership[]
   attendanceRecords         AttendanceRecord[]
   attendanceEvents          AttendanceEvent[]
   attendanceAdjustments     AttendanceAdjustment[] @relation("AdjustmentRequester")
@@ -672,24 +675,60 @@ model Employee {
 }
 
 model ShiftTemplate {
-  id                     String         @id @default(uuid()) @db.Uuid
-  code                   String?        @unique
+  id                     String            @id @default(uuid()) @db.Uuid
+  code                   String?           @unique
   name                   String
-  startMinutes           Int            @map("start_minutes")
-  endMinutes             Int            @map("end_minutes")
-  breakMinutes           Int            @default(0) @map("break_minutes")
-  lateGraceMinutes       Int            @default(0) @map("late_grace_minutes")
-  earlyLeaveGraceMinutes Int            @default(0) @map("early_leave_grace_minutes")
-  requiredHeadcount      Int            @default(1) @map("required_headcount")
+  startMinutes           Int               @map("start_minutes")
+  endMinutes             Int               @map("end_minutes")
+  breakMinutes           Int               @default(0) @map("break_minutes")
+  lateGraceMinutes       Int               @default(0) @map("late_grace_minutes")
+  earlyLeaveGraceMinutes Int               @default(0) @map("early_leave_grace_minutes")
+  requiredHeadcount      Int               @default(1) @map("required_headcount")
   color                  String?
-  isActive               Boolean        @default(true) @map("is_active")
+  isActive               Boolean           @default(true) @map("is_active")
   schedules              WorkSchedule[]
-  defaultForEmployees    Employee[]     @relation("EmployeeDefaultShift")
-  createdAt              DateTime       @default(now()) @map("created_at")
-  updatedAt              DateTime       @updatedAt @map("updated_at")
+  defaultForEmployees    Employee[]        @relation("EmployeeDefaultShift")
+  memberships            ShiftMembership[]
+  timePeriods            ShiftTemplateTimePeriod[]
+  createdAt              DateTime          @default(now()) @map("created_at")
+  updatedAt              DateTime          @updatedAt @map("updated_at")
 
   @@index([isActive, name])
   @@map("shift_templates")
+}
+
+/** Time configuration for a shift, effective from a calendar day onward until the next period. */
+model ShiftTemplateTimePeriod {
+  id                     String        @id @default(uuid()) @db.Uuid
+  shiftTemplateId        String        @map("shift_template_id") @db.Uuid
+  effectiveFrom          DateTime      @map("effective_from") @db.Date
+  startMinutes           Int           @map("start_minutes")
+  endMinutes             Int           @map("end_minutes")
+  breakMinutes           Int           @default(0) @map("break_minutes")
+  lateGraceMinutes       Int           @default(0) @map("late_grace_minutes")
+  earlyLeaveGraceMinutes Int           @default(0) @map("early_leave_grace_minutes")
+  shiftTemplate          ShiftTemplate @relation(fields: [shiftTemplateId], references: [id], onDelete: Cascade)
+  createdAt              DateTime      @default(now()) @map("created_at")
+  updatedAt              DateTime      @updatedAt @map("updated_at")
+
+  @@unique([shiftTemplateId, effectiveFrom])
+  @@index([shiftTemplateId, effectiveFrom])
+  @@map("shift_template_time_periods")
+}
+
+model ShiftMembership {
+  id              String        @id @default(uuid()) @db.Uuid
+  shiftTemplateId String        @map("shift_template_id") @db.Uuid
+  employeeId      String        @map("employee_id") @db.Uuid
+  shiftTemplate   ShiftTemplate @relation(fields: [shiftTemplateId], references: [id], onDelete: Cascade)
+  employee        Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  @@unique([employeeId])
+  @@unique([shiftTemplateId, employeeId])
+  @@index([shiftTemplateId])
+  @@map("shift_memberships")
 }
 
 enum WorkScheduleStatus {

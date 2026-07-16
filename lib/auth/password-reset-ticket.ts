@@ -3,7 +3,10 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 export type PasswordResetTicketPayload = {
   employeeId: string;
   authUserId: string;
+  /** Present for legacy email Auth accounts. */
   email: string;
+  /** Present for phone Auth / username-login accounts. */
+  phone: string;
   exp: number;
 };
 
@@ -28,12 +31,25 @@ function signPayload(payloadB64: string) {
 }
 
 export function createPasswordResetTicket(
-  input: Omit<PasswordResetTicketPayload, "exp">,
+  input: {
+    employeeId: string;
+    authUserId: string;
+    email?: string | null;
+    phone?: string | null;
+  },
   ttlSeconds = DEFAULT_TTL_SECONDS,
 ): string {
+  const email = (input.email ?? "").trim().toLowerCase();
+  const phone = (input.phone ?? "").trim();
+  if (!email && !phone) {
+    throw new Error("Password reset ticket requires email or phone");
+  }
+
   const payload: PasswordResetTicketPayload = {
-    ...input,
-    email: input.email.trim().toLowerCase(),
+    employeeId: input.employeeId,
+    authUserId: input.authUserId,
+    email,
+    phone,
     exp: Math.floor(Date.now() / 1000) + ttlSeconds,
   };
   const payloadB64 = Buffer.from(JSON.stringify(payload), "utf8").toString(
@@ -68,11 +84,15 @@ export function verifyPasswordResetTicket(
     if (
       typeof parsed.employeeId !== "string" ||
       typeof parsed.authUserId !== "string" ||
-      typeof parsed.email !== "string" ||
       typeof parsed.exp !== "number"
     ) {
       return null;
     }
+
+    const email =
+      typeof parsed.email === "string" ? parsed.email.trim().toLowerCase() : "";
+    const phone = typeof parsed.phone === "string" ? parsed.phone.trim() : "";
+    if (!email && !phone) return null;
 
     if (parsed.exp < Math.floor(Date.now() / 1000)) {
       return null;
@@ -81,10 +101,27 @@ export function verifyPasswordResetTicket(
     return {
       employeeId: parsed.employeeId,
       authUserId: parsed.authUserId,
-      email: parsed.email.trim().toLowerCase(),
+      email,
+      phone,
       exp: parsed.exp,
     };
   } catch {
     return null;
   }
+}
+
+/** Match ticket channel against the current employee record. */
+export function ticketMatchesEmployee(
+  payload: PasswordResetTicketPayload,
+  employee: { email: string | null; phone: string | null },
+): boolean {
+  const employeeEmail = employee.email?.trim().toLowerCase() ?? "";
+  const employeePhone = employee.phone?.trim() ?? "";
+  if (payload.email && employeeEmail && payload.email === employeeEmail) {
+    return true;
+  }
+  if (payload.phone && employeePhone && payload.phone === employeePhone) {
+    return true;
+  }
+  return false;
 }

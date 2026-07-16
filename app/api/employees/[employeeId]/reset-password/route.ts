@@ -9,10 +9,6 @@ import {
 } from "@/lib/auth/support-account";
 import { prisma } from "@/lib/prisma";
 import { isUuid } from "@/lib/settings/employees";
-import {
-  createAdminClient,
-  createTemporaryPassword,
-} from "@/lib/supabase/admin";
 import { NextRequest, NextResponse } from "next/server";
 
 type RouteContext = {
@@ -66,53 +62,11 @@ export async function POST(_request: NextRequest, context: RouteContext) {
         "NO_AUTH_USER",
       );
     }
-
-    // Legacy email Auth: ticket login without password (unchanged).
-    if (existing.email) {
-      const employee = await prisma.employee.update({
-        where: { id: employeeId },
-        data: { mustResetPassword: true },
-        select: { id: true, mustResetPassword: true },
-      });
-
-      await recordAuditLog({
-        actor: {
-          employeeId: currentUser?.employee?.id,
-          authUserId: currentUser?.user.id,
-        },
-        action: "EMPLOYEE_PASSWORD_RESET_REQUESTED",
-        entityType: "EMPLOYEE",
-        entityId: employee.id,
-        metadata: { name: existing.name, mode: "email_ticket" },
-      });
-
-      return NextResponse.json({
-        ok: true,
-        mustResetPassword: employee.mustResetPassword,
-        message:
-          "ตั้งค่าแล้ว — ผู้ใช้ใส่อีเมลแล้วกดเข้าสู่ระบบ จะถูกพาไปตั้งรหัสผ่านใหม่โดยไม่ต้องใส่รหัสเดิม",
-      });
-    }
-
-    // Phone Auth: admin-issued temporary password (no SMS OTP in this phase).
-    if (!existing.phone) {
+    if (!existing.email && !existing.phone) {
       return apiErrorResponse(
-        "พนักงานยังไม่มีเบอร์โทรสำหรับรีเซ็ตรหัสผ่าน",
+        "พนักงานยังไม่มีอีเมลหรือเบอร์โทรสำหรับตั้งรหัสผ่าน",
         400,
-        "NO_PHONE",
-      );
-    }
-
-    const temporaryPassword = createTemporaryPassword();
-    const admin = createAdminClient();
-    const { error } = await admin.auth.admin.updateUserById(existing.authUserId, {
-      password: temporaryPassword,
-    });
-    if (error) {
-      return apiErrorResponse(
-        `รีเซ็ตรหัสผ่าน Auth ไม่สำเร็จ: ${error.message}`,
-        502,
-        "AUTH_PASSWORD_RESET_FAILED",
+        "NO_LOGIN_CHANNEL",
       );
     }
 
@@ -132,7 +86,7 @@ export async function POST(_request: NextRequest, context: RouteContext) {
       entityId: employee.id,
       metadata: {
         name: existing.name,
-        mode: "phone_temp_password",
+        channel: existing.email ? "email" : "phone",
         username: existing.username,
       },
     });
@@ -140,9 +94,9 @@ export async function POST(_request: NextRequest, context: RouteContext) {
     return NextResponse.json({
       ok: true,
       mustResetPassword: employee.mustResetPassword,
-      temporaryPassword,
-      message:
-        "สร้างรหัสผ่านชั่วคราวแล้ว — ส่งให้พนักงานใช้เข้าสู่ระบบ แล้วเปลี่ยนรหัสผ่านทันที",
+      message: existing.email
+        ? "ตั้งค่าแล้ว — ผู้ใช้ใส่อีเมลแล้วกดเข้าสู่ระบบ จะถูกพาไปตั้งรหัสผ่านใหม่โดยไม่ต้องใส่รหัสเดิม"
+        : "ตั้งค่าแล้ว — ผู้ใช้ใส่ Username หรือเบอร์โทรแล้วกดเข้าสู่ระบบ จะถูกพาไปตั้งรหัสผ่านใหม่โดยไม่ต้องใส่รหัสเดิม",
     });
   } catch (error) {
     console.error("POST /api/employees/[employeeId]/reset-password failed", error);

@@ -175,46 +175,15 @@ export function parseEmployeeInput(
     }
   }
 
-  if (mode === "create" || "password" in body) {
-    const password = readTrimmedString(body, "password");
-    const passwordConfirm = readTrimmedString(body, "passwordConfirm");
-    if (password) {
-      if (password.length < 8) {
-        issues.push({
-          path: "password",
-          message: "รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร",
-        });
-      } else {
-        data.password = password;
-      }
-      if (passwordConfirm !== undefined && passwordConfirm !== password) {
-        issues.push({
-          path: "passwordConfirm",
-          message: "รหัสผ่านยืนยันไม่ตรงกัน",
-        });
-      } else if (passwordConfirm) {
-        data.passwordConfirm = passwordConfirm;
-      }
-    }
-  }
-
   if (mode === "create") {
-    const phoneAuth =
-      Boolean(data.username) && Boolean(data.phone) && Boolean(data.password);
-    const emailAuth = Boolean(data.email);
+    const phoneAuth = Boolean(data.username) && Boolean(data.phone);
+    const emailAuth = Boolean(data.email) && !phoneAuth;
 
     if (!phoneAuth && !emailAuth) {
       issues.push({
         path: "body",
         message:
-          "ต้องระบุ Username + เบอร์โทร + รหัสผ่าน (พนักงานใหม่) หรืออีเมล (บัญชีเดิม)",
-      });
-    }
-
-    if (phoneAuth && data.email) {
-      issues.push({
-        path: "email",
-        message: "พนักงานใหม่แบบ Username/Phone ไม่ต้องใส่อีเมล",
+          "ต้องระบุ Username + เบอร์โทร (พนักงานใหม่) หรืออีเมล (บัญชีเดิม)",
       });
     }
   }

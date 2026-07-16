@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
+import DateSelector from "@/components/ui/DateSelector";
 import {
   formatThaiDate,
   formatThaiDateRange,
@@ -495,35 +496,28 @@ export function MyWorkBoard() {
               <div className="grid grid-cols-2 gap-3">
                 <label className="block text-sm">
                   <span className="mb-1 block text-muted-foreground">วันที่เริ่ม</span>
-                  <input
-                    type="date"
-                    value={leaveForm.startDate}
-                    onChange={(event) =>
+                  <DateSelector
+                    date={leaveForm.startDate}
+                    setDate={(startDate) =>
                       setLeaveForm((current) => ({
                         ...current,
-                        startDate: event.target.value,
+                        startDate,
                         endDate:
-                          current.endDate < event.target.value
-                            ? event.target.value
+                          current.endDate < startDate
+                            ? startDate
                             : current.endDate,
                       }))
                     }
-                    className="w-full rounded-xl border border-border bg-background px-3 py-2"
                   />
                 </label>
                 <label className="block text-sm">
                   <span className="mb-1 block text-muted-foreground">วันที่สิ้นสุด</span>
-                  <input
-                    type="date"
-                    value={leaveForm.endDate}
-                    min={leaveForm.startDate}
-                    onChange={(event) =>
-                      setLeaveForm((current) => ({
-                        ...current,
-                        endDate: event.target.value,
-                      }))
+                  <DateSelector
+                    date={leaveForm.endDate}
+                    setDate={(endDate) =>
+                      setLeaveForm((current) => ({ ...current, endDate }))
                     }
-                    className="w-full rounded-xl border border-border bg-background px-3 py-2"
+                    min={leaveForm.startDate}
                   />
                 </label>
               </div>

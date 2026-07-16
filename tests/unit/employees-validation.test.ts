@@ -8,14 +8,12 @@ import {
 } from "@/lib/settings/employees";
 
 describe("parseEmployeeInput", () => {
-  it("accepts create with username + phone + password (new employees)", () => {
+  it("accepts create with username + phone without password", () => {
     const result = parseEmployeeInput(
       {
         name: "Somchai",
         username: "SomChai.W",
         phone: "0812345678",
-        password: "Secret123",
-        passwordConfirm: "Secret123",
         roleId: "00000000-0000-4000-8000-000000000001",
       },
       "create",
@@ -24,8 +22,7 @@ describe("parseEmployeeInput", () => {
     if (result.ok) {
       assert.equal(result.data.username, "somchai.w");
       assert.equal(result.data.phone, "+66812345678");
-      assert.equal(result.data.password, "Secret123");
-      assert.equal(result.data.email, undefined);
+      assert.equal(result.data.password, undefined);
     }
   });
 
@@ -55,21 +52,20 @@ describe("parseEmployeeInput", () => {
     }
   });
 
-  it("rejects phone-auth create that also sends email", () => {
+  it("allows optional email as contact on phone-auth create", () => {
     const result = parseEmployeeInput(
       {
         name: "Somchai",
         username: "somchai",
         phone: "0812345678",
-        password: "Secret123",
-        passwordConfirm: "Secret123",
         email: "a@b.com",
       },
       "create",
     );
-    assert.equal(result.ok, false);
-    if (!result.ok) {
-      assert.ok(result.issues.some((issue) => issue.path === "email"));
+    assert.equal(result.ok, true);
+    if (result.ok) {
+      assert.equal(result.data.email, "a@b.com");
+      assert.equal(result.data.username, "somchai");
     }
   });
 

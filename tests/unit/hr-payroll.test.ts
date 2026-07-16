@@ -17,6 +17,14 @@ describe("hr payroll", () => {
     ]);
     assert.equal(settings.otMultiplier, 1.5);
     assert.equal(settings.lateDeductionPerMinute, 1);
+    assert.equal(settings.payDayOfMonth, 25);
+  });
+
+  it("parses business payday", () => {
+    const settings = parsePayrollSettings([
+      { key: "pay_day_of_month", value: "5" },
+    ]);
+    assert.equal(settings.payDayOfMonth, 5);
   });
 
   it("calculates DAILY pay from worked days and OT", () => {
@@ -50,6 +58,7 @@ describe("hr payroll", () => {
         holidayMultiplier: 2,
         lateDeductionPerMinute: 0,
         standardWorkMinutesPerDay: 480,
+        payDayOfMonth: 25,
       },
       periodCalendarDays: 2,
       monthDays: 30,
@@ -93,6 +102,7 @@ describe("hr payroll", () => {
         holidayMultiplier: 2,
         lateDeductionPerMinute: 0,
         standardWorkMinutesPerDay: 480,
+        payDayOfMonth: 25,
       },
       periodCalendarDays: 15,
       monthDays: 30,

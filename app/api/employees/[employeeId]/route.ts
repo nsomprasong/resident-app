@@ -21,6 +21,7 @@ import {
   serializeEmployee,
 } from "@/lib/settings/employees";
 import {
+  ensureEmployeeAuthProvisioned,
   resolveAuthUserIdForEmail,
   updateAuthUserPhone,
 } from "@/lib/supabase/admin";
@@ -224,6 +225,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       authUserId?: string;
       roleId?: string | null;
       isActive?: boolean;
+      mustResetPassword?: boolean;
     } = { ...fieldsToUpdate };
 
     let authUserCreated = false;
@@ -257,7 +259,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         ]);
       }
 
-      // Phone-auth employees may update Auth phone; email-auth keep phone as contact only.
+      // Sync Auth phone only for phone-only Auth users. Username/email Auth keeps
+      // phone on the Employee row (updateAuthUserPhone no-ops when Auth has email).
       if (existing.authUserId && existing.username && !existing.email) {
         const phoneUpdate = await updateAuthUserPhone({
           authUserId: existing.authUserId,
@@ -319,6 +322,50 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       updateData.email = email;
       updateData.authUserId = authResolved.authUserId;
       authUserCreated = authResolved.created;
+    }
+
+    // Activating (or keeping active) must always have a live Auth user in Supabase.
+    if (nextActive) {
+      const ensured = await ensureEmployeeAuthProvisioned({
+        authUserId: updateData.authUserId ?? existing.authUserId,
+        username:
+          updateData.username !== undefined
+            ? updateData.username
+            : existing.username,
+        phone:
+          updateData.phone !== undefined ? updateData.phone : existing.phone,
+        contactEmail:
+          updateData.email !== undefined ? updateData.email : existing.email,
+      });
+      if (!ensured.ok) {
+        return apiErrorResponse(
+          ensured.message,
+          502,
+          "AUTH_PROVISION_FAILED",
+        );
+      }
+
+      if (ensured.authUserId !== existing.authUserId) {
+        const authOwner = await prisma.employee.findFirst({
+          where: {
+            authUserId: ensured.authUserId,
+            id: { not: employeeId },
+          },
+          select: { id: true },
+        });
+        if (authOwner) {
+          return validationErrorResponse(
+            "Auth user นี้ถูกผูกกับพนักงานอื่นแล้ว",
+            [{ path: "authUserId", message: "authUserId ซ้ำ" }],
+          );
+        }
+        updateData.authUserId = ensured.authUserId;
+      }
+
+      if (ensured.created) {
+        authUserCreated = true;
+        updateData.mustResetPassword = true;
+      }
     }
 
     const employee = await prisma.employee.update({

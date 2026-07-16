@@ -8,6 +8,7 @@ import {
   resolveApiPermission,
 } from "@/lib/auth/authorization";
 import { findEmployeeAuthorization } from "@/lib/auth/employee-authorization";
+import { sessionEpochMatches } from "@/lib/auth/session-epoch";
 
 const PUBLIC_ROUTES = new Set([
   "/login",
@@ -114,6 +115,30 @@ export async function updateSession(request: NextRequest) {
         status: 503,
       });
     }
+  }
+
+  // Another device logged in — invalidate this session and force re-login.
+  if (
+    employee &&
+    authUserId &&
+    !sessionEpochMatches(claims, employee.sessionEpoch)
+  ) {
+    await supabase.auth.signOut({ scope: "local" });
+
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json(
+        {
+          message: "บัญชีนี้เข้าใช้งานจากอุปกรณ์อื่นแล้ว",
+          code: "SESSION_REPLACED",
+        },
+        { status: 401 },
+      );
+    }
+
+    const loginUrl = request.nextUrl.clone();
+    loginUrl.pathname = "/login";
+    loginUrl.search = "sessionReplaced=1";
+    return copyResponseCookies(response, NextResponse.redirect(loginUrl));
   }
 
   // Force set-password even on public routes (e.g. /login) after admin reset.

@@ -9,18 +9,28 @@ import {
 } from "@/lib/hr/employees";
 
 describe("hr employees validation", () => {
-  it("requires first name and employment type on create", () => {
+  it("requires first name, username and phone on create (no password)", () => {
     const result = parseHrEmployeeInput({}, "create");
     assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.ok(result.issues.some((issue) => issue.path === "firstName"));
+      assert.ok(result.issues.some((issue) => issue.path === "username"));
+      assert.ok(result.issues.some((issue) => issue.path === "phone"));
+      assert.equal(
+        result.issues.some((issue) => issue.path === "password"),
+        false,
+      );
+    }
   });
 
-  it("parses daily employee create payload", () => {
+  it("parses phone-auth create payload without email or password", () => {
     const result = parseHrEmployeeInput(
       {
         firstName: "สมชาย",
         lastName: "ใจดี",
         employmentType: "DAILY",
-        email: "somchai@example.com",
+        username: "SomChai.W",
+        phone: "0812345678",
       },
       "create",
     );
@@ -29,6 +39,27 @@ describe("hr employees validation", () => {
     assert.equal(result.data.firstName, "สมชาย");
     assert.equal(result.data.employmentType, "DAILY");
     assert.equal(result.data.hrStatus, "ACTIVE");
+    assert.equal(result.data.username, "somchai.w");
+    assert.equal(result.data.phone, "+66812345678");
+    assert.equal(result.data.email, null);
+    assert.equal(result.data.password, undefined);
+  });
+
+  it("allows optional email as contact only", () => {
+    const result = parseHrEmployeeInput(
+      {
+        firstName: "สมชาย",
+        lastName: "ใจดี",
+        employmentType: "MONTHLY",
+        username: "somchai",
+        phone: "0812345678",
+        email: "contact@example.com",
+      },
+      "create",
+    );
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.data.email, "contact@example.com");
   });
 
   it("builds display name and login eligibility", () => {

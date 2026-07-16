@@ -15,7 +15,8 @@ import {
 import { prisma } from "@/lib/prisma";
 import { parseEmployeeInput, serializeEmployee } from "@/lib/settings/employees";
 import {
-  createAuthUserWithPhone,
+  createEmployeeAuthUser,
+  createTemporaryPassword,
   deleteAuthUserById,
   resolveAuthUserIdForEmail,
 } from "@/lib/supabase/admin";
@@ -140,14 +141,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { name, phone, email, username, password, roleId } = validated.data;
+    const { name, phone, email, username, roleId } = validated.data;
     if (!name) {
       return validationErrorResponse("กรุณาตรวจสอบข้อมูลพนักงาน", [
         { path: "body", message: "ข้อมูลไม่ครบ" },
       ]);
     }
 
-    const phoneAuth = Boolean(username && phone && password);
+    const phoneAuth = Boolean(username && phone);
     const emailAuth = Boolean(email) && !phoneAuth;
 
     if (!phoneAuth && !emailAuth) {
@@ -155,7 +156,7 @@ export async function POST(request: NextRequest) {
         {
           path: "body",
           message:
-            "ต้องระบุ Username + เบอร์โทร + รหัสผ่าน หรืออีเมลสำหรับบัญชีเดิม",
+            "ต้องระบุ Username + เบอร์โทร หรืออีเมลสำหรับบัญชีเดิม",
         },
       ]);
     }
@@ -185,7 +186,7 @@ export async function POST(request: NextRequest) {
     );
     if (!roleCheck.ok) return roleCheck.response;
 
-    if (phoneAuth && username && phone && password) {
+    if (phoneAuth && username && phone) {
       const usernameOwner = await prisma.employee.findUnique({
         where: { username },
         select: { id: true },
@@ -206,7 +207,11 @@ export async function POST(request: NextRequest) {
         ]);
       }
 
-      const authResolved = await createAuthUserWithPhone({ phone, password });
+      const authResolved = await createEmployeeAuthUser({
+        username,
+        phone,
+        password: createTemporaryPassword(),
+      });
       if (!authResolved.ok) {
         return apiErrorResponse(
           authResolved.message,
@@ -230,12 +235,27 @@ export async function POST(request: NextRequest) {
       }
 
       try {
+        if (email) {
+          const emailOwner = await prisma.employee.findUnique({
+            where: { email },
+            select: { id: true },
+          });
+          if (emailOwner) {
+            await deleteAuthUserById(authResolved.authUserId);
+            createdAuthUserId = null;
+            return validationErrorResponse("อีเมลนี้ถูกใช้โดยพนักงานอื่นแล้ว", [
+              { path: "email", message: "อีเมลซ้ำ" },
+            ]);
+          }
+        }
+
         const employee = await prisma.employee.create({
           data: {
             name,
             username,
             phone,
-            email: null,
+            // Optional contact only — Auth password login uses username-bound Auth email.
+            email: email ?? null,
             authUserId: authResolved.authUserId,
             roleId: roleId ?? null,
             mustResetPassword: true,
@@ -256,7 +276,7 @@ export async function POST(request: NextRequest) {
             username: employee.username,
             phone: employee.phone,
             roleId: employee.roleId,
-            authMode: "phone",
+            authMode: "username_auth_email",
             hasAuthMapping: Boolean(employee.authUserId),
             authUserCreated: true,
             mustResetPassword: true,

@@ -5,8 +5,8 @@ import {
   buildHrDashboardMetrics,
   buildHrMonthSummary,
 } from "@/lib/hr/dashboard";
-import { findUnderstaffedShifts } from "@/lib/hr/schedules";
 import { dateKeyUtc, monthRangeContaining, parseDateKey } from "@/lib/hr/schedules";
+import { understaffedFromMemberships } from "@/lib/hr/shift-memberships";
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -137,6 +137,7 @@ export async function GET(request: NextRequest) {
           name: true,
           requiredHeadcount: true,
           isActive: true,
+          _count: { select: { memberships: true } },
         },
       }),
       prisma.employeeCompensation.findMany({
@@ -154,17 +155,14 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
-    const understaffed = findUnderstaffedShifts({
-      templates,
-      schedules: schedules.map((item) => ({
-        employeeId: item.employeeId,
-        workDate: item.workDate,
-        status: item.status,
-        shiftTemplateId: item.shiftTemplateId,
-        startsAt: date,
-        endsAt: date,
+    const understaffed = understaffedFromMemberships({
+      templates: templates.map((template) => ({
+        id: template.id,
+        name: template.name,
+        requiredHeadcount: template.requiredHeadcount,
+        isActive: template.isActive,
+        memberCount: template._count.memberships,
       })),
-      workDates: [dateKeyUtc(date)],
     });
 
     const dayMetrics = buildHrDashboardMetrics({

@@ -4,6 +4,7 @@ import { calculateAttendanceMetrics } from "@/lib/hr/attendance";
 import { getAttendanceSetting } from "@/lib/hr/attendance-settings";
 import { haversineDistanceMeters, validateCoordinates } from "@/lib/hr/geo";
 import { dateKeyUtc, parseDateKey } from "@/lib/hr/schedules";
+import { ensureWorkScheduleFromMembership } from "@/lib/hr/shift-memberships";
 import { prisma } from "@/lib/prisma";
 
 /** "YYYY-MM-DD" for a given IANA timezone, defaulting to server clock as the source of truth. */
@@ -26,6 +27,13 @@ export async function getTodayScheduleForEmployee(
   const todayKey = todayDateKeyInTimezone(timezone);
   const workDate = parseDateKey(todayKey);
   if (!workDate) return null;
+
+  // Prefer permanent shift membership (every day until changed / validity ends).
+  const fromMembership = await ensureWorkScheduleFromMembership(
+    employeeId,
+    workDate,
+  );
+  if (fromMembership) return fromMembership;
 
   return prisma.workSchedule.findFirst({
     where: { employeeId, workDate, status: "ASSIGNED" },

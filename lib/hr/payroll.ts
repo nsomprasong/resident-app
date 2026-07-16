@@ -5,6 +5,8 @@ export type PayrollSettingsMap = {
   holidayMultiplier: number;
   lateDeductionPerMinute: number;
   standardWorkMinutesPerDay: number;
+  /** Business payday (1–31). Employee forms no longer override this. */
+  payDayOfMonth: number;
 };
 
 export const DEFAULT_PAYROLL_SETTINGS: PayrollSettingsMap = {
@@ -12,7 +14,36 @@ export const DEFAULT_PAYROLL_SETTINGS: PayrollSettingsMap = {
   holidayMultiplier: 2,
   lateDeductionPerMinute: 0,
   standardWorkMinutesPerDay: 480,
+  payDayOfMonth: 25,
 };
+
+export const PAYROLL_SETTING_DEFS = [
+  {
+    key: "ot_multiplier",
+    labelTh: "ตัวคูณ OT",
+    defaultValue: String(DEFAULT_PAYROLL_SETTINGS.otMultiplier),
+  },
+  {
+    key: "holiday_multiplier",
+    labelTh: "ตัวคูณวันหยุด",
+    defaultValue: String(DEFAULT_PAYROLL_SETTINGS.holidayMultiplier),
+  },
+  {
+    key: "late_deduction_per_minute",
+    labelTh: "หักมาสายต่อนาที",
+    defaultValue: String(DEFAULT_PAYROLL_SETTINGS.lateDeductionPerMinute),
+  },
+  {
+    key: "standard_work_minutes_per_day",
+    labelTh: "นาทีทำงานมาตรฐานต่อวัน",
+    defaultValue: String(DEFAULT_PAYROLL_SETTINGS.standardWorkMinutesPerDay),
+  },
+  {
+    key: "pay_day_of_month",
+    labelTh: "วันจ่ายเงินเดือนของกิจการ",
+    defaultValue: String(DEFAULT_PAYROLL_SETTINGS.payDayOfMonth),
+  },
+] as const;
 
 export function parsePayrollSettings(
   rows: readonly { key: string; value: string }[],
@@ -29,8 +60,27 @@ export function parsePayrollSettings(
     if (row.key === "standard_work_minutes_per_day") {
       map.standardWorkMinutesPerDay = value;
     }
+    if (row.key === "pay_day_of_month") {
+      const day = Math.trunc(value);
+      if (day >= 1 && day <= 31) map.payDayOfMonth = day;
+    }
   }
   return map;
+}
+
+export function mergePayrollSettingItems(
+  rows: readonly { id?: string; key: string; value: string; labelTh: string | null }[],
+) {
+  const byKey = new Map(rows.map((row) => [row.key, row]));
+  return PAYROLL_SETTING_DEFS.map((def) => {
+    const existing = byKey.get(def.key);
+    return {
+      id: existing?.id ?? null,
+      key: def.key,
+      value: existing?.value ?? def.defaultValue,
+      labelTh: existing?.labelTh ?? def.labelTh,
+    };
+  });
 }
 
 export function money(value: number): number {

@@ -14,10 +14,10 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
-import { formatThaiDate } from "@/lib/format/date";
-
 import { useEmployeePermissions } from "@/components/auth/EmployeePermissionsProvider";
+import DateSelector from "@/components/ui/DateSelector";
 import { useConfirmDialog } from "@/hooks/useConfirmDialog";
+import { formatThaiDate } from "@/lib/format/date";
 import { displayEmployeeName } from "@/lib/hr/employees";
 
 type Period = {
@@ -340,17 +340,17 @@ export function HrPayrollBoard() {
               <option value="MONTHLY">รายเดือน</option>
               <option value="CUSTOM">กำหนดเอง</option>
             </select>
-            <input
-              type="date"
-              value={periodStart}
-              onChange={(event) => setPeriodStart(event.target.value)}
-              className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
+            <DateSelector
+              date={periodStart}
+              setDate={setPeriodStart}
+              max={periodEnd}
+              className="min-w-[11rem]"
             />
-            <input
-              type="date"
-              value={periodEnd}
-              onChange={(event) => setPeriodEnd(event.target.value)}
-              className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
+            <DateSelector
+              date={periodEnd}
+              setDate={setPeriodEnd}
+              min={periodStart}
+              className="min-w-[11rem]"
             />
           </div>
           <button

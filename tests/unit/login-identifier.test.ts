@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  authLoginEmailForUsername,
   GENERIC_LOGIN_ERROR,
   isValidUsername,
   looksLikeEmail,
@@ -50,5 +51,12 @@ describe("login-identifier helpers", () => {
 
   it("exposes a generic login error constant", () => {
     assert.match(GENERIC_LOGIN_ERROR, /รหัสผ่านไม่ถูกต้อง/);
+  });
+
+  it("builds Auth-only login email from username", () => {
+    assert.equal(
+      authLoginEmailForUsername("  Nipa "),
+      "nipa@employee-auth.local",
+    );
   });
 });

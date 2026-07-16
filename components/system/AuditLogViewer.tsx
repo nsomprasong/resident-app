@@ -3,6 +3,7 @@
 import { LoaderCircle, RefreshCw, Search } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
+import DateSelector from "@/components/ui/DateSelector";
 import { formatThaiDateTime } from "@/lib/format/date";
 import type { AuditLogListItem } from "@/lib/system/audit-logs";
 
@@ -145,26 +146,24 @@ export function AuditLogViewer() {
           </label>
           <label className="block text-sm">
             <span className="mb-1 block text-muted-foreground">จากวันที่</span>
-            <input
-              type="date"
-              value={from}
-              onChange={(event) => {
+            <DateSelector
+              date={from}
+              setDate={(value) => {
                 setPage(1);
-                setFrom(event.target.value);
+                setFrom(value);
               }}
-              className="w-full rounded-xl border border-border bg-background px-3 py-2"
+              max={to || undefined}
             />
           </label>
           <label className="block text-sm">
             <span className="mb-1 block text-muted-foreground">ถึงวันที่</span>
-            <input
-              type="date"
-              value={to}
-              onChange={(event) => {
+            <DateSelector
+              date={to}
+              setDate={(value) => {
                 setPage(1);
-                setTo(event.target.value);
+                setTo(value);
               }}
-              className="w-full rounded-xl border border-border bg-background px-3 py-2"
+              min={from || undefined}
             />
           </label>
           <div className="flex items-end">

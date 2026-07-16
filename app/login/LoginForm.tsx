@@ -13,6 +13,9 @@ type RegisterState = {
   success: string | null;
 };
 
+const inputClassName =
+  "w-full rounded-xl border border-border bg-surface px-4 py-3 text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-ring/30";
+
 export default function LoginForm() {
   const router = useRouter();
   const [mode, setMode] = useState<"login" | "register">("login");
@@ -40,9 +43,12 @@ export default function LoginForm() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: String(form.get("name") ?? ""),
-          email: String(form.get("email") ?? ""),
+          firstName: String(form.get("firstName") ?? ""),
+          lastName: String(form.get("lastName") ?? ""),
+          notes: String(form.get("notes") ?? ""),
+          username: String(form.get("username") ?? ""),
           phone: String(form.get("phone") ?? ""),
+          email: String(form.get("email") ?? ""),
           password: String(form.get("password") ?? ""),
         }),
       });
@@ -50,13 +56,15 @@ export default function LoginForm() {
       if (!response.ok) {
         throw new Error(data.message ?? "ลงทะเบียนไม่สำเร็จ");
       }
+      const successMessage =
+        data.message ??
+        "ลงทะเบียนสำเร็จ รอผู้ดูแลเปิดใช้งานก่อนเข้าสู่ระบบ";
+      formElement.reset();
       setRegisterState({
         error: null,
-        success:
-          data.message ??
-          "ลงทะเบียนสำเร็จ รอผู้ดูแลเปิดใช้งานก่อนเข้าสู่ระบบ",
+        success: successMessage,
       });
-      formElement.reset();
+      setMode("login");
     } catch (reason) {
       setRegisterState({
         error:
@@ -84,7 +92,10 @@ export default function LoginForm() {
         </button>
         <button
           type="button"
-          onClick={() => setMode("register")}
+          onClick={() => {
+            setRegisterState({ error: null, success: null });
+            setMode("register");
+          }}
           className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium ${
             mode === "register"
               ? "bg-surface text-primary shadow-sm"
@@ -110,7 +121,7 @@ export default function LoginForm() {
               type="text"
               autoComplete="username"
               required
-              className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-ring/30"
+              className={inputClassName}
               placeholder="username / 08xxxxxxxx / name@example.com"
             />
           </div>
@@ -126,11 +137,12 @@ export default function LoginForm() {
               name="password"
               type="password"
               autoComplete="current-password"
-              className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-ring/30"
+              className={inputClassName}
               placeholder="••••••••"
             />
             <p className="mt-1.5 text-xs text-muted-foreground">
-              บัญชีเดิมที่ถูกรีเซ็ตรหัสผ่าน: ใส่อีเมลแล้วกดเข้าสู่ระบบได้โดยไม่ต้องใส่รหัสผ่าน
+              เข้าใช้งานครั้งแรกหรือถูกรีเซ็ตรหัสผ่าน: ใส่ Username เบอร์โทร
+              หรืออีเมล แล้วกดเข้าสู่ระบบโดยไม่ต้องใส่รหัสผ่าน เพื่อไปตั้งรหัสผ่านเอง
             </p>
           </div>
           {state.error ? (
@@ -139,6 +151,14 @@ export default function LoginForm() {
               className="rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive"
             >
               {state.error}
+            </p>
+          ) : null}
+          {registerState.success ? (
+            <p
+              role="status"
+              className="rounded-xl bg-success/10 px-4 py-3 text-sm text-success"
+            >
+              {registerState.success}
             </p>
           ) : null}
           <button
@@ -156,70 +176,140 @@ export default function LoginForm() {
         </form>
       ) : (
         <form onSubmit={(e) => void submitRegister(e)} className="space-y-5">
-          <div>
-            <label
-              htmlFor="register-name"
-              className="mb-2 block text-sm font-medium text-foreground"
-            >
-              ชื่อ-นามสกุล
-            </label>
-            <input
-              id="register-name"
-              name="name"
-              required
-              className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-ring/30"
-              placeholder="ชื่อที่ใช้ในระบบ"
-            />
-          </div>
-          <div>
-            <label
-              htmlFor="register-email"
-              className="mb-2 block text-sm font-medium text-foreground"
-            >
-              อีเมล
-            </label>
-            <input
-              id="register-email"
-              name="email"
-              type="email"
-              autoComplete="email"
-              required
-              className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-ring/30"
-              placeholder="name@example.com"
-            />
-          </div>
-          <div>
-            <label
-              htmlFor="register-phone"
-              className="mb-2 block text-sm font-medium text-foreground"
-            >
-              เบอร์โทร (ไม่บังคับ)
-            </label>
-            <input
-              id="register-phone"
-              name="phone"
-              className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-ring/30"
-              placeholder="08x-xxx-xxxx"
-            />
-          </div>
-          <div>
-            <label
-              htmlFor="register-password"
-              className="mb-2 block text-sm font-medium text-foreground"
-            >
-              รหัสผ่าน
-            </label>
-            <input
-              id="register-password"
-              name="password"
-              type="password"
-              autoComplete="new-password"
-              required
-              minLength={8}
-              className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-ring/30"
-              placeholder="อย่างน้อย 8 ตัวอักษร"
-            />
-          </div>
+          <section className="space-y-3">
+            <h3 className="text-sm font-semibold text-foreground">
+              1. ข้อมูลส่วนตัว
+            </h3>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label
+                  htmlFor="register-first-name"
+                  className="mb-2 block text-sm font-medium text-foreground"
+                >
+                  ชื่อ
+                </label>
+                <input
+                  id="register-first-name"
+                  name="firstName"
+                  required
+                  autoComplete="given-name"
+                  className={inputClassName}
+                  placeholder="ชื่อ"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="register-last-name"
+                  className="mb-2 block text-sm font-medium text-foreground"
+                >
+                  นามสกุล
+                </label>
+                <input
+                  id="register-last-name"
+                  name="lastName"
+                  autoComplete="family-name"
+                  className={inputClassName}
+                  placeholder="นามสกุล"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label
+                  htmlFor="register-notes"
+                  className="mb-2 block text-sm font-medium text-foreground"
+                >
+                  หมายเหตุ (ไม่บังคับ)
+                </label>
+                <textarea
+                  id="register-notes"
+                  name="notes"
+                  rows={2}
+                  className={inputClassName}
+                  placeholder="ข้อมูลเพิ่มเติมสำหรับผู้ดูแล"
+                />
+              </div>
+            </div>
+          </section>
+
+          <section className="space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">
+                2. ข้อมูลเข้าสู่ระบบ
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                ใช้ Username หรือเบอร์โทรศัพท์เข้าสู่ระบบ อีเมลเป็นข้อมูลติดต่อเท่านั้น
+                และไม่บังคับกรอก
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label
+                  htmlFor="register-username"
+                  className="mb-2 block text-sm font-medium text-foreground"
+                >
+                  Username
+                </label>
+                <input
+                  id="register-username"
+                  name="username"
+                  required
+                  autoComplete="username"
+                  className={inputClassName}
+                  placeholder="เช่น somchai.w"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="register-phone"
+                  className="mb-2 block text-sm font-medium text-foreground"
+                >
+                  เบอร์โทรศัพท์
+                </label>
+                <input
+                  id="register-phone"
+                  name="phone"
+                  required
+                  autoComplete="tel"
+                  className={inputClassName}
+                  placeholder="08xxxxxxxx"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label
+                  htmlFor="register-email"
+                  className="mb-2 block text-sm font-medium text-foreground"
+                >
+                  อีเมล (ไม่บังคับ)
+                </label>
+                <input
+                  id="register-email"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  className={inputClassName}
+                  placeholder="name@example.com"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label
+                  htmlFor="register-password"
+                  className="mb-2 block text-sm font-medium text-foreground"
+                >
+                  รหัสผ่าน
+                </label>
+                <input
+                  id="register-password"
+                  name="password"
+                  type="password"
+                  autoComplete="new-password"
+                  required
+                  minLength={8}
+                  className={inputClassName}
+                  placeholder="อย่างน้อย 8 ตัวอักษร"
+                />
+              </div>
+            </div>
+          </section>
+
           {registerState.error ? (
             <p
               role="alert"
@@ -238,6 +328,7 @@ export default function LoginForm() {
           ) : null}
           <p className="text-xs text-muted-foreground">
             หลังลงทะเบียนจะยังเข้าใช้งานไม่ได้ จนกว่าผู้ดูแลจะกำหนดสิทธิ์และเปิดใช้งาน
+            ข้อมูลที่กรอกจะถูกใช้เป็นข้อมูลส่วนตัวพนักงานทันที
           </p>
           <button
             type="submit"

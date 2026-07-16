@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
+import DateSelector from "@/components/ui/DateSelector";
 import { useConfirmDialog } from "@/hooks/useConfirmDialog";
 import {
   DOCUMENT_EXPIRY_WARNING_DAYS,
@@ -279,20 +280,14 @@ export function HrDocumentsBoard() {
           </label>
           <label className="text-sm">
             <span className="mb-1 block text-muted-foreground">วันที่ออก</span>
-            <input
-              type="date"
-              value={issuedAt}
-              onChange={(event) => setIssuedAt(event.target.value)}
-              className="w-full rounded-xl border border-border bg-background px-3 py-2"
-            />
+            <DateSelector date={issuedAt} setDate={setIssuedAt} />
           </label>
           <label className="text-sm">
             <span className="mb-1 block text-muted-foreground">วันหมดอายุ</span>
-            <input
-              type="date"
-              value={expiresAt}
-              onChange={(event) => setExpiresAt(event.target.value)}
-              className="w-full rounded-xl border border-border bg-background px-3 py-2"
+            <DateSelector
+              date={expiresAt}
+              setDate={setExpiresAt}
+              min={issuedAt || undefined}
             />
           </label>
           <label className="text-sm">

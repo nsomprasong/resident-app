@@ -6,12 +6,16 @@ import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 
 type LoginPageProps = {
-  searchParams: Promise<{ passwordUpdated?: string }>;
+  searchParams: Promise<{
+    passwordUpdated?: string;
+    sessionReplaced?: string;
+  }>;
 };
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = await searchParams;
   const passwordUpdated = params.passwordUpdated === "1";
+  const sessionReplaced = params.sessionReplaced === "1";
 
   const supabase = await createClient();
   const {
@@ -33,7 +37,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-muted px-4 py-10">
-      <section className="w-full max-w-md rounded-3xl border border-border bg-surface p-7 shadow-xl shadow-border/60 sm:p-9">
+      <section className="w-full max-w-lg rounded-3xl border border-border bg-surface p-7 shadow-xl shadow-border/60 sm:p-9">
         <div className="mb-8 text-center">
           <Image
             src="/logo.png"
@@ -57,6 +61,15 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             className="mb-5 rounded-xl bg-success/10 px-4 py-3 text-sm text-success"
           >
             ตั้งรหัสผ่านใหม่สำเร็จแล้ว กรุณาเข้าสู่ระบบด้วยรหัสผ่านใหม่
+          </p>
+        ) : null}
+        {sessionReplaced ? (
+          <p
+            role="alert"
+            className="mb-5 rounded-xl bg-warning/10 px-4 py-3 text-sm text-warning"
+          >
+            บัญชีนี้มีการเข้าสู่ระบบจากอุปกรณ์อื่นแล้ว
+            กรุณาเข้าสู่ระบบอีกครั้งหากต้องการใช้งานต่อที่เครื่องนี้
           </p>
         ) : null}
         <LoginForm />

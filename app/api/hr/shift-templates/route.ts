@@ -12,10 +12,34 @@ import {
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 
+const templateInclude = {
+  _count: { select: { memberships: true } },
+  timePeriods: {
+    orderBy: { effectiveFrom: "asc" as const },
+  },
+  memberships: {
+    orderBy: { createdAt: "asc" as const },
+    include: {
+      employee: {
+        select: {
+          id: true,
+          name: true,
+          firstName: true,
+          lastName: true,
+          nickname: true,
+          email: true,
+          employeeCode: true,
+        },
+      },
+    },
+  },
+} as const;
+
 export async function GET() {
   try {
     const templates = await prisma.shiftTemplate.findMany({
       orderBy: [{ isActive: "desc" }, { startMinutes: "asc" }, { name: "asc" }],
+      include: templateInclude,
     });
     return NextResponse.json(templates.map(serializeShiftTemplate));
   } catch (error) {
@@ -35,19 +59,38 @@ export async function POST(request: NextRequest) {
       return validationErrorResponse("กรุณาตรวจสอบข้อมูลกะ", validated.issues);
     }
 
-    const created = await prisma.shiftTemplate.create({
-      data: {
-        name: validated.data.name!,
-        code: validated.data.code,
-        startMinutes: validated.data.startMinutes!,
-        endMinutes: validated.data.endMinutes!,
-        breakMinutes: validated.data.breakMinutes ?? 0,
-        lateGraceMinutes: validated.data.lateGraceMinutes ?? 0,
-        earlyLeaveGraceMinutes: validated.data.earlyLeaveGraceMinutes ?? 0,
-        requiredHeadcount: validated.data.requiredHeadcount ?? 1,
-        color: validated.data.color,
-        isActive: validated.data.isActive ?? true,
-      },
+    const created = await prisma.$transaction(async (tx) => {
+      const template = await tx.shiftTemplate.create({
+        data: {
+          name: validated.data.name!,
+          code: validated.data.code,
+          startMinutes: validated.data.startMinutes!,
+          endMinutes: validated.data.endMinutes!,
+          breakMinutes: validated.data.breakMinutes ?? 0,
+          lateGraceMinutes: validated.data.lateGraceMinutes ?? 0,
+          earlyLeaveGraceMinutes: validated.data.earlyLeaveGraceMinutes ?? 0,
+          requiredHeadcount: validated.data.requiredHeadcount ?? 1,
+          color: validated.data.color,
+          isActive: validated.data.isActive ?? true,
+        },
+      });
+
+      await tx.shiftTemplateTimePeriod.create({
+        data: {
+          shiftTemplateId: template.id,
+          effectiveFrom: new Date(Date.UTC(1970, 0, 1)),
+          startMinutes: validated.data.startMinutes!,
+          endMinutes: validated.data.endMinutes!,
+          breakMinutes: validated.data.breakMinutes ?? 0,
+          lateGraceMinutes: validated.data.lateGraceMinutes ?? 0,
+          earlyLeaveGraceMinutes: validated.data.earlyLeaveGraceMinutes ?? 0,
+        },
+      });
+
+      return tx.shiftTemplate.findUniqueOrThrow({
+        where: { id: template.id },
+        include: templateInclude,
+      });
     });
 
     await recordAuditLog({
@@ -58,7 +101,9 @@ export async function POST(request: NextRequest) {
       action: "HR_SHIFT_TEMPLATE_CREATED",
       entityType: "SHIFT_TEMPLATE",
       entityId: created.id,
-      metadata: { name: created.name },
+      metadata: {
+        name: created.name,
+      },
     });
 
     return NextResponse.json(serializeShiftTemplate(created), { status: 201 });

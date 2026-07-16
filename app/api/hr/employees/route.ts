@@ -12,6 +12,7 @@ import {
   protectedSupportEmployeeWhere,
   supportAccountForbiddenResponseMessage,
 } from "@/lib/auth/support-account";
+import { nextEmployeeCode } from "@/lib/hr/employee-codes";
 import {
   buildEmployeeDisplayName,
   isLoginEligibleStatus,
@@ -19,7 +20,11 @@ import {
   serializeHrEmployee,
 } from "@/lib/hr/employees";
 import { prisma } from "@/lib/prisma";
-import { resolveAuthUserIdForEmail } from "@/lib/supabase/admin";
+import {
+  createEmployeeAuthUser,
+  createTemporaryPassword,
+  deleteAuthUserById,
+} from "@/lib/supabase/admin";
 import { Prisma } from "@/generated/prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -29,17 +34,6 @@ const employeeInclude = {
   roleRecord: { select: { id: true, displayName: true } },
   defaultShiftTemplate: { select: { id: true, name: true } },
 } as const;
-
-async function nextEmployeeCode() {
-  const latest = await prisma.employee.findFirst({
-    where: { employeeCode: { startsWith: "EMP-" } },
-    orderBy: { employeeCode: "desc" },
-    select: { employeeCode: true },
-  });
-  const current = Number(latest?.employeeCode?.replace("EMP-", "") ?? "0");
-  const next = Number.isFinite(current) ? current + 1 : 1;
-  return `EMP-${String(next).padStart(4, "0")}`;
-}
 
 export async function GET(request: NextRequest) {
   try {
@@ -66,6 +60,7 @@ export async function GET(request: NextRequest) {
         { name: { contains: q, mode: "insensitive" } },
         { firstName: { contains: q, mode: "insensitive" } },
         { lastName: { contains: q, mode: "insensitive" } },
+        { username: { contains: q, mode: "insensitive" } },
         { employeeCode: { contains: q, mode: "insensitive" } },
         { email: { contains: q, mode: "insensitive" } },
         { phone: { contains: q, mode: "insensitive" } },
@@ -103,6 +98,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  let createdAuthUserId: string | null = null;
   try {
     const currentUser = await getCurrentUser();
     const parsed = await readJsonObject(request);
@@ -118,22 +114,28 @@ export async function POST(request: NextRequest) {
       lastName = "",
       employmentType = "MONTHLY",
       hrStatus = "ACTIVE",
+      username,
+      phone,
+      email = null,
       ...rest
     } = validated.data;
 
-    if (!firstName) {
+    if (!firstName || !username || !phone) {
       return validationErrorResponse("กรุณาตรวจสอบข้อมูลพนักงาน", [
-        { path: "firstName", message: "กรุณาระบุชื่อ" },
+        {
+          path: "body",
+          message: "ต้องระบุชื่อ, Username และเบอร์โทรศัพท์",
+        },
       ]);
     }
 
     if (
-      typeof rest.email === "string" &&
-      isProtectedSupportEmail(rest.email) &&
-      !canActorAccessSupportEmployee(currentUser?.user.email, rest.email)
+      typeof email === "string" &&
+      isProtectedSupportEmail(email) &&
+      !canActorAccessSupportEmployee(currentUser?.user.email, email)
     ) {
       const existingSupport = await prisma.employee.findFirst({
-        where: { email: { equals: rest.email, mode: "insensitive" } },
+        where: { email: { equals: email, mode: "insensitive" } },
         select: { id: true },
       });
       if (existingSupport) {
@@ -163,21 +165,36 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (!rest.email) {
-      return validationErrorResponse("กรุณาตรวจสอบข้อมูลพนักงาน", [
-        { path: "email", message: "กรุณาระบุอีเมลสำหรับสร้างบัญชีเข้าสู่ระบบ" },
-      ]);
-    }
-    const email = rest.email;
-
-    const emailOwner = await prisma.employee.findFirst({
-      where: { email: { equals: email, mode: "insensitive" } },
+    const usernameOwner = await prisma.employee.findUnique({
+      where: { username },
       select: { id: true },
     });
-    if (emailOwner) {
-      return validationErrorResponse("อีเมลนี้ถูกใช้โดยพนักงานอื่นแล้ว", [
-        { path: "email", message: "อีเมลซ้ำ" },
+    if (usernameOwner) {
+      return validationErrorResponse("Username นี้ถูกใช้แล้ว", [
+        { path: "username", message: "Username ซ้ำ" },
       ]);
+    }
+
+    const phoneOwner = await prisma.employee.findUnique({
+      where: { phone },
+      select: { id: true },
+    });
+    if (phoneOwner) {
+      return validationErrorResponse("เบอร์โทรนี้ถูกใช้แล้ว", [
+        { path: "phone", message: "เบอร์โทรซ้ำ" },
+      ]);
+    }
+
+    if (email) {
+      const emailOwner = await prisma.employee.findFirst({
+        where: { email: { equals: email, mode: "insensitive" } },
+        select: { id: true },
+      });
+      if (emailOwner) {
+        return validationErrorResponse("อีเมลนี้ถูกใช้โดยพนักงานอื่นแล้ว", [
+          { path: "email", message: "อีเมลซ้ำ" },
+        ]);
+      }
     }
 
     if (rest.defaultShiftTemplateId) {
@@ -192,21 +209,29 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create the Supabase Auth user first (server-only, service role) so every
-    // new employee is guaranteed to have login credentials from step one.
-    const authResolved = await resolveAuthUserIdForEmail(email);
+    // Temporary password is never shown — employee sets their own on first login.
+    // Auth identity uses username-bound email (not Employee.email); Phone Auth login
+    // is often disabled in Supabase even when Admin can create phone users.
+    const authResolved = await createEmployeeAuthUser({
+      username,
+      phone,
+      password: createTemporaryPassword(),
+    });
     if (!authResolved.ok) {
       return apiErrorResponse(authResolved.message, 502, "AUTH_PROVISION_FAILED");
     }
+    createdAuthUserId = authResolved.authUserId;
 
     const authOwner = await prisma.employee.findUnique({
       where: { authUserId: authResolved.authUserId },
       select: { id: true },
     });
     if (authOwner) {
+      await deleteAuthUserById(authResolved.authUserId);
+      createdAuthUserId = null;
       return validationErrorResponse(
         "Auth user นี้ถูกผูกกับพนักงานอื่นแล้ว",
-        [{ path: "email", message: "authUserId ซ้ำ" }],
+        [{ path: "phone", message: "authUserId ซ้ำ" }],
       );
     }
 
@@ -226,10 +251,11 @@ export async function POST(request: NextRequest) {
             hrStatus,
             isActive: isLoginEligibleStatus(hrStatus),
             nickname: rest.nickname,
+            username,
+            phone,
             email,
             authUserId: authResolved.authUserId,
-            mustResetPassword: authResolved.created,
-            phone: rest.phone,
+            mustResetPassword: true,
             address: rest.address,
             nationalId: rest.nationalId,
             birthDate: rest.birthDate,
@@ -275,15 +301,12 @@ export async function POST(request: NextRequest) {
         return employee;
       });
     } catch (createError) {
-      // Auth user already exists at this point; a retry with the same email
-      // will find and reuse it via resolveAuthUserIdForEmail (no orphan risk).
-      console.error(
-        "POST /api/hr/employees failed after auth provisioning",
-        { authUserCreated: authResolved.created, email },
-        createError,
-      );
+      await deleteAuthUserById(authResolved.authUserId);
+      createdAuthUserId = null;
       throw createError;
     }
+
+    createdAuthUserId = null;
 
     await recordAuditLog({
       actor: {
@@ -297,23 +320,41 @@ export async function POST(request: NextRequest) {
         employeeCode: created.employeeCode,
         employmentType: created.employmentType,
         hrStatus: created.hrStatus,
-        authUserCreated: authResolved.created,
+        authMode: "username_auth_email",
+        username: created.username,
+        authUserCreated: true,
+        mustResetPassword: true,
       },
     });
 
     return NextResponse.json(serializeHrEmployee(created), { status: 201 });
   } catch (error) {
+    if (createdAuthUserId) {
+      await deleteAuthUserById(createdAuthUserId);
+    }
     if (
-      typeof error === "object" &&
-      error !== null &&
-      "code" in error &&
+      error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2002"
     ) {
-      return apiErrorResponse(
-        "รหัสหรืออีเมลซ้ำในระบบ กรุณาลองบันทึกใหม่ (บัญชี Auth ที่สร้างไว้จะถูกใช้ซ้ำ ไม่สร้างซ้ำ)",
-        409,
-        "CONFLICT",
-      );
+      const target = Array.isArray(error.meta?.target)
+        ? error.meta.target.join(",")
+        : String(error.meta?.target ?? "");
+      if (target.includes("username")) {
+        return validationErrorResponse("Username นี้ถูกใช้แล้ว", [
+          { path: "username", message: "Username ซ้ำ" },
+        ]);
+      }
+      if (target.includes("phone")) {
+        return validationErrorResponse("เบอร์โทรนี้ถูกใช้แล้ว", [
+          { path: "phone", message: "เบอร์โทรซ้ำ" },
+        ]);
+      }
+      if (target.includes("email")) {
+        return validationErrorResponse("อีเมลนี้ถูกใช้โดยพนักงานอื่นแล้ว", [
+          { path: "email", message: "อีเมลซ้ำ" },
+        ]);
+      }
+      return apiErrorResponse("ข้อมูลซ้ำในระบบ", 409, "CONFLICT");
     }
     console.error("POST /api/hr/employees failed", error);
     return apiErrorResponse("ไม่สามารถสร้างพนักงานได้", 500, "INTERNAL_ERROR");

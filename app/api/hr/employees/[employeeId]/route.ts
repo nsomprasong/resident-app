@@ -20,6 +20,7 @@ import {
   serializeHrEmployee,
 } from "@/lib/hr/employees";
 import { prisma } from "@/lib/prisma";
+import { ensureEmployeeAuthProvisioned } from "@/lib/supabase/admin";
 import { NextRequest, NextResponse } from "next/server";
 
 const employeeInclude = {
@@ -86,6 +87,8 @@ export async function PATCH(
         lastName: true,
         hrStatus: true,
         email: true,
+        username: true,
+        phone: true,
         authUserId: true,
       },
     });
@@ -179,12 +182,77 @@ export async function PATCH(
     const hrStatus = validated.data.hrStatus ?? existing.hrStatus;
     const patch = validated.data;
 
+    if (patch.username) {
+      const usernameOwner = await prisma.employee.findFirst({
+        where: { username: patch.username, id: { not: employeeId } },
+        select: { id: true },
+      });
+      if (usernameOwner) {
+        return validationErrorResponse("Username นี้ถูกใช้แล้ว", [
+          { path: "username", message: "Username ซ้ำ" },
+        ]);
+      }
+    }
+
+    if (patch.phone) {
+      const phoneOwner = await prisma.employee.findFirst({
+        where: { phone: patch.phone, id: { not: employeeId } },
+        select: { id: true },
+      });
+      if (phoneOwner) {
+        return validationErrorResponse("เบอร์โทรนี้ถูกใช้แล้ว", [
+          { path: "phone", message: "เบอร์โทรซ้ำ" },
+        ]);
+      }
+    }
+
+    const nextIsActive = isLoginEligibleStatus(hrStatus);
+    let authUserId = existing.authUserId;
+    let mustResetPassword: boolean | undefined;
+
+    if (nextIsActive) {
+      const ensured = await ensureEmployeeAuthProvisioned({
+        authUserId: existing.authUserId,
+        username: patch.username ?? existing.username,
+        phone: patch.phone ?? existing.phone,
+        contactEmail:
+          patch.email !== undefined ? patch.email : existing.email,
+      });
+      if (!ensured.ok) {
+        return apiErrorResponse(
+          ensured.message,
+          502,
+          "AUTH_PROVISION_FAILED",
+        );
+      }
+      if (ensured.authUserId !== existing.authUserId) {
+        const authOwner = await prisma.employee.findFirst({
+          where: {
+            authUserId: ensured.authUserId,
+            id: { not: employeeId },
+          },
+          select: { id: true },
+        });
+        if (authOwner) {
+          return validationErrorResponse(
+            "Auth user นี้ถูกผูกกับพนักงานอื่นแล้ว",
+            [{ path: "authUserId", message: "authUserId ซ้ำ" }],
+          );
+        }
+      }
+      authUserId = ensured.authUserId;
+      if (ensured.created) {
+        mustResetPassword = true;
+      }
+    }
+
     const updated = await prisma.employee.update({
       where: { id: employeeId },
       data: {
         ...(patch.firstName !== undefined ? { firstName: patch.firstName } : {}),
         ...(patch.lastName !== undefined ? { lastName: patch.lastName } : {}),
         ...(patch.nickname !== undefined ? { nickname: patch.nickname } : {}),
+        ...(patch.username !== undefined ? { username: patch.username } : {}),
         ...(patch.email !== undefined ? { email: patch.email } : {}),
         ...(patch.phone !== undefined ? { phone: patch.phone } : {}),
         ...(patch.address !== undefined ? { address: patch.address } : {}),
@@ -245,8 +313,12 @@ export async function PATCH(
         ...(patch.employeeCode !== undefined
           ? { employeeCode: patch.employeeCode }
           : {}),
+        ...(authUserId !== existing.authUserId
+          ? { authUserId }
+          : {}),
+        ...(mustResetPassword !== undefined ? { mustResetPassword } : {}),
         name: buildEmployeeDisplayName(firstName, lastName || undefined),
-        isActive: isLoginEligibleStatus(hrStatus),
+        isActive: nextIsActive,
       },
       include: employeeInclude,
     });

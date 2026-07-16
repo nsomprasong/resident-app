@@ -9,6 +9,11 @@ import type {
 } from "@/generated/prisma/client";
 
 import type { ValidationIssue } from "@/lib/api/validation";
+import {
+  isValidUsername,
+  normalizeThaiPhone,
+  normalizeUsername,
+} from "@/lib/auth/login-identifier";
 
 export const employmentTypes = ["DAILY", "MONTHLY"] as const;
 export const employeeHrStatuses = [
@@ -43,6 +48,7 @@ export type HrEmployeeRecord = {
   nickname: string | null;
   photoUrl: string | null;
   email: string | null;
+  username: string | null;
   phone: string | null;
   address: string | null;
   nationalId: string | null;
@@ -69,6 +75,7 @@ export type HrEmployeeRecord = {
   notes: string | null;
   authUserId: string | null;
   hasAuth: boolean;
+  mustResetPassword: boolean;
   roleId: string | null;
   roleDisplayName: string | null;
   hourlyRate: number | null;
@@ -151,6 +158,7 @@ export function serializeHrEmployee(employee: EmployeeWithHr): HrEmployeeRecord 
     nickname: employee.nickname,
     photoUrl: employee.photoUrl,
     email: employee.email,
+    username: employee.username,
     phone: employee.phone,
     address: employee.address,
     nationalId: employee.nationalId,
@@ -177,6 +185,7 @@ export function serializeHrEmployee(employee: EmployeeWithHr): HrEmployeeRecord 
     notes: employee.notes,
     authUserId: employee.authUserId,
     hasAuth: Boolean(employee.authUserId),
+    mustResetPassword: employee.mustResetPassword,
     roleId: employee.roleId,
     roleDisplayName: employee.roleRecord?.displayName ?? null,
     hourlyRate:
@@ -218,7 +227,10 @@ export type ParsedHrEmployeeInput = {
   lastName?: string;
   nickname?: string | null;
   email?: string | null;
+  username?: string | null;
   phone?: string | null;
+  password?: string;
+  passwordConfirm?: string;
   address?: string | null;
   nationalId?: string | null;
   birthDate?: Date | null;
@@ -300,14 +312,41 @@ export function parseHrEmployeeInput(
     data.nickname = nickname ? nickname : null;
   }
 
+  if (mode === "create" || "username" in body) {
+    const usernameRaw = readTrimmed(body, "username");
+    if (mode === "create") {
+      if (!usernameRaw) {
+        issues.push({ path: "username", message: "กรุณาระบุ Username" });
+      } else {
+        const username = normalizeUsername(usernameRaw);
+        if (!isValidUsername(username)) {
+          issues.push({
+            path: "username",
+            message: "Username ต้องเป็น a-z 0-9 . _ - ความยาว 3–40 ตัว",
+          });
+        } else {
+          data.username = username;
+        }
+      }
+    } else if (usernameRaw === undefined || usernameRaw === "") {
+      data.username = null;
+    } else {
+      const username = normalizeUsername(usernameRaw);
+      if (!isValidUsername(username)) {
+        issues.push({
+          path: "username",
+          message: "Username ต้องเป็น a-z 0-9 . _ - ความยาว 3–40 ตัว",
+        });
+      } else {
+        data.username = username;
+      }
+    }
+  }
+
   if (mode === "create" || "email" in body) {
     const emailRaw = readTrimmed(body, "email");
     if (!emailRaw) {
-      if (mode === "create") {
-        issues.push({ path: "email", message: "กรุณาระบุอีเมลสำหรับสร้างบัญชีเข้าสู่ระบบ" });
-      } else {
-        data.email = null;
-      }
+      data.email = null;
     } else {
       const email = emailRaw.toLowerCase();
       if (!EMAIL_PATTERN.test(email)) {
@@ -318,8 +357,32 @@ export function parseHrEmployeeInput(
     }
   }
 
+  if (mode === "create" || "phone" in body) {
+    const phoneRaw = readTrimmed(body, "phone");
+    if (mode === "create") {
+      if (!phoneRaw) {
+        issues.push({ path: "phone", message: "กรุณาระบุเบอร์โทรศัพท์" });
+      } else {
+        const phone = normalizeThaiPhone(phoneRaw);
+        if (!phone) {
+          issues.push({ path: "phone", message: "รูปแบบเบอร์โทรไม่ถูกต้อง" });
+        } else {
+          data.phone = phone;
+        }
+      }
+    } else if (phoneRaw === undefined || phoneRaw === "") {
+      data.phone = null;
+    } else {
+      const phone = normalizeThaiPhone(phoneRaw);
+      if (!phone) {
+        issues.push({ path: "phone", message: "รูปแบบเบอร์โทรไม่ถูกต้อง" });
+      } else {
+        data.phone = phone;
+      }
+    }
+  }
+
   for (const key of [
-    "phone",
     "address",
     "nationalId",
     "emergencyContactName",

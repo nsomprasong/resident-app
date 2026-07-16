@@ -5,7 +5,7 @@ import {
 } from "@/lib/api/validation";
 import { recordAuditLog } from "@/lib/audit/audit-log";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { parsePayrollSettings } from "@/lib/hr/payroll";
+import { parsePayrollSettings, mergePayrollSettingItems } from "@/lib/hr/payroll";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
@@ -14,6 +14,7 @@ const ALLOWED_KEYS = new Set([
   "holiday_multiplier",
   "late_deduction_per_minute",
   "standard_work_minutes_per_day",
+  "pay_day_of_month",
 ]);
 
 export async function GET() {
@@ -21,13 +22,9 @@ export async function GET() {
     const rows = await prisma.payrollSetting.findMany({
       orderBy: { key: "asc" },
     });
+    const items = mergePayrollSettingItems(rows);
     return NextResponse.json({
-      items: rows.map((row) => ({
-        id: row.id,
-        key: row.key,
-        value: row.value,
-        labelTh: row.labelTh,
-      })),
+      items,
       parsed: parsePayrollSettings(rows),
     });
   } catch (error) {
@@ -52,23 +49,41 @@ export async function POST(request: Request) {
       typeof parsed.body.value === "string"
         ? parsed.body.value.trim()
         : String(parsed.body.value ?? "");
-    if (!ALLOWED_KEYS.has(key) || !value || Number.isNaN(Number(value))) {
+    const numeric = Number(value);
+    if (!ALLOWED_KEYS.has(key) || !value || Number.isNaN(numeric)) {
       return validationErrorResponse("ค่าตั้งค่าไม่ถูกต้อง", [
         { path: "key", message: "key/value ไม่ถูกต้อง" },
       ]);
     }
+    if (key === "pay_day_of_month") {
+      const day = Math.trunc(numeric);
+      if (day < 1 || day > 31) {
+        return validationErrorResponse("วันจ่ายเงินเดือนต้องอยู่ระหว่าง 1–31", [
+          { path: "value", message: "ต้องเป็นจำนวนเต็ม 1–31" },
+        ]);
+      }
+    }
+
+    const labelThDefault =
+      key === "pay_day_of_month"
+        ? "วันจ่ายเงินเดือนของกิจการ"
+        : typeof parsed.body.labelTh === "string"
+          ? parsed.body.labelTh.trim() || null
+          : null;
 
     const saved = await prisma.payrollSetting.upsert({
       where: { key },
       create: {
         key,
-        value,
+        value: key === "pay_day_of_month" ? String(Math.trunc(numeric)) : value,
         labelTh:
           typeof parsed.body.labelTh === "string"
-            ? parsed.body.labelTh.trim() || null
-            : null,
+            ? parsed.body.labelTh.trim() || labelThDefault
+            : labelThDefault,
       },
-      update: { value },
+      update: {
+        value: key === "pay_day_of_month" ? String(Math.trunc(numeric)) : value,
+      },
     });
 
     await recordAuditLog({
@@ -79,7 +94,7 @@ export async function POST(request: Request) {
       action: "HR_PAYROLL_SETTING_UPDATED",
       entityType: "PAYROLL_SETTING",
       entityId: saved.id,
-      metadata: { key, value },
+      metadata: { key, value: saved.value },
     });
 
     return NextResponse.json({

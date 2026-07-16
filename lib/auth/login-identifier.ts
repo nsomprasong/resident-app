@@ -91,3 +91,13 @@ export function resolveLoginIdentifier(raw: string): ResolvedLoginIdentifier {
 
 export const GENERIC_LOGIN_ERROR =
   "ชื่อผู้ใช้ เบอร์โทรศัพท์ อีเมล หรือรหัสผ่านไม่ถูกต้อง";
+
+/**
+ * Auth-only mailbox bound to username for password login.
+ * Never store this on Employee.email (contact email stays optional/null).
+ * Used because Supabase projects may have Phone logins disabled even when
+ * Admin API can create phone users.
+ */
+export function authLoginEmailForUsername(username: string): string {
+  return `${normalizeUsername(username)}@employee-auth.local`;
+}

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import DateSelector from "@/components/ui/DateSelector";
 import { formatThaiDateTime } from "@/lib/format/date";
 
 const paymentLabels: Record<string, string> = {
@@ -136,23 +137,17 @@ export function PosReportsBoard() {
       ) : null}
 
       <section className="flex flex-wrap items-end gap-3 rounded-[1.75rem] border border-border bg-surface p-5 shadow-sm">
-        <label className="text-sm font-medium">
+        <label className="min-w-[12rem] text-sm font-medium">
           ตั้งแต่
-          <input
-            type="date"
-            value={from}
-            onChange={(event) => setFrom(event.target.value)}
-            className="mt-1.5 block rounded-2xl border border-border bg-background px-3 py-2.5"
-          />
+          <div className="mt-1.5">
+            <DateSelector date={from} setDate={setFrom} max={to} />
+          </div>
         </label>
-        <label className="text-sm font-medium">
+        <label className="min-w-[12rem] text-sm font-medium">
           ถึง
-          <input
-            type="date"
-            value={to}
-            onChange={(event) => setTo(event.target.value)}
-            className="mt-1.5 block rounded-2xl border border-border bg-background px-3 py-2.5"
-          />
+          <div className="mt-1.5">
+            <DateSelector date={to} setDate={setTo} min={from} />
+          </div>
         </label>
         <button
           type="button"
