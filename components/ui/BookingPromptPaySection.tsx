@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { useEmployeePermissions } from "@/components/auth/EmployeePermissionsProvider";
 import Modal from "@/components/ui/Modal";
+import NumberInput from "@/components/ui/NumberInput";
 import { useConfirmDialog } from "@/hooks/useConfirmDialog";
 import type { PromptPayAccountRecord } from "@/lib/settings/promptpay-account-shared";
 import type { PaymentListItem } from "@/lib/payments/promptpay-workflow";
@@ -490,12 +491,12 @@ export function BookingPromptPaySection({
           </label>
           <label className="block text-sm">
             จำนวนเงิน
-            <input
-              type="number"
+            <NumberInput
               min={0.01}
               step={0.01}
+              emptyValue={0}
               value={amount}
-              onChange={(e) => setAmount(Number(e.target.value))}
+              onChange={setAmount}
               className="mt-1 w-full rounded-xl border border-border px-3 py-2"
             />
           </label>

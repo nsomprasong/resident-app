@@ -14,6 +14,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 
 import Modal from "./Modal";
+import NumberInput from "./NumberInput";
 import PricingToggle from "./PricingToggle";
 
 export interface BookingFoodItem {
@@ -41,6 +42,97 @@ interface Product {
   typeName?: string;
   isMinibar?: boolean;
   optionGroups?: ProductOptionGroup[];
+}
+
+const OPTION_NOTE_SEP = " · ";
+
+function parseOptionNoteParts(note: string | undefined): string[] {
+  if (!note?.trim()) return [];
+  return note
+    .split(OPTION_NOTE_SEP)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function getSelectedOptionLabel(
+  note: string | undefined,
+  group: ProductOptionGroup,
+): string | null {
+  const parts = parseOptionNoteParts(note);
+  for (const option of group.options) {
+    if (parts.includes(option.label)) return option.label;
+  }
+  const trimmed = note?.trim();
+  if (trimmed && group.options.some((option) => option.label === trimmed)) {
+    return trimmed;
+  }
+  return null;
+}
+
+function buildOptionNote(
+  note: string | undefined,
+  groups: ProductOptionGroup[],
+  group: ProductOptionGroup,
+  label: string | null,
+): string {
+  const selected = new Map<string, string>();
+  for (const entry of groups) {
+    const current = getSelectedOptionLabel(note, entry);
+    if (current) selected.set(entry.id, current);
+  }
+  if (label) selected.set(group.id, label);
+  else selected.delete(group.id);
+  return groups
+    .map((entry) => selected.get(entry.id))
+    .filter((value): value is string => Boolean(value))
+    .join(OPTION_NOTE_SEP);
+}
+
+function groupRequiresSelection(
+  item: BookingFoodItem,
+  group: ProductOptionGroup,
+  groups: ProductOptionGroup[],
+): boolean {
+  if (item.requireOptions === false) return false;
+  if (group.isRequired) return true;
+  if (item.requireOptions === true) {
+    return !groups.some((entry) => entry.isRequired);
+  }
+  return false;
+}
+
+/** True when a line still needs required option picks (kitchen note). */
+export function foodItemMissingRequiredOptions(
+  item: BookingFoodItem,
+  product?: { optionGroups?: ProductOptionGroup[] } | null,
+): boolean {
+  if (item.requireOptions === false) return false;
+  const groups = product?.optionGroups ?? [];
+  const requiredGroups = groups.filter((group) =>
+    groupRequiresSelection(item, group, groups),
+  );
+
+  if (requiredGroups.length > 0) {
+    return requiredGroups.some(
+      (group) => !getSelectedOptionLabel(item.note, group),
+    );
+  }
+
+  if (item.requireOptions === true) {
+    return !item.note?.trim();
+  }
+
+  return false;
+}
+
+export function foodItemsMissingRequiredOptions(
+  items: BookingFoodItem[],
+  products: Array<{ id: string; optionGroups?: ProductOptionGroup[] }>,
+): boolean {
+  const productMap = new Map(products.map((product) => [product.id, product]));
+  return items.some((item) =>
+    foodItemMissingRequiredOptions(item, productMap.get(item.productId)),
+  );
 }
 
 const PAGE_SIZE = 40;
@@ -205,22 +297,20 @@ export default function BookingFoodSelect({
     );
   };
 
-  const setItemNote = (id: string, note: string) => {
-    onChange(
-      items.map((item) =>
-        item.productId === id
-          ? { ...item, note: note.trim() || undefined }
-          : item,
-      ),
-    );
-  };
-
-  const itemNeedsOption = (item: BookingFoodItem, product: Product) => {
+  const setGroupOption = (
+    productId: string,
+    product: Product,
+    group: ProductOptionGroup,
+    label: string | null,
+  ) => {
     const groups = product.optionGroups ?? [];
-    if (!groups.length) return false;
-    if (item.requireOptions === true) return true;
-    if (item.requireOptions === false) return false;
-    return groups.some((group) => group.isRequired);
+    onChange(
+      items.map((item) => {
+        if (item.productId !== productId) return item;
+        const nextNote = buildOptionNote(item.note, groups, group, label);
+        return { ...item, note: nextNote || undefined };
+      }),
+    );
   };
 
   const addFromPicker = (id: string) => {
@@ -384,7 +474,17 @@ export default function BookingFoodSelect({
                     {(row.product.optionGroups?.length ?? 0) > 0 ? (
                       <div className="space-y-2 border-t border-border/60 pt-2">
                         {row.product.optionGroups!.map((group) => {
-                          const required = itemNeedsOption(row, row.product);
+                          const groups = row.product.optionGroups!;
+                          const required = groupRequiresSelection(
+                            row,
+                            group,
+                            groups,
+                          );
+                          const selectedLabel = getSelectedOptionLabel(
+                            row.note,
+                            group,
+                          );
+                          const missing = required && !selectedLabel;
                           return (
                             <div key={group.id} className="space-y-1.5">
                               <p className="text-xs font-medium text-foreground">
@@ -397,24 +497,34 @@ export default function BookingFoodSelect({
                                     (ไม่บังคับ)
                                   </span>
                                 )}
+                                {missing ? (
+                                  <span className="ml-1 text-destructive">
+                                    เลือกตัวเลือก
+                                  </span>
+                                ) : null}
                               </p>
                               <div className="flex flex-wrap gap-2">
                                 {group.options.map((option) => {
-                                  const selected = row.note === option.label;
+                                  const selected =
+                                    selectedLabel === option.label;
                                   return (
                                     <button
                                       key={option.id}
                                       type="button"
                                       onClick={() =>
-                                        setItemNote(
+                                        setGroupOption(
                                           row.productId,
-                                          selected ? "" : option.label,
+                                          row.product,
+                                          group,
+                                          selected ? null : option.label,
                                         )
                                       }
                                       className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
                                         selected
                                           ? "border-primary bg-primary/10 text-primary"
-                                          : "border-border bg-surface text-foreground hover:border-primary/40"
+                                          : missing
+                                            ? "border-destructive/40 bg-surface text-foreground hover:border-primary/40"
+                                            : "border-border bg-surface text-foreground hover:border-primary/40"
                                       }`}
                                     >
                                       {option.label}
@@ -551,17 +661,14 @@ export default function BookingFoodSelect({
                       </button>
                     ) : (
                       <>
-                        <input
-                          type="number"
+                        <NumberInput
                           min={1}
+                          emptyValue={1}
                           value={qty}
-                          onChange={(event) =>
+                          onChange={(next) =>
                             setDraftQty((prev) => ({
                               ...prev,
-                              [product.id]: Math.max(
-                                1,
-                                Number(event.target.value) || 1,
-                              ),
+                              [product.id]: next,
                             }))
                           }
                           className="w-16 rounded-lg border border-border px-2 py-1.5 text-center text-sm"

@@ -4,7 +4,10 @@ import { useState, type FormEvent } from "react";
 import { Save } from "lucide-react";
 
 import BookingFoodSetPanel from "./BookingFoodSetPanel";
-import type { BookingFoodItem } from "./BookingFoodSelect";
+import {
+  foodItemsMissingRequiredOptions,
+  type BookingFoodItem,
+} from "./BookingFoodSelect";
 import DateSelector from "./DateSelector";
 import Modal from "./Modal";
 import RaftSelect from "./RaftSelect";
@@ -50,6 +53,28 @@ export default function AddSoloBookingDialog({
     setSaving(true);
     setError("");
     try {
+      if (foodItems.length) {
+        const productsRes = await fetch("/api/products?minibar=false", {
+          cache: "no-store",
+        });
+        if (productsRes.ok) {
+          const products = (await productsRes.json()) as Array<{
+            id: string;
+            optionGroups?: Array<{
+              id: string;
+              name: string;
+              isRequired: boolean;
+              options: Array<{ id: string; label: string }>;
+            }>;
+          }>;
+          if (foodItemsMissingRequiredOptions(foodItems, products)) {
+            throw new Error(
+              "กรุณาเลือกตัวเลือกที่บังคับของเมนูอาหาร (เช่น ไก่/หมู หรือชนิดเส้น)",
+            );
+          }
+        }
+      }
+
       const response = await fetch("/api/bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -61,7 +86,12 @@ export default function AddSoloBookingDialog({
           checkOut,
           roomIds,
           raftIds,
-          foodItems,
+          foodItems: foodItems.map((item) => ({
+            productId: item.productId,
+            quantity: item.quantity,
+            isExtra: item.isExtra ?? true,
+            ...(item.note?.trim() ? { note: item.note.trim() } : {}),
+          })),
         }),
       });
       const data = (await response.json()) as { message?: string };

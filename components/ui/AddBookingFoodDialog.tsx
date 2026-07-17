@@ -10,7 +10,10 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
-import BookingFoodSelect, { type BookingFoodItem } from "./BookingFoodSelect";
+import BookingFoodSelect, {
+  foodItemsMissingRequiredOptions,
+  type BookingFoodItem,
+} from "./BookingFoodSelect";
 import BookingFoodSetPanel from "./BookingFoodSetPanel";
 import Modal from "./Modal";
 import type {
@@ -178,15 +181,6 @@ export default function AddBookingFoodDialog({
     }
   };
 
-  const missingRequiredOptions = () => {
-    // Validated in BookingFoodSelect via requireOptions flag from set;
-    // products with options and requireOptions!==false without note block submit.
-    return items.some((item) => {
-      if (item.requireOptions !== true) return false;
-      return !item.note?.trim();
-    });
-  };
-
   const submit = async () => {
     if (!items.length) return;
     if (
@@ -197,14 +191,30 @@ export default function AddBookingFoodDialog({
       setError("ห้องที่เลือกไม่ถูกต้อง");
       return;
     }
-    if (missingRequiredOptions()) {
-      setError("กรุณาเลือกตัวเลือกวัตถุดิบที่บังคับ (เช่น ไก่/หมู หรือชนิดเส้น)");
-      return;
-    }
 
     setSaving(true);
     setError("");
     try {
+      const productsRes = await fetch("/api/products?minibar=false", {
+        cache: "no-store",
+      });
+      if (productsRes.ok) {
+        const products = (await productsRes.json()) as Array<{
+          id: string;
+          optionGroups?: Array<{
+            id: string;
+            name: string;
+            isRequired: boolean;
+            options: Array<{ id: string; label: string }>;
+          }>;
+        }>;
+        if (foodItemsMissingRequiredOptions(items, products)) {
+          throw new Error(
+            "กรุณาเลือกตัวเลือกวัตถุดิบที่บังคับ (เช่น ไก่/หมู หรือชนิดเส้น)",
+          );
+        }
+      }
+
       if (isGroup && tourGroupId) {
         await persistGroupCustomization();
       }

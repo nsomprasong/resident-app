@@ -4,9 +4,13 @@ import { Calculator, Save, UsersRound, X } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import BookingFoodSetPanel from "./BookingFoodSetPanel";
-import type { BookingFoodItem } from "./BookingFoodSelect";
+import {
+  foodItemsMissingRequiredOptions,
+  type BookingFoodItem,
+} from "./BookingFoodSelect";
 import DateSelector from "./DateSelector";
 import Modal from "./Modal";
+import NumberInput from "./NumberInput";
 import RaftSelect from "./RaftSelect";
 import ZoneRoomSelect from "./ZoneRoomSelect";
 
@@ -39,6 +43,12 @@ type RaftPriceInfo = {
 type FoodPriceInfo = {
   id: string;
   price: number;
+  optionGroups?: Array<{
+    id: string;
+    name: string;
+    isRequired: boolean;
+    options: Array<{ id: string; label: string }>;
+  }>;
 };
 
 function nightsBetween(checkIn: string, checkOut: string) {
@@ -119,11 +129,13 @@ export default function AddGroupBookingDialog({
           const foods = (await foodRes.json()) as Array<{
             id: string;
             price: number;
+            optionGroups?: FoodPriceInfo["optionGroups"];
           }>;
           setFoodCatalog(
             foods.map((food) => ({
               id: food.id,
               price: Number(food.price ?? 0),
+              optionGroups: food.optionGroups,
             })),
           );
         }
@@ -175,6 +187,15 @@ export default function AddGroupBookingDialog({
     setSaving(true);
     setError("");
     try {
+      if (
+        foodItems.length &&
+        foodItemsMissingRequiredOptions(foodItems, foodCatalog)
+      ) {
+        throw new Error(
+          "กรุณาเลือกตัวเลือกที่บังคับของเมนูอาหาร (เช่น ไก่/หมู หรือชนิดเส้น)",
+        );
+      }
+
       const response = await fetch("/api/bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -193,6 +214,7 @@ export default function AddGroupBookingDialog({
             productId: item.productId,
             quantity: item.quantity,
             isExtra: item.isExtra ?? false,
+            ...(item.note?.trim() ? { note: item.note.trim() } : {}),
           })),
           foodSet: foodItems.length
             ? {
@@ -303,25 +325,23 @@ export default function AddGroupBookingDialog({
             </label>
             <label className="text-xs text-muted-foreground">
               จำนวนคน
-              <input
+              <NumberInput
                 required
                 min={1}
-                type="number"
+                emptyValue={1}
                 value={guestCount}
-                onChange={(event) => setGuestCount(Number(event.target.value))}
+                onChange={setGuestCount}
                 className={inputClass}
               />
             </label>
             <label className="text-xs text-muted-foreground">
               ราคาต่อหัว
-              <input
+              <NumberInput
                 required
                 min={0}
-                type="number"
+                emptyValue={0}
                 value={pricePerPerson}
-                onChange={(event) =>
-                  setPricePerPerson(Number(event.target.value))
-                }
+                onChange={setPricePerPerson}
                 className={inputClass}
               />
             </label>

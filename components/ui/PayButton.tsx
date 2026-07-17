@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { useEmployeePermissions } from "@/components/auth/EmployeePermissionsProvider";
 import Modal from "./Modal";
+import NumberInput from "./NumberInput";
 type Method = "CASH" | "TRANSFER" | "PROMPTPAY" | "CARD";
 interface Channel {
   id: string;
@@ -111,13 +112,13 @@ export default function PayButton({
         <div className="space-y-4 text-foreground">
           <label className="block text-sm font-medium">
             {refund ? "จำนวนเงินที่คืน" : "จำนวนเงินที่ได้รับ"}
-            <input
-              type="number"
+            <NumberInput
               min={0.01}
               max={amount}
               step="0.01"
+              emptyValue={amount}
               value={paidAmount}
-              onChange={(e) => setPaidAmount(Number(e.target.value))}
+              onChange={setPaidAmount}
               className="mt-1 w-full rounded-xl border border-border bg-surface px-4 py-3 text-lg font-semibold text-foreground outline-none focus:border-primary"
             />
           </label>
