@@ -6,6 +6,7 @@ import {
   resolveLoginIdentifier,
 } from "@/lib/auth/login-identifier";
 import { rotateEmployeeSessionEpoch } from "@/lib/auth/rotate-session-epoch";
+import { readSessionEpochFromAccessToken } from "@/lib/auth/session-epoch";
 import { prisma } from "@/lib/prisma";
 import { ensureAuthLoginEmail } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -105,6 +106,34 @@ function ticketRedirect(employee: PendingResetEmployee): LoginState {
   };
 }
 
+type LoginEmployeeGate = {
+  username: string | null;
+  email: string | null;
+  isActive: boolean;
+  roleId: string | null;
+  authUserId: string | null;
+};
+
+function gateLoginEmployee(
+  employee: LoginEmployeeGate | null,
+): LoginState | null {
+  if (!employee?.authUserId) {
+    return { error: GENERIC_LOGIN_ERROR };
+  }
+  if (!employee.isActive) {
+    return {
+      error:
+        "บัญชีรอการเปิดใช้งานจากผู้ดูแลระบบ กรุณาติดต่อผู้จัดการเพื่อกำหนดสิทธิ์",
+    };
+  }
+  if (!employee.roleId) {
+    return {
+      error: "บัญชียังไม่ได้กำหนดสิทธิ์ กรุณาติดต่อผู้ดูแลระบบ",
+    };
+  }
+  return null;
+}
+
 async function resolvePasswordLoginEmail(employee: {
   username: string | null;
   authUserId: string;
@@ -166,72 +195,60 @@ export async function login(
 
   const supabase = await createClient();
   let authEmail: string | null = null;
+  const employeeSelect = {
+    username: true,
+    email: true,
+    isActive: true,
+    roleId: true,
+    authUserId: true,
+  } as const;
 
   if (resolved.kind === "email") {
-    authEmail = resolved.email;
+    // Prefer Employee.contact email → username Auth mailbox.
+    // Self-registered / HR users store contact email separately from Auth login.
+    const byContact = await prisma.employee.findFirst({
+      where: { email: { equals: resolved.email, mode: "insensitive" } },
+      select: employeeSelect,
+    });
+    if (byContact) {
+      const gate = gateLoginEmployee(byContact);
+      if (gate) return gate;
+      authEmail = await resolvePasswordLoginEmail({
+        username: byContact.username,
+        authUserId: byContact.authUserId!,
+        email: byContact.email,
+      });
+    } else {
+      // Legacy: typed email is the Auth identity itself.
+      authEmail = resolved.email;
+    }
   } else if (resolved.kind === "phone") {
     const employee = await prisma.employee.findFirst({
       where: { phone: resolved.phone },
-      select: {
-        username: true,
-        email: true,
-        isActive: true,
-        roleId: true,
-        authUserId: true,
-      },
+      select: employeeSelect,
     });
 
-    if (!employee?.authUserId) {
-      return { error: GENERIC_LOGIN_ERROR };
-    }
-    if (!employee.isActive) {
-      return {
-        error:
-          "บัญชีรอการเปิดใช้งานจากผู้ดูแลระบบ กรุณาติดต่อผู้จัดการเพื่อกำหนดสิทธิ์",
-      };
-    }
-    if (!employee.roleId) {
-      return {
-        error: "บัญชียังไม่ได้กำหนดสิทธิ์ กรุณาติดต่อผู้ดูแลระบบ",
-      };
-    }
+    const gate = gateLoginEmployee(employee);
+    if (gate) return gate;
 
     authEmail = await resolvePasswordLoginEmail({
-      username: employee.username,
-      authUserId: employee.authUserId,
-      email: employee.email,
+      username: employee!.username,
+      authUserId: employee!.authUserId!,
+      email: employee!.email,
     });
   } else {
     const employee = await prisma.employee.findUnique({
       where: { username: resolved.username },
-      select: {
-        username: true,
-        email: true,
-        isActive: true,
-        roleId: true,
-        authUserId: true,
-      },
+      select: employeeSelect,
     });
 
-    if (!employee?.authUserId) {
-      return { error: GENERIC_LOGIN_ERROR };
-    }
-    if (!employee.isActive) {
-      return {
-        error:
-          "บัญชีรอการเปิดใช้งานจากผู้ดูแลระบบ กรุณาติดต่อผู้จัดการเพื่อกำหนดสิทธิ์",
-      };
-    }
-    if (!employee.roleId) {
-      return {
-        error: "บัญชียังไม่ได้กำหนดสิทธิ์ กรุณาติดต่อผู้ดูแลระบบ",
-      };
-    }
+    const gate = gateLoginEmployee(employee);
+    if (gate) return gate;
 
     authEmail = await resolvePasswordLoginEmail({
-      username: employee.username ?? resolved.username,
-      authUserId: employee.authUserId,
-      email: employee.email,
+      username: employee!.username ?? resolved.username,
+      authUserId: employee!.authUserId!,
+      email: employee!.email,
     });
   }
 
@@ -251,15 +268,93 @@ export async function login(
     return { error: GENERIC_LOGIN_ERROR };
   }
 
-  const employee = await prisma.employee.findUnique({
+  let employee = await prisma.employee.findUnique({
     where: { authUserId: user.id },
     select: {
       id: true,
       isActive: true,
       roleId: true,
       mustResetPassword: true,
+      username: true,
     },
   });
+
+  // Repair: Auth mailbox matched username login but Employee.authUserId pointed
+  // at a different (contact-email) Auth user after an admin email edit.
+  if (!employee && resolved.kind === "username") {
+    const byUsername = await prisma.employee.findUnique({
+      where: { username: resolved.username },
+      select: {
+        id: true,
+        isActive: true,
+        roleId: true,
+        mustResetPassword: true,
+        username: true,
+        authUserId: true,
+      },
+    });
+    if (byUsername?.isActive && byUsername.roleId) {
+      await prisma.employee.update({
+        where: { id: byUsername.id },
+        data: { authUserId: user.id },
+      });
+      employee = {
+        id: byUsername.id,
+        isActive: byUsername.isActive,
+        roleId: byUsername.roleId,
+        mustResetPassword: byUsername.mustResetPassword,
+        username: byUsername.username,
+      };
+    }
+  } else if (!employee && resolved.kind === "phone") {
+    const byPhone = await prisma.employee.findFirst({
+      where: { phone: resolved.phone },
+      select: {
+        id: true,
+        isActive: true,
+        roleId: true,
+        mustResetPassword: true,
+        username: true,
+      },
+    });
+    if (byPhone?.isActive && byPhone.roleId && byPhone.username) {
+      await prisma.employee.update({
+        where: { id: byPhone.id },
+        data: { authUserId: user.id },
+      });
+      employee = {
+        id: byPhone.id,
+        isActive: byPhone.isActive,
+        roleId: byPhone.roleId,
+        mustResetPassword: byPhone.mustResetPassword,
+        username: byPhone.username,
+      };
+    }
+  } else if (!employee && resolved.kind === "email") {
+    const byContact = await prisma.employee.findFirst({
+      where: { email: { equals: resolved.email, mode: "insensitive" } },
+      select: {
+        id: true,
+        isActive: true,
+        roleId: true,
+        mustResetPassword: true,
+        username: true,
+      },
+    });
+    if (byContact?.isActive && byContact.roleId && byContact.username) {
+      await prisma.employee.update({
+        where: { id: byContact.id },
+        data: { authUserId: user.id },
+      });
+      employee = {
+        id: byContact.id,
+        isActive: byContact.isActive,
+        roleId: byContact.roleId,
+        mustResetPassword: byContact.mustResetPassword,
+        username: byContact.username,
+      };
+    }
+  }
 
   if (!employee) {
     await supabase.auth.signOut();
@@ -292,9 +387,33 @@ export async function login(
     return { error: "เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่" };
   }
 
-  const { error: refreshError } = await supabase.auth.refreshSession();
-  if (refreshError) {
-    console.error("refreshSession after epoch rotate failed", refreshError);
+  // Refresh until the new access token carries the epoch. Prefer the token
+  // returned by refreshSession (cookie reads in the same Server Action can lag).
+  let epochInJwt = false;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const { data: refreshData, error: refreshError } =
+      await supabase.auth.refreshSession();
+    if (refreshError) {
+      console.error("refreshSession after epoch rotate failed", refreshError);
+      await supabase.auth.signOut();
+      return { error: "เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่" };
+    }
+
+    const tokenEpoch = readSessionEpochFromAccessToken(
+      refreshData.session?.access_token,
+    );
+    if (tokenEpoch === rotated.sessionEpoch) {
+      epochInJwt = true;
+      break;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 150 * (attempt + 1)));
+  }
+
+  if (!epochInJwt) {
+    console.error("session epoch missing from JWT after refresh", {
+      expected: rotated.sessionEpoch,
+    });
     await supabase.auth.signOut();
     return { error: "เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่" };
   }

@@ -336,9 +336,14 @@ export function HrEmployeesManager() {
       );
       const body = (await response.json().catch(() => null)) as {
         message?: string;
+        code?: string;
         issues?: Array<{ path: string; message: string }>;
       } | null;
       if (!response.ok) {
+        if (body?.code === "SESSION_REPLACED") {
+          window.location.assign("/login?sessionReplaced=1");
+          return;
+        }
         const feedback = hrEmployeeValidationFeedback(body ?? {});
         setFormFieldErrors(feedback.byPath);
         throw new Error(feedback.summary);
@@ -347,8 +352,12 @@ export function HrEmployeesManager() {
       setModalOpen(false);
       await load();
     } catch (saveError) {
+      const raw =
+        saveError instanceof Error ? saveError.message : "บันทึกไม่สำเร็จ";
       setFormError(
-        saveError instanceof Error ? saveError.message : "บันทึกไม่สำเร็จ",
+        /failed to fetch|networkerror|load failed/i.test(raw)
+          ? "เชื่อมต่อเซิร์ฟเวอร์ไม่สำเร็จ กรุณาลองใหม่ (ถ้าเพิ่ง deploy อาจใช้เวลานานขึ้นชั่วคราว)"
+          : raw,
       );
     } finally {
       setSaving(false);

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  readSessionEpochFromAccessToken,
   readSessionEpochFromClaims,
   sessionEpochMatches,
 } from "@/lib/auth/session-epoch";
@@ -23,5 +24,14 @@ describe("session-epoch helpers", () => {
       readSessionEpochFromClaims({ app_metadata: { session_epoch: "4" } }),
       4,
     );
+  });
+
+  it("reads session_epoch from access token payload", () => {
+    const payload = Buffer.from(
+      JSON.stringify({ app_metadata: { session_epoch: 7 } }),
+      "utf8",
+    ).toString("base64url");
+    assert.equal(readSessionEpochFromAccessToken(`x.${payload}.y`), 7);
+    assert.equal(readSessionEpochFromAccessToken("not-a-jwt"), 0);
   });
 });

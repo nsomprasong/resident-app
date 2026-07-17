@@ -23,6 +23,9 @@ import {
 import { Prisma } from "@/generated/prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 
+/** Auth user provisioning can exceed the default serverless budget. */
+export const maxDuration = 30;
+
 const employeeInclude = {
   roleRecord: {
     select: {

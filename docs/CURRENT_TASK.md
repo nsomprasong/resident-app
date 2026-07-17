@@ -2,43 +2,27 @@
 
 ## Task
 
-Fix account-specific mobile login (only nsomprasong@gmail.com worked on phone)
+Fix self-registered users cannot login after role + activate
 
 ## Status
 
 COMPLETED
 
-## Objective
+## Why (difference)
 
-หาความต่างบัญชีจริง แก้ต้นเหตุ account-specific กัน client exception และห้าม hard-code อีเมลเป็น ADMIN
-
-## Evidence — ความต่างก่อนแก้
-
-| | nsomprasong (ใช้ได้) | บัญชีอื่น (พังบนมือถือ) |
+| | ลงทะเบียนหน้า login | เพิ่มในโปรแกรม |
 |--|--|--|
-| Employee.email | gmail จริง | null หรือ hotmail แยกจาก Auth |
-| Auth email | nsomprasong@gmail.com | `*@employee-auth.local` |
-| bb. Auth email | — | **invalid** `bb.@employee-auth.local` |
-| providers | email | email+phone |
-| Role ใน DB ตอนนี้ | ADMIN คนเดียว | OWNER / MANAGER |
-| authUserId match | exact | exact (ไม่ใช่ปัญหา UUID) |
-| Employee ซ้ำ | ไม่มี | ไม่มี |
+| Auth login | `username@employee-auth.local` + รหัสที่ตั้งตอนสมัคร | temp password + `mustResetPassword` |
+| รหัสผ่านแรก | ใช้รหัสตอนสมัคร | ตั้งใหม่ผ่านหน้า set-password |
+| Employee.email | อีเมลติดต่อ (ถ้ามี) ≠ Auth | มักว่าง |
 
-Hard-code ที่พบ: `FALLBACK_SUPPORT_EMAILS = ["nsomprasong@gmail.com"]` ใน `lib/auth/support-account.ts`
+## Bugs ที่ทำให้เข้าไม่ได้
 
-## Fixes
+1. Login ด้วยอีเมลติดต่อ → ใช้เป็น Auth email ตรงๆ (ผิด)
+2. Settings แก้/เซฟอีเมลของบัญชีที่มี username → `resolveAuthUserIdForEmail` สลับ `authUserId` ทิ้ง mailbox เดิม
 
-- ลบ hard-code อีเมล — ใช้เฉพาะ `SUPPORT_ACCOUNT_EMAILS`
-- Auth email: `bb.@…` → `bb@…` (repair แล้วบน production Auth)
-- ห้าม username ขึ้นต้น/ลงท้ายด้วยจุดสำหรับบัญชีใหม่
-- ClientErrorBoundary + null-safe logger / auth/me / getClaims try/catch
-- ไม่มี fallback เป็น ADMIN จากอีเมล
+## Fix
 
-## Verification
-
-- Unit (login-identifier, support-account, auth/menus) pass
-- `tsc` pass; production build รันต่อ
-
-## Deploy
-
-Deploy โค้ด + ยืนยัน `.env` มี `SUPPORT_ACCOUNT_EMAILS` (ไม่มี fallback ในโค้ดแล้ว)
+- Login: resolve อีเมลติดต่อ → username Auth mailbox
+- Settings: บัญชีมี username ไม่วิ่ง rebind Auth จากอีเมลติดต่อ
+- `ensureAuthLoginEmail` + repair `authUserId` หลัง sign-in ถ้าชี้ผิดตัว

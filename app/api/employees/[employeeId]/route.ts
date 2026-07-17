@@ -288,40 +288,39 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         ]);
       }
 
-      // Phone-auth employees must not switch identity via email automatically.
-      if (existing.username && !existing.email) {
-        return validationErrorResponse(
-          "บัญชี Phone Auth ไม่สามารถตั้งอีเมลเพื่อเปลี่ยน Identity ในเฟสนี้",
-          [{ path: "email", message: "ห้ามตั้งอีเมลบนบัญชี Phone Auth" }],
-        );
-      }
+      // Username Auth accounts: contact email is NOT the Auth identity.
+      // Never rebind authUserId via resolveAuthUserIdForEmail — that orphans
+      // the username@employee-auth.local mailbox (self-register password).
+      if (existing.username) {
+        updateData.email = email;
+      } else {
+        const authResolved = await resolveAuthUserIdForEmail(email);
+        if (!authResolved.ok) {
+          return apiErrorResponse(
+            authResolved.message,
+            502,
+            "AUTH_PROVISION_FAILED",
+          );
+        }
 
-      const authResolved = await resolveAuthUserIdForEmail(email);
-      if (!authResolved.ok) {
-        return apiErrorResponse(
-          authResolved.message,
-          502,
-          "AUTH_PROVISION_FAILED",
-        );
-      }
+        const authOwner = await prisma.employee.findFirst({
+          where: {
+            authUserId: authResolved.authUserId,
+            id: { not: employeeId },
+          },
+          select: { id: true },
+        });
+        if (authOwner) {
+          return validationErrorResponse(
+            "Auth user นี้ถูกผูกกับพนักงานอื่นแล้ว",
+            [{ path: "email", message: "authUserId ซ้ำ" }],
+          );
+        }
 
-      const authOwner = await prisma.employee.findFirst({
-        where: {
-          authUserId: authResolved.authUserId,
-          id: { not: employeeId },
-        },
-        select: { id: true },
-      });
-      if (authOwner) {
-        return validationErrorResponse(
-          "Auth user นี้ถูกผูกกับพนักงานอื่นแล้ว",
-          [{ path: "email", message: "authUserId ซ้ำ" }],
-        );
+        updateData.email = email;
+        updateData.authUserId = authResolved.authUserId;
+        authUserCreated = authResolved.created;
       }
-
-      updateData.email = email;
-      updateData.authUserId = authResolved.authUserId;
-      authUserCreated = authResolved.created;
     }
 
     // Activating (or keeping active) must always have a live Auth user in Supabase.

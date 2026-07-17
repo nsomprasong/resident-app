@@ -87,13 +87,24 @@ export function EmployeePermissionsProvider({
         });
         if (!response.ok) {
           setEmployee(null);
+          const body = (await response.json().catch(() => null)) as {
+            code?: string;
+          } | null;
+          const currentPath =
+            typeof window !== "undefined" ? window.location.pathname : "";
+
+          if (
+            response.status === 401 &&
+            body?.code === "SESSION_REPLACED" &&
+            currentPath !== "/login" &&
+            currentPath !== "/set-password"
+          ) {
+            router.replace("/login?sessionReplaced=1");
+            return;
+          }
+
           if (response.status === 403) {
-            const body = (await response.json().catch(() => null)) as {
-              code?: string;
-            } | null;
             const code = body?.code;
-            const currentPath =
-              typeof window !== "undefined" ? window.location.pathname : "";
             if (
               isAccessDenialCode(code) &&
               currentPath !== "/access-denied" &&

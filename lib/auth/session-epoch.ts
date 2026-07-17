@@ -31,3 +31,31 @@ export function sessionEpochMatches(
 ): boolean {
   return readSessionEpochFromClaims(claims) === employeeEpoch;
 }
+
+function decodeJwtPayloadJson(accessToken: string): string | null {
+  const payloadPart = accessToken.split(".")[1];
+  if (!payloadPart) return null;
+  try {
+    const normalized = payloadPart.replace(/-/g, "+").replace(/_/g, "/");
+    if (typeof Buffer !== "undefined") {
+      return Buffer.from(payloadPart, "base64url").toString("utf8");
+    }
+    return atob(normalized);
+  } catch {
+    return null;
+  }
+}
+
+/** Decode JWT payload without verifying — used only after Supabase session APIs succeed. */
+export function readSessionEpochFromAccessToken(
+  accessToken: string | null | undefined,
+): number {
+  if (!accessToken) return 0;
+  const json = decodeJwtPayloadJson(accessToken);
+  if (!json) return 0;
+  try {
+    return readSessionEpochFromClaims(JSON.parse(json) as ClaimsLike);
+  } catch {
+    return 0;
+  }
+}

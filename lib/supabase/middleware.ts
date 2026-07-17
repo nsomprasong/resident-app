@@ -137,28 +137,51 @@ export async function updateSession(request: NextRequest) {
     }
   }
 
-  // Another device logged in — invalidate this session and force re-login.
+  // Single-device guard: JWT session_epoch must match Employee.sessionEpoch.
+  // Access tokens minted before app_metadata was stamped can look "replaced"
+  // even on the active device — refresh once before kicking.
   if (
     employee &&
     authUserId &&
     !sessionEpochMatches(claims, employee.sessionEpoch)
   ) {
-    await supabase.auth.signOut({ scope: "local" });
+    const { data: refreshed, error: refreshError } =
+      await supabase.auth.refreshSession();
+    const refreshedClaims = refreshed.session
+      ? ((
+          await supabase.auth.getClaims(refreshed.session.access_token)
+        ).data?.claims as { app_metadata?: unknown } | null)
+      : null;
 
-    if (pathname.startsWith("/api/")) {
-      return NextResponse.json(
-        {
-          message: "บัญชีนี้เข้าใช้งานจากอุปกรณ์อื่นแล้ว",
-          code: "SESSION_REPLACED",
-        },
-        { status: 401 },
-      );
+    if (
+      !refreshError &&
+      refreshedClaims &&
+      sessionEpochMatches(refreshedClaims, employee.sessionEpoch)
+    ) {
+      claims = refreshedClaims;
+    } else {
+      await supabase.auth.signOut({ scope: "local" });
+
+      // Public auth pages/APIs must stay usable with leftover stale cookies.
+      if (isPublicRoute) {
+        return response;
+      }
+
+      if (pathname.startsWith("/api/")) {
+        return NextResponse.json(
+          {
+            message: "บัญชีนี้เข้าใช้งานจากอุปกรณ์อื่นแล้ว",
+            code: "SESSION_REPLACED",
+          },
+          { status: 401 },
+        );
+      }
+
+      const loginUrl = request.nextUrl.clone();
+      loginUrl.pathname = "/login";
+      loginUrl.search = "sessionReplaced=1";
+      return copyResponseCookies(response, NextResponse.redirect(loginUrl));
     }
-
-    const loginUrl = request.nextUrl.clone();
-    loginUrl.pathname = "/login";
-    loginUrl.search = "sessionReplaced=1";
-    return copyResponseCookies(response, NextResponse.redirect(loginUrl));
   }
 
   // Force set-password even on public routes (e.g. /login) after admin reset.

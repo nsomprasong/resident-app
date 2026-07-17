@@ -151,10 +151,36 @@ export async function findAuthUserIdByPhone(phone: string): Promise<string | nul
   }
 }
 
+function isAuthNetworkErrorMessage(message: string) {
+  return /failed to fetch|fetch failed|network|ECONNRESET|ETIMEDOUT|ENOTFOUND|socket/i.test(
+    message,
+  );
+}
+
+function mapAuthProvisionErrorMessage(message: string): string {
+  const lower = message.toLowerCase();
+  if (isAuthNetworkErrorMessage(message)) {
+    return "เชื่อมต่อระบบยืนยันตัวตนไม่สำเร็จ กรุณาลองใหม่";
+  }
+  if (
+    lower.includes("already been registered") ||
+    lower.includes("already registered") ||
+    lower.includes("user already exists") ||
+    lower.includes("email address has already")
+  ) {
+    return "Username นี้มีบัญชี Auth อยู่แล้ว";
+  }
+  if (lower.includes("phone") && lower.includes("already")) {
+    return "เบอร์โทรนี้มีบัญชี Auth อยู่แล้ว";
+  }
+  return `สร้าง Auth user ไม่สำเร็จ: ${message}`;
+}
+
 /**
  * Create Auth user for a new username/phone employee.
  * Password login uses username-bound Auth email (Employee.email stays null).
- * Phone is also stored on the Auth user for visibility / lookup (login still uses email).
+ * Creates email-only first (phone provider is often disabled and doubles latency),
+ * then best-effort attaches phone for lookup/display.
  */
 export async function createEmployeeAuthUser(input: {
   username: string;
@@ -176,22 +202,6 @@ export async function createEmployeeAuthUser(input: {
   }
 
   try {
-    const existingEmailId = await findAuthUserIdByEmail(authEmail);
-    if (existingEmailId) {
-      return {
-        ok: false,
-        message: "Username นี้มีบัญชี Auth อยู่แล้ว",
-      };
-    }
-
-    const existingPhoneId = await findAuthUserIdByPhone(phone);
-    if (existingPhoneId) {
-      return {
-        ok: false,
-        message: "เบอร์โทรนี้มีบัญชี Auth อยู่แล้ว",
-      };
-    }
-
     const admin = createAdminClient();
     const metadata = {
       provisioned_by: "employee_manage_username",
@@ -199,43 +209,40 @@ export async function createEmployeeAuthUser(input: {
       phone,
     };
 
-    let { data, error } = await admin.auth.admin.createUser({
+    // Email-only create is the fast path — login uses Auth email, not phone.
+    // Avoid listUsers pre-scans and phone-first create (often fails then retries).
+    const { data, error } = await admin.auth.admin.createUser({
       email: authEmail,
       password: input.password,
       email_confirm: true,
-      phone,
-      phone_confirm: true,
       user_metadata: metadata,
     });
 
-    // Phone field may be rejected even when Admin email create works — fall back.
     if (error) {
-      const retry = await admin.auth.admin.createUser({
-        email: authEmail,
-        password: input.password,
-        email_confirm: true,
-        user_metadata: metadata,
-      });
-      data = retry.data;
-      error = retry.error;
-    }
-
-    if (error) {
-      return {
-        ok: false,
-        message: `สร้าง Auth user ไม่สำเร็จ: ${error.message}`,
-      };
+      return { ok: false, message: mapAuthProvisionErrorMessage(error.message) };
     }
 
     if (!data.user?.id) {
       return { ok: false, message: "สร้าง Auth user ไม่สำเร็จ" };
     }
 
+    // Best-effort phone attach; do not fail employee create if phone sync fails.
+    const phoneSync = await updateAuthUserPhone({
+      authUserId: data.user.id,
+      phone,
+    });
+    if (!phoneSync.ok) {
+      console.warn(
+        "createEmployeeAuthUser: phone sync skipped",
+        phoneSync.message,
+      );
+    }
+
     return { ok: true, authUserId: data.user.id, created: true };
   } catch (error) {
-    const message =
+    const raw =
       error instanceof Error ? error.message : "เชื่อมต่อ Supabase Admin ไม่สำเร็จ";
-    return { ok: false, message };
+    return { ok: false, message: mapAuthProvisionErrorMessage(raw) };
   }
 }
 
@@ -262,11 +269,8 @@ export async function ensureAuthLoginEmail(input: {
       return { ok: true, email: expected };
     }
 
-    // Preserve real contact emails already used for legacy Auth login.
-    if (current && !current.endsWith("@employee-auth.local")) {
-      return { ok: true, email: current };
-    }
-
+    // Username accounts always authenticate via the username mailbox.
+    // Do not keep a contact email on Auth — that orphans the registration password.
     const { error: updateError } = await admin.auth.admin.updateUserById(
       input.authUserId,
       {
@@ -275,6 +279,11 @@ export async function ensureAuthLoginEmail(input: {
       },
     );
     if (updateError) {
+      // Expected mailbox may already belong to the original Auth user — use it.
+      const existingId = await findAuthUserIdByEmail(expected);
+      if (existingId) {
+        return { ok: true, email: expected };
+      }
       return {
         ok: false,
         message: `ผูก Auth login email ไม่สำเร็จ: ${updateError.message}`,

@@ -144,10 +144,13 @@ export function EmployeesManager() {
         },
       );
 
-      const body = (await response.json()) as EmployeeRecord | ApiErrorBody;
+      const body = (await response.json().catch(() => null)) as
+        | EmployeeRecord
+        | ApiErrorBody
+        | null;
       if (!response.ok) {
         throw new Error(
-          "message" in body && body.message
+          body && "message" in body && body.message
             ? body.message
             : "บันทึกพนักงานไม่สำเร็จ",
         );
@@ -156,8 +159,12 @@ export function EmployeesManager() {
       setModalOpen(false);
       await loadItems();
     } catch (reason) {
+      const raw =
+        reason instanceof Error ? reason.message : "บันทึกพนักงานไม่สำเร็จ";
       setFormError(
-        reason instanceof Error ? reason.message : "บันทึกพนักงานไม่สำเร็จ",
+        /failed to fetch|networkerror|load failed/i.test(raw)
+          ? "เชื่อมต่อเซิร์ฟเวอร์ไม่สำเร็จ กรุณาลองใหม่ (ถ้าเพิ่ง deploy อาจใช้เวลานานขึ้นชั่วคราว)"
+          : raw,
       );
     } finally {
       setSaving(false);
