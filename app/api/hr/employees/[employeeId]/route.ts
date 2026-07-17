@@ -22,7 +22,10 @@ import {
 } from "@/lib/hr/employees";
 import { syncMembershipFromDefaultShift } from "@/lib/hr/shift-memberships";
 import { prisma } from "@/lib/prisma";
-import { ensureEmployeeAuthProvisioned } from "@/lib/supabase/admin";
+import {
+  ensureAuthLoginEmail,
+  ensureEmployeeAuthProvisioned,
+} from "@/lib/supabase/admin";
 import { NextRequest, NextResponse } from "next/server";
 
 const employeeInclude = {
@@ -270,6 +273,23 @@ export async function PATCH(
       }
       authUserId = ensured.authUserId;
       if (ensured.created) {
+        mustResetPassword = true;
+      }
+
+      const activateUsername = patch.username ?? existing.username;
+      if (activateUsername && authUserId) {
+        const ensuredEmail = await ensureAuthLoginEmail({
+          authUserId,
+          username: activateUsername,
+        });
+        if (!ensuredEmail.ok) {
+          console.warn(
+            "PATCH /api/hr/employees ensureAuthLoginEmail soft-fail",
+            ensuredEmail.message,
+          );
+        }
+      }
+      if (!existing.isActive && nextIsActive) {
         mustResetPassword = true;
       }
     }

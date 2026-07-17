@@ -5,6 +5,7 @@ import {
   type ValidationIssue,
 } from "@/lib/api/validation";
 import { recordAuditLog } from "@/lib/audit/audit-log";
+import { provisionUsernamePhoneAuth } from "@/lib/auth/provision-username-employee";
 import {
   isValidUsername,
   normalizeThaiPhone,
@@ -17,14 +18,15 @@ import {
   isValidEmployeeEmail,
   normalizeEmployeeEmail,
 } from "@/lib/settings/employees";
-import {
-  createEmployeeAuthUser,
-  deleteAuthUserById,
-} from "@/lib/supabase/admin";
+import { deleteAuthUserById } from "@/lib/supabase/admin";
 import { NextRequest, NextResponse } from "next/server";
 
-const MIN_PASSWORD_LENGTH = 8;
-
+/**
+ * Public self-register — same Auth principle as Settings / HR employee create:
+ * username-bound Auth mailbox + temporary password + mustResetPassword.
+ * Account stays inactive until an admin assigns a role and activates it;
+ * first login then uses Username only to set a password.
+ */
 export async function POST(request: NextRequest) {
   let createdAuthUserId: string | null = null;
 
@@ -51,8 +53,6 @@ export async function POST(request: NextRequest) {
       typeof parsed.body.phone === "string" ? parsed.body.phone.trim() : "";
     const emailRaw =
       typeof parsed.body.email === "string" ? parsed.body.email.trim() : "";
-    const password =
-      typeof parsed.body.password === "string" ? parsed.body.password : "";
 
     // Backward-compatible: old clients sent a single `name` field.
     const legacyName =
@@ -97,13 +97,6 @@ export async function POST(request: NextRequest) {
       if (!email || !isValidEmployeeEmail(email)) {
         issues.push({ path: "email", message: "อีเมลไม่ถูกต้อง" });
       }
-    }
-
-    if (!password || password.length < MIN_PASSWORD_LENGTH) {
-      issues.push({
-        path: "password",
-        message: `รหัสผ่านต้องมีอย่างน้อย ${MIN_PASSWORD_LENGTH} ตัวอักษร`,
-      });
     }
 
     if (notesRaw.length > 2000) {
@@ -157,40 +150,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const authResolved = await createEmployeeAuthUser({
-      username,
-      phone,
-      password,
-    });
+    const authResolved = await provisionUsernamePhoneAuth({ username, phone });
     if (!authResolved.ok) {
-      if (
-        authResolved.message.includes("มีบัญชี Auth อยู่แล้ว") ||
-        authResolved.message.toLowerCase().includes("already")
-      ) {
+      if (authResolved.code === "AUTH_EXISTS") {
         return apiErrorResponse(
           "บัญชีนี้มีในระบบแล้ว กรุณาเข้าสู่ระบบ หรือติดต่อผู้ดูแล",
           409,
           "AUTH_EXISTS",
         );
       }
-      console.error("self-register createEmployeeAuthUser failed", authResolved);
-      return apiErrorResponse(authResolved.message, 502, "AUTH_PROVISION_FAILED");
-    }
-    createdAuthUserId = authResolved.authUserId;
-
-    const authOwner = await prisma.employee.findUnique({
-      where: { authUserId: authResolved.authUserId },
-      select: { id: true },
-    });
-    if (authOwner) {
-      await deleteAuthUserById(authResolved.authUserId);
-      createdAuthUserId = null;
+      console.error("self-register provisionUsernamePhoneAuth failed", authResolved);
       return apiErrorResponse(
-        "บัญชีนี้มีในระบบแล้ว กรุณาเข้าสู่ระบบ หรือติดต่อผู้ดูแล",
-        409,
-        "AUTH_EXISTS",
+        authResolved.message,
+        502,
+        "AUTH_PROVISION_FAILED",
       );
     }
+    createdAuthUserId = authResolved.authUserId;
 
     const name = buildEmployeeDisplayName(resolvedFirstName, resolvedLastName);
     const employeeCode = await nextEmployeeCode();
@@ -205,11 +181,12 @@ export async function POST(request: NextRequest) {
           notes: notesRaw || null,
           username,
           phone,
+          // Contact only — Auth login uses username-bound mailbox (Settings principle).
           email,
           authUserId: authResolved.authUserId,
           roleId: null,
           isActive: false,
-          mustResetPassword: false,
+          mustResetPassword: true,
           employmentType: "MONTHLY",
           hrStatus: "ACTIVE",
         },
@@ -231,13 +208,14 @@ export async function POST(request: NextRequest) {
           name,
           employeeCode,
           authMode: "username_auth_email",
+          mustResetPassword: true,
         },
       });
 
       return NextResponse.json(
         {
           message:
-            "ลงทะเบียนสำเร็จแล้ว รอผู้ดูแลระบบกำหนดสิทธิ์และเปิดใช้งานก่อนเข้าใช้งาน",
+            "ลงทะเบียนสำเร็จแล้ว รอผู้ดูแลกำหนดสิทธิ์และเปิดใช้งาน จากนั้นเข้าสู่ระบบด้วย Username เพื่อตั้งรหัสผ่านครั้งแรก",
         },
         { status: 201 },
       );

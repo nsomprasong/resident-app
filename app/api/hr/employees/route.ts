@@ -21,11 +21,8 @@ import {
 } from "@/lib/hr/employees";
 import { syncActiveEmployeeCompensation } from "@/lib/hr/employee-compensation";
 import { prisma } from "@/lib/prisma";
-import {
-  createEmployeeAuthUser,
-  createTemporaryPassword,
-  deleteAuthUserById,
-} from "@/lib/supabase/admin";
+import { provisionUsernamePhoneAuth } from "@/lib/auth/provision-username-employee";
+import { deleteAuthUserById } from "@/lib/supabase/admin";
 import { Prisma } from "@/generated/prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -227,31 +224,21 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Temporary password is never shown — employee sets their own on first login.
-    // Auth identity uses username-bound email (not Employee.email); Phone Auth login
-    // is often disabled in Supabase even when Admin can create phone users.
-    const authResolved = await createEmployeeAuthUser({
+    // Same principle as Settings: temp Auth password; employee sets password on first login.
+    // Auth identity uses username-bound email (not Employee.email).
+    const authResolved = await provisionUsernamePhoneAuth({
       username,
       phone,
-      password: createTemporaryPassword(),
     });
     if (!authResolved.ok) {
+      if (authResolved.code === "AUTH_EXISTS") {
+        return validationErrorResponse(authResolved.message, [
+          { path: "username", message: "บัญชี Auth ซ้ำ" },
+        ]);
+      }
       return apiErrorResponse(authResolved.message, 502, "AUTH_PROVISION_FAILED");
     }
     createdAuthUserId = authResolved.authUserId;
-
-    const authOwner = await prisma.employee.findUnique({
-      where: { authUserId: authResolved.authUserId },
-      select: { id: true },
-    });
-    if (authOwner) {
-      await deleteAuthUserById(authResolved.authUserId);
-      createdAuthUserId = null;
-      return validationErrorResponse(
-        "Auth user นี้ถูกผูกกับพนักงานอื่นแล้ว",
-        [{ path: "phone", message: "authUserId ซ้ำ" }],
-      );
-    }
 
     const employeeCode = validated.data.employeeCode ?? (await nextEmployeeCode());
     const name = buildEmployeeDisplayName(firstName, lastName);

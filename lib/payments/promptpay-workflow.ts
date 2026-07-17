@@ -21,6 +21,7 @@ const ALLOWED_TRANSITIONS: Readonly<
     PaymentStatus.CANCELLED,
   ]),
   VERIFIED: new Set([
+    PaymentStatus.PENDING_VERIFICATION,
     PaymentStatus.PARTIALLY_REFUNDED,
     PaymentStatus.REFUNDED,
   ]),

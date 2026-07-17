@@ -464,13 +464,21 @@ const apiPermissionRules: readonly ApiPermissionRule[] = [
     anyOf: ["payment.submit", "payment.collect"],
   } },
   { method: "POST", pattern: /^\/api\/bookings\/[^/]+\/promptpay-payments\/[^/]+\/verify$/, permission: "payment.verify" },
+  { method: "POST", pattern: /^\/api\/bookings\/[^/]+\/promptpay-payments\/[^/]+\/unverify$/, permission: "payment.verify" },
   { method: "POST", pattern: /^\/api\/bookings\/[^/]+\/promptpay-payments\/[^/]+\/reject$/, permission: "payment.verify" },
   { method: "POST", pattern: /^\/api\/bookings\/[^/]+\/promptpay-payments\/[^/]+\/cancel$/, permission: {
     anyOf: ["payment.cancel", "payment.collect"],
   } },
   { method: "POST", pattern: /^\/api\/bookings\/[^/]+\/promptpay-payments\/[^/]+\/refund$/, permission: "payment.refund" },
   { method: "GET", pattern: /^\/api\/bookings\/[^/]+\/promptpay-payments\/[^/]+\/slip$/, permission: {
-    anyOf: ["payment.view", "payment.verify", "payment.read"],
+    anyOf: [
+      "payment.view",
+      "payment.verify",
+      "payment.read",
+      "payment.collect",
+      "payment.create",
+      "payment.submit",
+    ],
   } },
   { method: "GET", pattern: /^\/api\/bookings\/[^/]+\/promptpay-payments\/[^/]+\/qr$/, permission: {
     anyOf: ["payment.view", "payment.create", "payment.receipt.print", "payment.read"],

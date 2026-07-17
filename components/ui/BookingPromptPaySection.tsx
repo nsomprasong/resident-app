@@ -47,6 +47,13 @@ type CreatedQrItem = {
   paymentId: string;
   status: string;
   qr: QrPayload;
+  hasSlip: boolean;
+};
+
+type SlipViewer = {
+  url: string;
+  fileName: string | null;
+  contentType: string | null;
 };
 
 const purposeOptions = [
@@ -105,6 +112,7 @@ export function BookingPromptPaySection({
   const [qrIndex, setQrIndex] = useState(0);
   const [slipFile, setSlipFile] = useState<File | null>(null);
   const [slipPreviewUrl, setSlipPreviewUrl] = useState<string | null>(null);
+  const [slipViewer, setSlipViewer] = useState<SlipViewer | null>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -112,8 +120,17 @@ export function BookingPromptPaySection({
   const activePaymentId = activeQr?.paymentId ?? null;
   const activePaymentStatus = activeQr?.status ?? null;
   const qr = activeQr?.qr ?? null;
+  const activeHasSlip = Boolean(activeQr?.hasSlip);
   const canSubmitActive =
     activePaymentStatus === "AWAITING_PAYMENT" && Boolean(activePaymentId);
+  const canViewSlip = canAny([
+    "payment.view",
+    "payment.verify",
+    "payment.read",
+    "payment.collect",
+    "payment.create",
+    "payment.submit",
+  ]);
 
   const selectedTotal = useMemo(
     () =>
@@ -271,6 +288,7 @@ export function BookingPromptPaySection({
             paymentId: body.payment.id,
             status: body.payment.status,
             qr: body.qr,
+            hasSlip: Boolean(body.payment.hasSlip),
           });
         }
       }
@@ -335,12 +353,18 @@ export function BookingPromptPaySection({
       );
       const body = (await response.json()) as {
         signedUrl?: string;
+        fileName?: string | null;
+        contentType?: string | null;
         message?: string;
       };
       if (!response.ok || !body.signedUrl) {
         throw new Error(body.message ?? "เปิดสลิปไม่สำเร็จ");
       }
-      window.open(body.signedUrl, "_blank", "noopener,noreferrer");
+      setSlipViewer({
+        url: body.signedUrl,
+        fileName: body.fileName ?? null,
+        contentType: body.contentType ?? null,
+      });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "เปิดสลิปไม่สำเร็จ");
     } finally {
@@ -350,29 +374,40 @@ export function BookingPromptPaySection({
 
   const act = async (
     paymentId: string,
-    action: "verify" | "reject" | "cancel",
+    action: "verify" | "unverify" | "reject" | "cancel",
   ) => {
     const ok = await confirm({
       title:
         action === "verify"
           ? "ยืนยันว่าได้รับเงินแล้ว?"
-          : action === "reject"
-            ? "ปฏิเสธรายการนี้?"
-            : "ยกเลิกรายการนี้?",
+          : action === "unverify"
+            ? "แก้กลับการยืนยัน?"
+            : action === "reject"
+              ? "ปฏิเสธรายการนี้?"
+              : "ยกเลิกรายการนี้?",
       description:
-        action === "reject"
-          ? "สถานะจะเป็น REJECTED และไม่นับเป็นยอดรับเงิน"
-          : undefined,
+        action === "unverify"
+          ? "รายการจะกลับไปรอตรวจสอบ และไม่นับเป็นยอดรับเงิน จนกว่าจะยืนยันใหม่"
+          : action === "reject"
+            ? "สถานะจะเป็น REJECTED และไม่นับเป็นยอดรับเงิน"
+            : undefined,
       confirmLabel:
         action === "verify"
           ? "ยืนยัน"
-          : action === "reject"
-            ? "ปฏิเสธ"
-            : "ยกเลิกบิล",
+          : action === "unverify"
+            ? "แก้กลับ"
+            : action === "reject"
+              ? "ปฏิเสธ"
+              : "ยกเลิกบิล",
       tone: action === "verify" ? "warning" : "danger",
     });
     if (!ok) return;
-    const noteValue = action === "reject" ? "ปฏิเสธโดยเจ้าหน้าที่" : "";
+    const noteValue =
+      action === "reject"
+        ? "ปฏิเสธโดยเจ้าหน้าที่"
+        : action === "unverify"
+          ? "ยกเลิกการยืนยันโดยเจ้าหน้าที่"
+          : "";
     setSaving(true);
     try {
       const response = await fetch(
@@ -409,6 +444,7 @@ export function BookingPromptPaySection({
           paymentId,
           status: current?.status ?? "AWAITING_PAYMENT",
           qr: body,
+          hasSlip: Boolean(current?.hasSlip),
         },
       ]);
       setQrIndex(0);
@@ -519,10 +555,10 @@ export function BookingPromptPaySection({
                       ดู QR
                     </button>
                   ) : null}
-                  {payment.hasSlip ? (
+                  {payment.hasSlip && canViewSlip ? (
                     <button
                       type="button"
-                      className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs"
+                      className="inline-flex items-center gap-1 rounded-lg border border-primary/30 bg-primary/5 px-2.5 py-1 text-xs font-medium text-primary"
                       onClick={() => void openSlip(payment.id)}
                     >
                       <Eye size={12} />
@@ -546,6 +582,15 @@ export function BookingPromptPaySection({
                         ปฏิเสธ
                       </button>
                     </>
+                  ) : null}
+                  {payment.status === "VERIFIED" && canVerify ? (
+                    <button
+                      type="button"
+                      className="rounded-lg border border-border px-2 py-1 text-xs text-amber-800"
+                      onClick={() => void act(payment.id, "unverify")}
+                    >
+                      แก้กลับ
+                    </button>
                   ) : null}
                   {["AWAITING_PAYMENT", "PENDING_VERIFICATION"].includes(
                     payment.status,
@@ -885,11 +930,71 @@ export function BookingPromptPaySection({
                   ส่งตรวจสอบ
                 </button>
               </>
-            ) : activePaymentStatus === "PENDING_VERIFICATION" ? (
-              <p className="rounded-xl bg-muted px-3 py-2 text-sm text-muted-foreground">
-                ส่งตรวจสอบแล้ว — รอเจ้าหน้าที่ยืนยัน
-              </p>
+            ) : activePaymentStatus === "PENDING_VERIFICATION" ||
+              activePaymentStatus === "VERIFIED" ? (
+              <div className="space-y-2">
+                <p className="rounded-xl bg-muted px-3 py-2 text-sm text-muted-foreground">
+                  {activePaymentStatus === "VERIFIED"
+                    ? "ยืนยันรับเงินแล้ว"
+                    : "ส่งตรวจสอบแล้ว — รอเจ้าหน้าที่ยืนยัน"}
+                </p>
+                {activeHasSlip && canViewSlip && activePaymentId ? (
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void openSlip(activePaymentId)}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-2.5 text-sm font-medium text-primary disabled:opacity-50"
+                  >
+                    <Eye size={16} />
+                    ดูสลิปที่แนบ
+                  </button>
+                ) : null}
+              </div>
             ) : null}
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal
+        open={Boolean(slipViewer)}
+        onClose={() => setSlipViewer(null)}
+        title="สลิปที่แนบ"
+      >
+        {slipViewer ? (
+          <div className="space-y-3">
+            {slipViewer.contentType?.startsWith("image/") ||
+            !slipViewer.contentType ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={slipViewer.url}
+                alt={slipViewer.fileName ?? "สลิปการโอน"}
+                className="max-h-[70vh] w-full rounded-xl border border-border bg-white object-contain"
+              />
+            ) : (
+              <iframe
+                src={slipViewer.url}
+                title={slipViewer.fileName ?? "สลิปการโอน"}
+                className="h-[70vh] w-full rounded-xl border border-border bg-white"
+              />
+            )}
+            <div className="flex flex-wrap gap-2">
+              <a
+                href={slipViewer.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-foreground"
+              >
+                <Eye size={16} />
+                เปิดแท็บใหม่
+              </a>
+              <button
+                type="button"
+                onClick={() => setSlipViewer(null)}
+                className="inline-flex flex-1 items-center justify-center rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground"
+              >
+                ปิด
+              </button>
+            </div>
           </div>
         ) : null}
       </Modal>

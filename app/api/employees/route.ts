@@ -14,9 +14,8 @@ import {
 } from "@/lib/auth/support-account";
 import { prisma } from "@/lib/prisma";
 import { parseEmployeeInput, serializeEmployee } from "@/lib/settings/employees";
+import { provisionUsernamePhoneAuth } from "@/lib/auth/provision-username-employee";
 import {
-  createEmployeeAuthUser,
-  createTemporaryPassword,
   deleteAuthUserById,
   resolveAuthUserIdForEmail,
 } from "@/lib/supabase/admin";
@@ -210,12 +209,16 @@ export async function POST(request: NextRequest) {
         ]);
       }
 
-      const authResolved = await createEmployeeAuthUser({
+      const authResolved = await provisionUsernamePhoneAuth({
         username,
         phone,
-        password: createTemporaryPassword(),
       });
       if (!authResolved.ok) {
+        if (authResolved.code === "AUTH_EXISTS") {
+          return validationErrorResponse(authResolved.message, [
+            { path: "username", message: "บัญชี Auth ซ้ำ" },
+          ]);
+        }
         return apiErrorResponse(
           authResolved.message,
           502,
@@ -223,19 +226,6 @@ export async function POST(request: NextRequest) {
         );
       }
       createdAuthUserId = authResolved.authUserId;
-
-      const authOwner = await prisma.employee.findUnique({
-        where: { authUserId: authResolved.authUserId },
-        select: { id: true, name: true },
-      });
-      if (authOwner) {
-        await deleteAuthUserById(authResolved.authUserId);
-        createdAuthUserId = null;
-        return validationErrorResponse(
-          "Auth user นี้ถูกผูกกับพนักงานอื่นแล้ว",
-          [{ path: "phone", message: "authUserId ซ้ำ" }],
-        );
-      }
 
       try {
         if (email) {

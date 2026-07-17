@@ -287,6 +287,94 @@ export async function rejectPromptPayPayment(request: NextRequest, ids: Ids) {
   });
 }
 
+/** Undo a mistaken verify — back to pending review (not counted as paid). */
+export async function unverifyPromptPayPayment(request: NextRequest, ids: Ids) {
+  try {
+    const currentUser = await getCurrentUser();
+    const parsed = await readJsonObject(request);
+    const note =
+      parsed.ok && typeof parsed.body.note === "string"
+        ? parsed.body.note.trim()
+        : "";
+
+    const payment = await prisma.$transaction(async (tx) => {
+      await acquireBookingFinancialLock(tx, ids.bookingId);
+      const existing = await tx.payment.findFirst({
+        where: { id: ids.paymentId, bookingId: ids.bookingId },
+        include: { refunds: { select: { id: true } } },
+      });
+      if (!existing) throw new Error("NOT_FOUND");
+      if (existing.status !== PaymentStatus.VERIFIED) {
+        throw new Error("INVALID_STATUS_TRANSITION");
+      }
+      if (existing.refunds.length > 0) {
+        throw new Error("HAS_REFUNDS");
+      }
+      assertPaymentTransition(
+        existing.status,
+        PaymentStatus.PENDING_VERIFICATION,
+      );
+
+      const updated = await tx.payment.update({
+        where: { id: existing.id },
+        data: {
+          status: PaymentStatus.PENDING_VERIFICATION,
+          verifiedAt: null,
+          verifiedById: null,
+          paidAt: null,
+          note: note || existing.note,
+        },
+        select: paymentSelect,
+      });
+
+      await recordPaymentStatusHistory(tx, {
+        paymentId: existing.id,
+        fromStatus: existing.status,
+        toStatus: PaymentStatus.PENDING_VERIFICATION,
+        note: note || "ยกเลิกการยืนยัน",
+        actorId: currentUser?.employee?.id,
+      });
+
+      return updated;
+    });
+
+    await recordAuditLog({
+      actor: {
+        employeeId: currentUser?.employee?.id,
+        authUserId: currentUser?.user.id,
+      },
+      action: "PROMPTPAY_PAYMENT_UNVERIFIED",
+      entityType: "PAYMENT",
+      entityId: payment.id,
+      metadata: { bookingId: ids.bookingId, note: note || null },
+    });
+
+    return NextResponse.json({ payment: serializePaymentListItem(payment) });
+  } catch (error) {
+    if (error instanceof Error) {
+      if (error.message === "NOT_FOUND") {
+        return apiErrorResponse("ไม่พบรายการชำระเงิน", 404, "NOT_FOUND");
+      }
+      if (error.message === "INVALID_STATUS_TRANSITION") {
+        return apiErrorResponse(
+          "รายการนี้ยังไม่ได้ยืนยัน หรือแก้กลับไม่ได้",
+          409,
+          "INVALID_TRANSITION",
+        );
+      }
+      if (error.message === "HAS_REFUNDS") {
+        return apiErrorResponse(
+          "มีการคืนเงินแล้ว แก้กลับการยืนยันไม่ได้",
+          409,
+          "HAS_REFUNDS",
+        );
+      }
+    }
+    console.error("unverifyPromptPayPayment failed", error);
+    return apiErrorResponse("แก้กลับการยืนยันไม่สำเร็จ", 500, "INTERNAL_ERROR");
+  }
+}
+
 export async function cancelPromptPayPayment(request: NextRequest, ids: Ids) {
   const parsed = await readJsonObject(request);
   const note =

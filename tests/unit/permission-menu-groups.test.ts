@@ -20,9 +20,10 @@ describe("permissionMenuGroups", () => {
     const titles = permissionMenuGroups.map((group) => group.title);
     assert.equal(titles[0], "ภาพรวมวันนี้");
     assert.equal(titles[1], "รายการจอง");
-    assert.equal(titles[2], "สั่งอาหาร");
-    assert.equal(titles[3], "ครัว");
-    assert.equal(titles[4], "แม่บ้านและตรวจสอบห้องพัก");
+    assert.equal(titles[2], "PromptPay");
+    assert.equal(titles[3], "สั่งอาหาร");
+    assert.equal(titles[4], "ครัว");
+    assert.equal(titles[5], "แม่บ้านและตรวจสอบห้องพัก");
     assert.ok(titles.includes("บัญชีและแดชบอร์ด"));
     assert.ok(titles.includes("รายงานรวม"));
     assert.ok(
@@ -60,22 +61,30 @@ describe("permissionMenuGroups", () => {
     );
   });
 
-  it("keeps manage/write before read within booking and settings", () => {
+  it("keeps manage/write before read within booking, PromptPay, and settings", () => {
     const booking = permissionMenuGroups.find((group) => group.id === "booking");
+    const promptpay = permissionMenuGroups.find(
+      (group) => group.id === "promptpay",
+    );
     const settings = permissionMenuGroups.find((group) => group.id === "settings");
     assert.ok(booking);
+    assert.ok(promptpay);
     assert.ok(settings);
     assert.ok(
       booking.permissions.indexOf("booking.write") <
         booking.permissions.indexOf("booking.read"),
     );
     assert.ok(
-      settings.permissions.indexOf("settings.manage") <
-        settings.permissions.indexOf("employee.read"),
+      promptpay.permissions.indexOf("payment.verify") <
+        promptpay.permissions.indexOf("payment.promptpay_settings.view"),
     );
     assert.ok(
-      settings.permissions.indexOf("payment.promptpay_settings.manage") <
-        settings.permissions.indexOf("payment.promptpay_settings.view"),
+      promptpay.permissions.indexOf("payment.promptpay_settings.manage") <
+        promptpay.permissions.indexOf("payment.promptpay_settings.view"),
+    );
+    assert.ok(
+      settings.permissions.indexOf("settings.manage") <
+        settings.permissions.indexOf("employee.read"),
     );
   });
 });

@@ -21,6 +21,7 @@ import {
   serializeEmployee,
 } from "@/lib/settings/employees";
 import {
+  ensureAuthLoginEmail,
   ensureEmployeeAuthProvisioned,
   resolveAuthUserIdForEmail,
   updateAuthUserPhone,
@@ -369,6 +370,29 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
           authUserCreated = true;
           updateData.mustResetPassword = true;
         }
+      }
+
+      // Align with Settings first-login: username Auth mailbox + set-password.
+      const activateUsername =
+        updateData.username !== undefined
+          ? updateData.username
+          : existing.username;
+      const activateAuthUserId =
+        updateData.authUserId ?? existing.authUserId ?? null;
+      if (activateUsername && activateAuthUserId) {
+        const ensuredEmail = await ensureAuthLoginEmail({
+          authUserId: activateAuthUserId,
+          username: activateUsername,
+        });
+        if (!ensuredEmail.ok) {
+          console.warn(
+            "PATCH /api/employees ensureAuthLoginEmail soft-fail",
+            ensuredEmail.message,
+          );
+        }
+      }
+      if (!existing.isActive && nextActive) {
+        updateData.mustResetPassword = true;
       }
     }
 

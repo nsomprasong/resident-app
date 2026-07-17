@@ -49,7 +49,6 @@ export default function LoginForm() {
           username: String(form.get("username") ?? ""),
           phone: String(form.get("phone") ?? ""),
           email: String(form.get("email") ?? ""),
-          password: String(form.get("password") ?? ""),
         }),
       });
       const data = (await response.json()) as { message?: string };
@@ -58,7 +57,7 @@ export default function LoginForm() {
       }
       const successMessage =
         data.message ??
-        "ลงทะเบียนสำเร็จ รอผู้ดูแลเปิดใช้งานก่อนเข้าสู่ระบบ";
+        "ลงทะเบียนสำเร็จ รอผู้ดูแลกำหนดสิทธิ์และเปิดใช้งาน จากนั้นเข้าสู่ระบบด้วย Username เพื่อตั้งรหัสผ่าน";
       formElement.reset();
       setRegisterState({
         error: null,
@@ -278,7 +277,7 @@ export default function LoginForm() {
                   htmlFor="register-email"
                   className="mb-2 block text-sm font-medium text-foreground"
                 >
-                  อีเมล (ไม่บังคับ)
+                  อีเมลติดต่อ (ไม่บังคับ)
                 </label>
                 <input
                   id="register-email"
@@ -287,24 +286,6 @@ export default function LoginForm() {
                   autoComplete="email"
                   className={inputClassName}
                   placeholder="name@example.com"
-                />
-              </div>
-              <div className="sm:col-span-2">
-                <label
-                  htmlFor="register-password"
-                  className="mb-2 block text-sm font-medium text-foreground"
-                >
-                  รหัสผ่าน
-                </label>
-                <input
-                  id="register-password"
-                  name="password"
-                  type="password"
-                  autoComplete="new-password"
-                  required
-                  minLength={8}
-                  className={inputClassName}
-                  placeholder="อย่างน้อย 8 ตัวอักษร"
                 />
               </div>
             </div>
@@ -327,8 +308,9 @@ export default function LoginForm() {
             </p>
           ) : null}
           <p className="text-xs text-muted-foreground">
-            หลังลงทะเบียนจะยังเข้าใช้งานไม่ได้ จนกว่าผู้ดูแลจะกำหนดสิทธิ์และเปิดใช้งาน
-            ข้อมูลที่กรอกจะถูกใช้เป็นข้อมูลส่วนตัวพนักงานทันที
+            ใช้หลักเดียวกับตั้งค่าข้อมูลหลัก: ยังไม่ตั้งรหัสผ่านตอนลงทะเบียน
+            รอผู้ดูแลกำหนดสิทธิ์และเปิดใช้งาน จากนั้นเข้าสู่ระบบด้วย Username
+            เพื่อตั้งรหัสผ่านครั้งแรก
           </p>
           <button
             type="submit"
