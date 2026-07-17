@@ -101,6 +101,7 @@ export async function PATCH(
         username: true,
         phone: true,
         authUserId: true,
+        isActive: true,
       },
     });
     if (!existing) {
