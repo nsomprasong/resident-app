@@ -8,6 +8,7 @@ import {
   LogIn,
   LogOut,
   Pencil,
+  Receipt,
   ReceiptText,
   ShipWheel,
   Utensils,
@@ -18,6 +19,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { useEmployeePermissions } from "@/components/auth/EmployeePermissionsProvider";
+import AddBookingChargesDialog from "@/components/ui/AddBookingChargesDialog";
 import AddBookingFoodDialog from "@/components/ui/AddBookingFoodDialog";
 import BackButton from "@/components/ui/BackButton";
 import BillItem from "@/components/ui/BillItem";
@@ -101,6 +103,7 @@ export default function BookingDetailPage() {
   const [pricingBusy, setPricingBusy] = useState<string | null>(null);
   const [openManageResources, setOpenManageResources] = useState(false);
   const [openManageFood, setOpenManageFood] = useState(false);
+  const [openManageCharges, setOpenManageCharges] = useState(false);
 
   const canManageItems = !["CHECKED_OUT", "CANCELLED"].includes(
     data?.status ?? "",
@@ -575,6 +578,16 @@ export default function BookingDetailPage() {
                         จัดการรายการอาหาร
                       </button>
                     </PermissionGate>
+                    <PermissionGate permission="booking.write">
+                      <button
+                        type="button"
+                        onClick={() => setOpenManageCharges(true)}
+                        className="inline-flex items-center gap-2 rounded-xl border border-secondary/30 px-4 py-2 text-sm text-secondary"
+                      >
+                        <Receipt size={17} />
+                        เพิ่มค่าใช้จ่าย
+                      </button>
+                    </PermissionGate>
                   </>
                 ) : null}
                 {canLifecycle
@@ -723,6 +736,12 @@ export default function BookingDetailPage() {
           id: room.id,
           number: room.number,
         }))}
+        onAdded={() => void load()}
+      />
+      <AddBookingChargesDialog
+        open={openManageCharges}
+        setOpen={setOpenManageCharges}
+        bookingId={data.id}
         onAdded={() => void load()}
       />
     </>

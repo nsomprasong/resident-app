@@ -3,16 +3,21 @@
 import { Calculator, Save, UsersRound, X } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
+import BookingExtraChargesPanel, {
+  type BookingExtraChargeDraft,
+} from "./BookingExtraChargesPanel";
 import BookingFoodSetPanel from "./BookingFoodSetPanel";
 import {
   foodItemsMissingRequiredOptions,
   type BookingFoodItem,
 } from "./BookingFoodSelect";
 import DateSelector from "./DateSelector";
+import GuestSuggestInput from "./GuestSuggestInput";
 import Modal from "./Modal";
 import NumberInput from "./NumberInput";
-import RaftSelect from "./RaftSelect";
+import RaftSelect, { type SelectedRaft } from "./RaftSelect";
 import ZoneRoomSelect from "./ZoneRoomSelect";
+import { extraChargeLineTotal } from "@/lib/bookings/extra-charges";
 
 const dateText = (offset = 0) => {
   const value = new Date();
@@ -74,8 +79,11 @@ export default function AddGroupBookingDialog({
   const [guestCount, setGuestCount] = useState(1);
   const [pricePerPerson, setPricePerPerson] = useState(0);
   const [roomIds, setRoomIds] = useState<string[]>([]);
-  const [raftIds, setRaftIds] = useState<string[]>([]);
+  const [selectedRafts, setSelectedRafts] = useState<SelectedRaft[]>([]);
   const [foodItems, setFoodItems] = useState<BookingFoodItem[]>([]);
+  const [extraCharges, setExtraCharges] = useState<BookingExtraChargeDraft[]>(
+    [],
+  );
   const [foodSetMeta, setFoodSetMeta] = useState<{
     name: string;
     sourceFoodSetId: string | null;
@@ -85,6 +93,11 @@ export default function AddGroupBookingDialog({
   const [roomsCatalog, setRoomsCatalog] = useState<RoomPriceInfo[]>([]);
   const [raftsCatalog, setRaftsCatalog] = useState<RaftPriceInfo[]>([]);
   const [foodCatalog, setFoodCatalog] = useState<FoodPriceInfo[]>([]);
+
+  useEffect(() => {
+    if (!open) return;
+    setExtraCharges([]);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -156,8 +169,15 @@ export default function AddGroupBookingDialog({
   }, [nights, roomIds, roomsCatalog]);
   const raftTotal = useMemo(() => {
     const map = new Map(raftsCatalog.map((raft) => [raft.id, raft.basePrice]));
-    return raftIds.reduce((sum, id) => sum + (map.get(id) ?? 0), 0) * nights;
-  }, [nights, raftIds, raftsCatalog]);
+    return (
+      selectedRafts.reduce((sum, item) => {
+        if (!item.isExtra) return sum;
+        return sum + (map.get(item.id) ?? 0);
+      }, 0) * nights
+    );
+  }, [nights, selectedRafts, raftsCatalog]);
+  const raftIncludedCount = selectedRafts.filter((item) => !item.isExtra).length;
+  const raftExtraCount = selectedRafts.filter((item) => item.isExtra).length;
   const foodTotal = useMemo(() => {
     const map = new Map(foodCatalog.map((food) => [food.id, food.price]));
     return foodItems.reduce((sum, item) => {
@@ -166,6 +186,11 @@ export default function AddGroupBookingDialog({
     }, 0);
   }, [foodCatalog, foodItems]);
   const foodCount = foodItems.reduce((sum, item) => sum + item.quantity, 0);
+  const extraChargesTotal = extraCharges.reduce(
+    (sum, item) => sum + extraChargeLineTotal(item),
+    0,
+  );
+  const grandTotal = packageTotal + raftTotal + foodTotal + extraChargesTotal;
 
   const resetForm = () => {
     setName("");
@@ -176,8 +201,9 @@ export default function AddGroupBookingDialog({
     setGuestCount(1);
     setPricePerPerson(0);
     setRoomIds([]);
-    setRaftIds([]);
+    setSelectedRafts([]);
     setFoodItems([]);
+    setExtraCharges([]);
     setFoodSetMeta({ name: "", sourceFoodSetId: null });
     setError("");
   };
@@ -209,13 +235,24 @@ export default function AddGroupBookingDialog({
           guestCount,
           pricePerPerson,
           roomIds,
-          raftIds,
+          rafts: selectedRafts.map((item) => ({
+            id: item.id,
+            isExtra: item.isExtra,
+          })),
           foodItems: foodItems.map((item) => ({
             productId: item.productId,
             quantity: item.quantity,
             isExtra: item.isExtra ?? false,
             ...(item.note?.trim() ? { note: item.note.trim() } : {}),
           })),
+          extraCharges: extraCharges
+            .filter((item) => extraChargeLineTotal(item) > 0)
+            .map((item) => ({
+              description: item.description.trim(),
+              amount: item.amount,
+              quantity: item.quantity,
+              type: item.type,
+            })),
           foodSet: foodItems.length
             ? {
                 name: foodSetMeta.name || "ชุดของกรุ๊ป",
@@ -240,7 +277,7 @@ export default function AddGroupBookingDialog({
     setCheckIn(value);
     setCheckOut(nextDate(value));
     setRoomIds([]);
-    setRaftIds([]);
+    setSelectedRafts([]);
   };
 
   return (
@@ -298,20 +335,44 @@ export default function AddGroupBookingDialog({
           <div className="grid gap-3 p-4 sm:grid-cols-2">
             <label className="text-xs text-muted-foreground sm:col-span-2">
               ชื่อกรุ๊ปทัวร์
-              <input
+              <GuestSuggestInput
                 required
+                includeTourGroups
                 value={name}
-                onChange={(event) => setName(event.target.value)}
+                onChange={setName}
+                onSelect={(item) => {
+                  if (item.kind === "tour_group") {
+                    setName(item.name);
+                    setContactName(item.contactName ?? item.name);
+                    setPhone(item.phone ?? "");
+                    return;
+                  }
+                  setContactName(item.name);
+                  setPhone(item.phone ?? "");
+                }}
                 className={inputClass}
+                placeholder="พิมพ์ชื่อกรุ๊ปหรือลูกค้าเก่า"
               />
             </label>
             <label className="text-xs text-muted-foreground">
               ผู้ติดต่อ
-              <input
+              <GuestSuggestInput
                 required
+                includeTourGroups
                 value={contactName}
-                onChange={(event) => setContactName(event.target.value)}
+                onChange={setContactName}
+                onSelect={(item) => {
+                  if (item.kind === "tour_group") {
+                    setName(item.name);
+                    setContactName(item.contactName ?? item.name);
+                    setPhone(item.phone ?? "");
+                    return;
+                  }
+                  setContactName(item.name);
+                  setPhone(item.phone ?? "");
+                }}
                 className={inputClass}
+                placeholder="พิมพ์ชื่อเพื่อค้นหา"
               />
             </label>
             <label className="text-xs text-muted-foreground">
@@ -361,10 +422,10 @@ export default function AddGroupBookingDialog({
                 required
                 date={checkOut}
                 min={nextDate(checkIn)}
-                setDate={(value) => {
+                  setDate={(value) => {
                   setCheckOut(value);
                   setRoomIds([]);
-                  setRaftIds([]);
+                  setSelectedRafts([]);
                 }}
                 className="w-full"
               />
@@ -380,8 +441,10 @@ export default function AddGroupBookingDialog({
         />
 
         <RaftSelect
-          selectedRaftIds={raftIds}
-          onChange={setRaftIds}
+          selectedRafts={selectedRafts}
+          onRaftsChange={setSelectedRafts}
+          allowPackagePricing
+          defaultIsExtra={false}
           checkIn={checkIn}
           checkOut={checkOut}
         />
@@ -397,6 +460,11 @@ export default function AddGroupBookingDialog({
           onMetaChange={setFoodSetMeta}
         />
 
+        <BookingExtraChargesPanel
+          items={extraCharges}
+          onChange={setExtraCharges}
+        />
+
         <section className="rounded-2xl border border-border bg-surface">
           <div className="flex items-center gap-2 border-b border-border px-4 py-3">
             <span className="grid h-9 w-9 place-items-center rounded-xl bg-secondary/10 text-secondary">
@@ -405,7 +473,7 @@ export default function AddGroupBookingDialog({
             <div>
               <h3 className="text-sm font-semibold text-foreground">สรุปการจอง</h3>
               <p className="text-xs text-muted-foreground">
-                ห้อง แพ และอาหารรวมในราคาเหมา
+                ห้องรวมในเหมา · แพ/อาหารเลือกได้ว่าเหมาหรือคิดเพิ่ม
               </p>
             </div>
           </div>
@@ -415,17 +483,22 @@ export default function AddGroupBookingDialog({
               <span className="font-medium text-foreground">{roomIds.length}</span>
             </div>
             <div className="flex items-center justify-between gap-3">
-              <span className="text-muted-foreground">ราคารวมห้อง</span>
+              <span className="text-muted-foreground">ราคารวมห้อง (อ้างอิง)</span>
               <span className="font-medium text-foreground">
                 ฿{roomTotal.toLocaleString()}
               </span>
             </div>
             <div className="flex items-center justify-between gap-3">
               <span className="text-muted-foreground">จำนวนแพ</span>
-              <span className="font-medium text-foreground">{raftIds.length}</span>
+              <span className="font-medium text-foreground">
+                {selectedRafts.length}
+                {selectedRafts.length
+                  ? ` (เหมา ${raftIncludedCount} · เพิ่ม ${raftExtraCount})`
+                  : ""}
+              </span>
             </div>
             <div className="flex items-center justify-between gap-3">
-              <span className="text-muted-foreground">ราคารวมแพ</span>
+              <span className="text-muted-foreground">แพคิดเพิ่ม</span>
               <span className="font-medium text-foreground">
                 ฿{raftTotal.toLocaleString()}
               </span>
@@ -435,19 +508,29 @@ export default function AddGroupBookingDialog({
               <span className="font-medium text-foreground">{foodCount}</span>
             </div>
             <div className="flex items-center justify-between gap-3">
-              <span className="text-muted-foreground">ราคารวมอาหาร</span>
+              <span className="text-muted-foreground">อาหารคิดเพิ่ม</span>
               <span className="font-medium text-foreground">
                 ฿{foodTotal.toLocaleString()}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-muted-foreground">ค่าใช้จ่ายเพิ่มเติม</span>
+              <span className="font-medium text-foreground">
+                ฿{extraChargesTotal.toLocaleString()}
               </span>
             </div>
             <div className="mt-2 flex items-center justify-between gap-3 rounded-xl bg-primary/10 px-3 py-3">
               <span className="font-semibold text-foreground">ยอดรวมทั้งหมด</span>
               <span className="text-lg font-semibold text-primary">
-                ฿{packageTotal.toLocaleString()}
+                ฿{grandTotal.toLocaleString()}
               </span>
             </div>
             <p className="text-xs text-muted-foreground">
-              คิดจาก {guestCount} คน × ฿{pricePerPerson.toLocaleString()} ต่อหัว
+              เหมา {guestCount} คน × ฿{pricePerPerson.toLocaleString()} = ฿
+              {packageTotal.toLocaleString()}
+              {raftTotal + foodTotal + extraChargesTotal > 0
+                ? ` + คิดเพิ่ม ฿${(raftTotal + foodTotal + extraChargesTotal).toLocaleString()}`
+                : ""}
             </p>
           </div>
         </section>

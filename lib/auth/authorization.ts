@@ -447,6 +447,12 @@ const apiPermissionRules: readonly ApiPermissionRule[] = [
   { method: "POST", pattern: /^\/api\/bookings$/, permission: "booking.write" },
   { method: "GET", pattern: /^\/api\/bookings\/[^/]+$/, permission: "booking.read" },
   { method: "PATCH", pattern: /^\/api\/bookings\/[^/]+$/, permission: "booking.lifecycle" },
+  { method: "POST", pattern: /^\/api\/bookings\/[^/]+\/charges$/, permission: "booking.write" },
+  { method: "GET", pattern: /^\/api\/booking-charge-templates$/, permission: "booking.read" },
+  { method: "POST", pattern: /^\/api\/booking-charge-templates$/, permission: "booking.write" },
+  { method: "PATCH", pattern: /^\/api\/booking-charge-templates\/[^/]+$/, permission: "booking.write" },
+  { method: "DELETE", pattern: /^\/api\/booking-charge-templates\/[^/]+$/, permission: "booking.write" },
+  { method: "GET", pattern: /^\/api\/guests$/, permission: "booking.read" },
   { method: "POST", pattern: /^\/api\/bookings\/[^/]+\/payments$/, permission: "payment.collect" },
   { method: "GET", pattern: /^\/api\/bookings\/[^/]+\/promptpay-payments$/, permission: {
     anyOf: ["payment.view", "payment.read"],

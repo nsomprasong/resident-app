@@ -3,6 +3,8 @@
 import { CircleCheck, ShipWheel } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import PricingToggle from "./PricingToggle";
+
 interface Raft {
   id: string;
   number: string;
@@ -12,22 +14,49 @@ interface Raft {
   booked: boolean;
 }
 
+export type SelectedRaft = {
+  id: string;
+  isExtra: boolean;
+};
+
 export default function RaftSelect({
   selectedRaftIds,
   onChange,
+  selectedRafts,
+  onRaftsChange,
   checkIn,
   checkOut,
   excludeBookingId,
+  allowPackagePricing = false,
+  defaultIsExtra = true,
 }: {
-  selectedRaftIds: string[];
-  onChange: (ids: string[]) => void;
+  /** Legacy id-only selection (solo / add resources) */
+  selectedRaftIds?: string[];
+  onChange?: (ids: string[]) => void;
+  /** Structured selection with package/extra flag */
+  selectedRafts?: SelectedRaft[];
+  onRaftsChange?: (rafts: SelectedRaft[]) => void;
   checkIn: string;
   checkOut: string;
   excludeBookingId?: string;
+  allowPackagePricing?: boolean;
+  defaultIsExtra?: boolean;
 }) {
   const [rafts, setRafts] = useState<Raft[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  const usingStructured = Boolean(onRaftsChange);
+  const selectedIds = usingStructured
+    ? (selectedRafts ?? []).map((item) => item.id)
+    : (selectedRaftIds ?? []);
+  const extraById = useMemo(() => {
+    const map = new Map<string, boolean>();
+    for (const item of selectedRafts ?? []) {
+      map.set(item.id, item.isExtra);
+    }
+    return map;
+  }, [selectedRafts]);
 
   useEffect(() => {
     const load = async () => {
@@ -64,18 +93,51 @@ export default function RaftSelect({
     return Math.max(1, Math.round((end - start) / 86_400_000));
   }, [checkIn, checkOut]);
 
-  const selectedRafts = rafts.filter((raft) =>
-    selectedRaftIds.includes(raft.id),
+  const selectedRaftRecords = rafts.filter((raft) =>
+    selectedIds.includes(raft.id),
   );
+
+  const chargedRafts = selectedRaftRecords.filter((raft) => {
+    if (!allowPackagePricing) return true;
+    return extraById.get(raft.id) ?? defaultIsExtra;
+  });
   const raftTotal =
-    selectedRafts.reduce((sum, raft) => sum + raft.basePrice, 0) * nights;
+    chargedRafts.reduce((sum, raft) => sum + raft.basePrice, 0) * nights;
+  const includedCount = allowPackagePricing
+    ? selectedRaftRecords.length - chargedRafts.length
+    : 0;
+
+  const setSelection = (nextIds: string[]) => {
+    if (usingStructured) {
+      const previous = new Map(
+        (selectedRafts ?? []).map((item) => [item.id, item.isExtra]),
+      );
+      onRaftsChange?.(
+        nextIds.map((id) => ({
+          id,
+          isExtra: previous.get(id) ?? defaultIsExtra,
+        })),
+      );
+      return;
+    }
+    onChange?.(nextIds);
+  };
 
   const toggle = (id: string) =>
-    onChange(
-      selectedRaftIds.includes(id)
-        ? selectedRaftIds.filter((raftId) => raftId !== id)
-        : [...selectedRaftIds, id],
+    setSelection(
+      selectedIds.includes(id)
+        ? selectedIds.filter((raftId) => raftId !== id)
+        : [...selectedIds, id],
     );
+
+  const setExtra = (id: string, isExtra: boolean) => {
+    if (!usingStructured) return;
+    onRaftsChange?.(
+      (selectedRafts ?? []).map((item) =>
+        item.id === id ? { ...item, isExtra } : item,
+      ),
+    );
+  };
 
   return (
     <section className="rounded-2xl border border-border bg-surface">
@@ -86,7 +148,9 @@ export default function RaftSelect({
         <div>
           <h3 className="text-sm font-semibold text-foreground">แพ</h3>
           <p className="text-xs text-muted-foreground">
-            เลือกแพว่างตามช่วงวันที่จอง
+            {allowPackagePricing
+              ? "เลือกแพว่าง แล้วกำหนดว่ารวมในเหมาหรือคิดเพิ่ม"
+              : "เลือกแพว่างตามช่วงวันที่จอง"}
           </p>
         </div>
       </div>
@@ -97,28 +161,37 @@ export default function RaftSelect({
         ) : error ? (
           <p className="text-sm text-destructive">{error}</p>
         ) : (
-          <div className="max-h-48 overflow-y-auto rounded-xl border border-border bg-background p-2">
+          <div className="max-h-64 space-y-2 overflow-y-auto rounded-xl border border-border bg-background p-2">
             {rafts.length === 0 ? (
               <p className="px-2 py-6 text-center text-sm text-muted-foreground">
                 ไม่พบแพในช่วงวันที่เลือก
               </p>
             ) : (
-              <div className="grid gap-2 sm:grid-cols-2">
-                {rafts.map((raft) => {
-                  const selected = selectedRaftIds.includes(raft.id);
-                  const blocked = raft.booked && !selected;
-                  return (
+              rafts.map((raft) => {
+                const selected = selectedIds.includes(raft.id);
+                const blocked = raft.booked && !selected;
+                const isExtra = extraById.get(raft.id) ?? defaultIsExtra;
+                return (
+                  <div
+                    key={raft.id}
+                    className={`rounded-xl border p-3 ${
+                      blocked
+                        ? "border-destructive/30 bg-destructive/10"
+                        : selected
+                          ? "border-success/40 bg-success/10"
+                          : "border-border bg-surface"
+                    }`}
+                  >
                     <button
                       type="button"
-                      key={raft.id}
                       disabled={blocked}
                       onClick={() => toggle(raft.id)}
-                      className={`flex items-center justify-between rounded-xl border p-3 text-left ${
+                      className={`flex w-full items-center justify-between gap-3 text-left ${
                         blocked
-                          ? "cursor-not-allowed border-destructive/30 bg-destructive/10 text-destructive"
+                          ? "cursor-not-allowed text-destructive"
                           : selected
-                            ? "border-success/40 bg-success/10 text-success"
-                            : "border-border bg-surface hover:border-primary/40"
+                            ? "text-success"
+                            : "text-foreground hover:text-primary"
                       }`}
                     >
                       <span className="flex min-w-0 items-center gap-3">
@@ -131,9 +204,9 @@ export default function RaftSelect({
                           <span className="block truncate font-medium">
                             {raft.name}
                           </span>
-                          <span className="text-xs">
+                          <span className="text-xs text-muted-foreground">
                             {raft.capacity} คน · ฿
-                            {raft.basePrice.toLocaleString()}
+                            {raft.basePrice.toLocaleString()}/คืน
                           </span>
                         </span>
                       </span>
@@ -141,9 +214,18 @@ export default function RaftSelect({
                         {blocked ? "ไม่ว่าง" : selected ? "เลือกแล้ว" : "ว่าง"}
                       </span>
                     </button>
-                  );
-                })}
-              </div>
+                    {allowPackagePricing && selected ? (
+                      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-2">
+                        <p className="text-xs text-muted-foreground">การคิดเงิน</p>
+                        <PricingToggle
+                          value={isExtra}
+                          onChange={(next) => setExtra(raft.id, next)}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })
             )}
           </div>
         )}
@@ -153,17 +235,22 @@ export default function RaftSelect({
             <p className="text-muted-foreground">
               เลือกแล้ว{" "}
               <span className="font-medium text-foreground">
-                {selectedRaftIds.length}
+                {selectedIds.length}
               </span>{" "}
               แพ
-              {selectedRafts.length > 0 ? (
+              {allowPackagePricing && selectedIds.length > 0 ? (
                 <span className="ml-2 text-xs">
-                  ({selectedRafts.map((raft) => raft.name).join(", ")})
+                  (รวมในเหมา {includedCount} · คิดเพิ่ม {chargedRafts.length})
+                </span>
+              ) : selectedRaftRecords.length > 0 ? (
+                <span className="ml-2 text-xs">
+                  ({selectedRaftRecords.map((raft) => raft.name).join(", ")})
                 </span>
               ) : null}
             </p>
             <p className="font-medium text-foreground">
-              รวมแพ ฿{raftTotal.toLocaleString()}
+              {allowPackagePricing ? "คิดเพิ่ม ฿" : "รวมแพ ฿"}
+              {raftTotal.toLocaleString()}
               <span className="ml-1 text-xs font-normal text-muted-foreground">
                 ({nights} คืน)
               </span>

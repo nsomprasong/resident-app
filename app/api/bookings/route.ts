@@ -17,6 +17,7 @@ import {
   availableRoomStatuses,
 } from "@/lib/bookings/availability";
 import { acquireBookingResourceLocks } from "@/lib/bookings/resource-locks";
+import { parseBookingExtraCharges } from "@/lib/bookings/extra-charges";
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -130,12 +131,15 @@ export async function POST(request: NextRequest) {
         : undefined;
     const phone =
       typeof parsed.body.phone === "string" ? parsed.body.phone.trim() : "";
+    const guestIdValue =
+      typeof parsed.body.guestId === "string" ? parsed.body.guestId.trim() : "";
     const checkInValue =
       typeof parsed.body.checkIn === "string" ? parsed.body.checkIn : "";
     const checkOutValue =
       typeof parsed.body.checkOut === "string" ? parsed.body.checkOut : "";
     const roomIdsValue = parsed.body.roomIds;
     const raftIdsValue = parsed.body.raftIds;
+    const raftsValue = parsed.body.rafts;
     const foodItemsValue = parsed.body.foodItems;
     const foodSetMetaRaw =
       typeof parsed.body.foodSet === "object" &&
@@ -160,12 +164,63 @@ export async function POST(request: NextRequest) {
         : Array.isArray(roomIdsValue) && roomIdsValue.every((id) => typeof id === "string" && id.trim())
           ? roomIdsValue.map((id) => id.trim())
           : null;
-    const raftIds: string[] | null =
-      raftIdsValue === undefined
-        ? []
-        : Array.isArray(raftIdsValue) && raftIdsValue.every((id) => typeof id === "string" && id.trim())
-          ? raftIdsValue.map((id) => id.trim())
-          : null;
+    const selectedRafts: Array<{ id: string; isExtra: boolean }> = [];
+    let raftsValid = true;
+    if (raftsValue !== undefined) {
+      if (!Array.isArray(raftsValue)) {
+        issues.push({ path: "rafts", message: "Rafts must be an array" });
+        raftsValid = false;
+      } else {
+        raftsValue.forEach((entry, index) => {
+          if (typeof entry === "string" && entry.trim()) {
+            selectedRafts.push({
+              id: entry.trim(),
+              isExtra: modeValue === "group" ? false : true,
+            });
+            return;
+          }
+          if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
+            issues.push({
+              path: `rafts.${index}`,
+              message: "Raft entry must be an object",
+            });
+            raftsValid = false;
+            return;
+          }
+          const record = entry as Record<string, unknown>;
+          const id = typeof record.id === "string" ? record.id.trim() : "";
+          if (!id) {
+            issues.push({ path: `rafts.${index}.id`, message: "Raft id is required" });
+            raftsValid = false;
+            return;
+          }
+          if (typeof record.isExtra !== "boolean") {
+            issues.push({
+              path: `rafts.${index}.isExtra`,
+              message: "isExtra must be boolean",
+            });
+            raftsValid = false;
+            return;
+          }
+          selectedRafts.push({ id, isExtra: record.isExtra });
+        });
+      }
+    } else if (raftIdsValue !== undefined) {
+      if (
+        !Array.isArray(raftIdsValue) ||
+        !raftIdsValue.every((id) => typeof id === "string" && id.trim())
+      ) {
+        issues.push({ path: "raftIds", message: "Raft ids must be strings" });
+        raftsValid = false;
+      } else {
+        for (const id of raftIdsValue.map((value) => value.trim())) {
+          selectedRafts.push({
+            id,
+            isExtra: modeValue === "group" ? false : true,
+          });
+        }
+      }
+    }
     const foodItems: Array<{
       productId: string;
       quantity: number;
@@ -177,12 +232,28 @@ export async function POST(request: NextRequest) {
     if (!phone) issues.push({ path: "phone", message: "Customer phone is required" });
     if (!checkInValue) issues.push({ path: "checkIn", message: "Check-in date is required" });
     if (!checkOutValue) issues.push({ path: "checkOut", message: "Check-out date is required" });
+    if (guestIdValue && modeValue === "group") {
+      issues.push({
+        path: "guestId",
+        message: "guestId is only valid for solo bookings",
+      });
+    }
+    if (
+      guestIdValue &&
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        guestIdValue,
+      )
+    ) {
+      issues.push({ path: "guestId", message: "guestId must be a valid uuid" });
+    }
     if (modeValue !== "solo" && modeValue !== "group") {
       issues.push({ path: "mode", message: "Booking mode is invalid" });
     }
     if (!roomIds) issues.push({ path: "roomIds", message: "Room ids must be strings" });
-    if (!raftIds) issues.push({ path: "raftIds", message: "Raft ids must be strings" });
-    if (roomIds && raftIds && !roomIds.length && !raftIds.length) {
+    if (!raftsValid) {
+      /* issues already recorded */
+    }
+    if (roomIds && raftsValid && !roomIds.length && !selectedRafts.length) {
       issues.push({ path: "resources", message: "At least one room or raft is required" });
     }
     if (foodItemsValue !== undefined && !Array.isArray(foodItemsValue)) {
@@ -251,6 +322,18 @@ export async function POST(request: NextRequest) {
         }
       });
     }
+
+    const parsedExtraCharges = parseBookingExtraCharges(
+      parsed.body.extraCharges,
+      "extraCharges",
+    );
+    if (!parsedExtraCharges.ok) {
+      issues.push(...parsedExtraCharges.issues);
+    }
+    const extraCharges = parsedExtraCharges.ok
+      ? parsedExtraCharges.charges
+      : [];
+
     if (issues.length)
       return validationErrorResponse(
         "กรุณากรอกข้อมูลและเลือกห้องหรือแพอย่างน้อย 1 รายการ",
@@ -303,7 +386,13 @@ export async function POST(request: NextRequest) {
         [{ path: "checkIn", message: "Check-in date cannot be in the past" }],
       );
     const selectedRoomIds = roomIds ?? [];
-    const selectedRaftIds = raftIds ?? [];
+    const selectedRaftIds = selectedRafts.map((item) => item.id);
+    const raftExtraById = new Map(
+      selectedRafts.map((item) => [
+        item.id,
+        mode === "group" ? item.isExtra : true,
+      ]),
+    );
     const result = await prisma.$transaction(async (tx) => {
       await acquireBookingResourceLocks(tx, {
         roomIds: selectedRoomIds,
@@ -372,6 +461,23 @@ export async function POST(request: NextRequest) {
           },
         });
         tourGroupId = group.id;
+      } else if (guestIdValue) {
+        const existingGuest = await tx.guest.findUnique({
+          where: { id: guestIdValue },
+        });
+        if (!existingGuest) {
+          throw new Error("GUEST_NOT_FOUND");
+        }
+        const [firstName, ...last] = name.split(/\s+/);
+        await tx.guest.update({
+          where: { id: existingGuest.id },
+          data: {
+            firstName,
+            lastName: last.join(" ") || "-",
+            phone,
+          },
+        });
+        guestId = existingGuest.id;
       } else {
         const [firstName, ...last] = name.split(/\s+/);
         const guest = await tx.guest.create({
@@ -391,10 +497,19 @@ export async function POST(request: NextRequest) {
         (sum, room) => sum + Number(room.roomType.basePrice) * nights,
         0,
       );
-      const raftTotal = rafts.reduce(
-        (sum, raft) => sum + Number(raft.basePrice) * nights,
-        0,
-      );
+      const raftPayload = rafts.map((raft) => {
+        const isExtra = raftExtraById.get(raft.id) ?? mode !== "group";
+        return {
+          raft,
+          isExtra,
+          amount: Number(raft.basePrice) * nights,
+        };
+      });
+      const raftTotal = raftPayload.reduce((sum, item) => sum + item.amount, 0);
+      const extraRaftTotal = raftPayload
+        .filter((item) => item.isExtra)
+        .reduce((sum, item) => sum + item.amount, 0);
+      const extraRaftCount = raftPayload.filter((item) => item.isExtra).length;
       const groupPackage =
         mode === "group"
           ? (guestCount ?? 0) * (pricePerPerson ?? 0)
@@ -418,10 +533,10 @@ export async function POST(request: NextRequest) {
             })),
           },
           rafts: {
-            create: rafts.map((raft) => ({
+            create: raftPayload.map(({ raft, isExtra }) => ({
               raftId: raft.id,
               rate: raft.basePrice,
-              isExtra: false,
+              isExtra,
             })),
           },
           charges: {
@@ -433,6 +548,20 @@ export async function POST(request: NextRequest) {
                       description: `ราคาเหมากลุ่ม ${guestCount} คน × ฿${pricePerPerson}`,
                       amount: groupPackage,
                     },
+                    ...(extraRaftCount
+                      ? [
+                          {
+                            type: ChargeType.RAFT,
+                            description: `แพคิดเพิ่ม ${extraRaftCount} หลัง · ${nights} คืน`,
+                            amount: extraRaftTotal,
+                          },
+                        ]
+                      : []),
+                    ...extraCharges.map((charge) => ({
+                      type: charge.type,
+                      description: charge.description,
+                      amount: charge.amount,
+                    })),
                   ]
                 : [
                     ...(rooms.length
@@ -444,15 +573,20 @@ export async function POST(request: NextRequest) {
                           },
                         ]
                       : []),
-                    ...(rafts.length
+                    ...(raftPayload.length
                       ? [
                           {
                             type: ChargeType.RAFT,
-                            description: `ค่าแพ ${rafts.length} หลัง · ${nights} คืน`,
+                            description: `ค่าแพ ${raftPayload.length} หลัง · ${nights} คืน`,
                             amount: raftTotal,
                           },
                         ]
                       : []),
+                    ...extraCharges.map((charge) => ({
+                      type: charge.type,
+                      description: charge.description,
+                      amount: charge.amount,
+                    })),
                   ],
           },
         },
@@ -551,6 +685,8 @@ export async function POST(request: NextRequest) {
       return apiErrorResponse("แพที่เลือกไม่พร้อมใช้งาน", 409, "RAFT_NOT_AVAILABLE");
     if (message === "PRODUCT_NOT_FOUND")
       return apiErrorResponse("ไม่พบอาหารที่เลือก", 400, "PRODUCT_NOT_FOUND");
+    if (message === "GUEST_NOT_FOUND")
+      return apiErrorResponse("ไม่พบลูกค้าที่เลือก", 400, "GUEST_NOT_FOUND");
     if (message.startsWith("ROOM_CONFLICT:"))
       return apiErrorResponse(`ห้อง ${message.split(":")[1]} ไม่ว่าง`, 409, "ROOM_CONFLICT");
     if (message.startsWith("RAFT_CONFLICT:"))

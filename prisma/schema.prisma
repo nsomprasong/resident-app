@@ -498,6 +498,21 @@ model Charge {
   @@map("charges")
 }
 
+/// Reusable extra-charge presets (cleaning, gas, ice, custom) with saved prices.
+model BookingChargeTemplate {
+  id            String     @id @default(uuid()) @db.Uuid
+  name          String     @unique
+  type          ChargeType @default(OTHER)
+  defaultAmount Decimal    @default(0) @map("default_amount") @db.Decimal(10, 2)
+  isActive      Boolean    @default(true) @map("is_active")
+  sortOrder     Int        @default(0) @map("sort_order")
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
+
+  @@index([isActive, sortOrder, name])
+  @@map("booking_charge_templates")
+}
+
 model Payment {
   id                           String                 @id @default(uuid()) @db.Uuid
   paymentNumber                String?                @unique @map("payment_number")

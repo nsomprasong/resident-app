@@ -7,7 +7,6 @@ import { activeBookingConflictStatuses } from "@/lib/bookings/availability";
 import {
   addDaysToOpsDateKey,
   bangkokDateOnly,
-  bangkokDayBounds,
   bangkokTodayKey,
   resolveOpsDateKey,
   summarizeTodayOps,
@@ -47,7 +46,6 @@ export default async function TodayOpsPage({ searchParams }: TodayOpsPageProps) 
   const selectedKey = resolveOpsDateKey(params.date, actualTodayKey);
   const selectedDate = bangkokDateOnly(selectedKey);
   const nextKey = addDaysToOpsDateKey(selectedKey, 1);
-  const { start, end } = bangkokDayBounds(selectedKey);
   const dayLabel = selectedKey === actualTodayKey ? "วันนี้" : "วันที่เลือก";
 
   const currentBookingWhere = {
@@ -85,6 +83,8 @@ export default async function TodayOpsPage({ searchParams }: TodayOpsPageProps) 
   });
 
   const currentBookingIds = bookings.map((booking) => booking.id);
+  // Food/minibar for open in-house stays (not only orders created on this calendar day).
+  // Package food is often created at booking time before/on check-in day.
   const orderItems =
     currentBookingIds.length === 0
       ? []
@@ -92,7 +92,6 @@ export default async function TodayOpsPage({ searchParams }: TodayOpsPageProps) 
           where: {
             order: {
               status: { not: "CANCELLED" },
-              createdAt: { gte: start, lte: end },
               bookingId: { in: currentBookingIds },
             },
           },
@@ -100,10 +99,12 @@ export default async function TodayOpsPage({ searchParams }: TodayOpsPageProps) 
             id: true,
             quantity: true,
             productId: true,
+            note: true,
             product: { select: { name: true, isMinibar: true } },
             order: {
               select: {
                 number: true,
+                createdAt: true,
                 room: { select: { number: true } },
                 booking: {
                   select: {
@@ -223,6 +224,7 @@ export default async function TodayOpsPage({ searchParams }: TodayOpsPageProps) 
       item.order.number,
       item.order.room ? `ห้อง ${item.order.room.number}` : null,
       item.order.booking?.tourGroup?.name ?? (guestLabel || null),
+      item.note?.trim() || null,
     ].filter(Boolean) as string[];
     const current = target.get(item.productId) ?? {
       name: item.product.name,
@@ -284,7 +286,7 @@ export default async function TodayOpsPage({ searchParams }: TodayOpsPageProps) 
       key: "food",
       title: `อาหารที่สั่ง${dayLabel}`,
       value: formatNumber(summary.foodPortionsToday),
-      helper: `${formatNumber(summary.foodKindsToday)} รายการเมนู · จากกรุ๊ปที่ยังเปิดอยู่`,
+      helper: `${formatNumber(summary.foodKindsToday)} รายการเมนู · จากออเดอร์ของการจองที่เข้าพักอยู่`,
       accent: "primary",
       rows: foodRows,
     },
@@ -292,7 +294,7 @@ export default async function TodayOpsPage({ searchParams }: TodayOpsPageProps) 
       key: "minibar",
       title: `มินิบาร์${dayLabel}`,
       value: formatNumber(summary.minibarPortionsToday),
-      helper: "มินิบาร์ของกรุ๊ปที่เข้าพักและยังไม่ปิดงาน",
+      helper: "มินิบาร์จากการจองที่เข้าพักและยังไม่ปิดงาน",
       accent: "secondary",
       rows: minibarRows,
     },

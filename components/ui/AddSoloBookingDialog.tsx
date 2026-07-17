@@ -1,17 +1,22 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Save } from "lucide-react";
 
+import BookingExtraChargesPanel, {
+  type BookingExtraChargeDraft,
+} from "./BookingExtraChargesPanel";
 import BookingFoodSetPanel from "./BookingFoodSetPanel";
 import {
   foodItemsMissingRequiredOptions,
   type BookingFoodItem,
 } from "./BookingFoodSelect";
 import DateSelector from "./DateSelector";
+import GuestSuggestInput from "./GuestSuggestInput";
 import Modal from "./Modal";
 import RaftSelect from "./RaftSelect";
 import ZoneRoomSelect from "./ZoneRoomSelect";
+import { extraChargeLineTotal } from "@/lib/bookings/extra-charges";
 
 const dateText = (offset = 0) => {
   const value = new Date();
@@ -40,13 +45,22 @@ export default function AddSoloBookingDialog({
 }) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [guestId, setGuestId] = useState<string | null>(null);
   const [checkIn, setCheckIn] = useState(dateText());
   const [checkOut, setCheckOut] = useState(dateText(1));
   const [roomIds, setRoomIds] = useState<string[]>([]);
   const [raftIds, setRaftIds] = useState<string[]>([]);
   const [foodItems, setFoodItems] = useState<BookingFoodItem[]>([]);
+  const [extraCharges, setExtraCharges] = useState<BookingExtraChargeDraft[]>(
+    [],
+  );
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setExtraCharges([]);
+  }, [open]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -82,6 +96,7 @@ export default function AddSoloBookingDialog({
           mode: "solo",
           name,
           phone,
+          ...(guestId ? { guestId } : {}),
           checkIn,
           checkOut,
           roomIds,
@@ -92,14 +107,26 @@ export default function AddSoloBookingDialog({
             isExtra: item.isExtra ?? true,
             ...(item.note?.trim() ? { note: item.note.trim() } : {}),
           })),
+          extraCharges: extraCharges
+            .filter((item) => extraChargeLineTotal(item) > 0)
+            .map((item) => ({
+              description: item.description.trim(),
+              amount: item.amount,
+              quantity: item.quantity,
+              type: item.type,
+            })),
         }),
       });
       const data = (await response.json()) as { message?: string };
       if (!response.ok) throw new Error(data.message);
       setOpen(false);
+      setName("");
+      setPhone("");
+      setGuestId(null);
       setRoomIds([]);
       setRaftIds([]);
       setFoodItems([]);
+      setExtraCharges([]);
       onCreated?.();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "บันทึกไม่สำเร็จ");
@@ -114,11 +141,20 @@ export default function AddSoloBookingDialog({
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="text-sm text-muted-foreground">
             ชื่อผู้เข้าพัก
-            <input
+            <GuestSuggestInput
               required
               value={name}
-              onChange={(event) => setName(event.target.value)}
+              onChange={(next) => {
+                setName(next);
+                setGuestId(null);
+              }}
+              onSelect={(item) => {
+                setName(item.name);
+                setPhone(item.phone ?? "");
+                setGuestId(item.kind === "guest" ? item.id : null);
+              }}
               className={fieldClass}
+              placeholder="พิมพ์ชื่อเพื่อค้นหาลูกค้าเก่า"
             />
           </label>
           <label className="text-sm text-muted-foreground">
@@ -178,6 +214,10 @@ export default function AddSoloBookingDialog({
           included={false}
           defaultIsExtra
           resetToken={open}
+        />
+        <BookingExtraChargesPanel
+          items={extraCharges}
+          onChange={setExtraCharges}
         />
         {error ? (
           <p className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">
