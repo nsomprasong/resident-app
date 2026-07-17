@@ -2,7 +2,7 @@
 
 ## Task
 
-Align self-register / employee create with Settings auth principle
+Settings employee create: assign EMP-xxxx code
 
 ## Status
 
@@ -10,9 +10,9 @@ COMPLETED
 
 ## Evidence
 
-- Shared `provisionUsernamePhoneAuth` used by Settings, HR create, and `/api/auth/register`
-- Self-register: temp Auth password + `mustResetPassword` (no password on form); contact email is contact-only
-- Activating in Settings forces set-password + ensures username Auth mailbox
+- Gap was `POST /api/employees` (ตั้งค่าข้อมูลหลัก) — no `employeeCode`
+- Login register + HR create already used `nextEmployeeCode()`
+- Settings create now assigns `EMP-####` on both username and legacy email paths
 
 ## Next Action
 

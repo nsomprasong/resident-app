@@ -271,10 +271,7 @@ export async function login(
   // Dual email+phone identities inflate Set-Cookie and break mobile Server Actions
   // (beebee vs test: test has email-only and works).
   if (preAuthUserId && preUsername) {
-    const cleared = await clearAuthUserPhone({ authUserId: preAuthUserId });
-    if (!cleared.ok) {
-      console.warn("clearAuthUserPhone before login", cleared.message);
-    }
+    await clearAuthUserPhone({ authUserId: preAuthUserId });
   }
 
   const {

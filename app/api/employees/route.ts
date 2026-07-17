@@ -12,6 +12,7 @@ import {
   protectedSupportEmployeeWhere,
   supportAccountForbiddenResponseMessage,
 } from "@/lib/auth/support-account";
+import { nextEmployeeCode } from "@/lib/hr/employee-codes";
 import { prisma } from "@/lib/prisma";
 import { parseEmployeeInput, serializeEmployee } from "@/lib/settings/employees";
 import { provisionUsernamePhoneAuth } from "@/lib/auth/provision-username-employee";
@@ -242,11 +243,13 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        const employeeCode = await nextEmployeeCode();
         const employee = await prisma.employee.create({
           data: {
             name,
             username,
             phone,
+            employeeCode,
             // Optional contact only — Auth password login uses username-bound Auth email.
             email: email ?? null,
             authUserId: authResolved.authUserId,
@@ -268,6 +271,7 @@ export async function POST(request: NextRequest) {
             name: employee.name,
             username: employee.username,
             phone: employee.phone,
+            employeeCode: employee.employeeCode,
             roleId: employee.roleId,
             authMode: "username_auth_email",
             hasAuthMapping: Boolean(employee.authUserId),
@@ -326,12 +330,14 @@ export async function POST(request: NextRequest) {
     }
 
     try {
+      const employeeCode = await nextEmployeeCode();
       const employee = await prisma.employee.create({
         data: {
           name,
           email,
           phone: phone ?? null,
           username: username ?? null,
+          employeeCode,
           authUserId: authResolved.authUserId,
           roleId: roleId ?? null,
           mustResetPassword: false,
@@ -350,6 +356,7 @@ export async function POST(request: NextRequest) {
         metadata: {
           name: employee.name,
           email: employee.email,
+          employeeCode: employee.employeeCode,
           roleId: employee.roleId,
           authMode: "email",
           hasAuthMapping: Boolean(employee.authUserId),

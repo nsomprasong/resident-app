@@ -347,10 +347,7 @@ export async function clearAuthUserPhone(input: {
         phone: null,
       },
     });
-    if (error) {
-      // Identity may already be gone; phone field clear is best-effort.
-      console.warn("clearAuthUserPhone phone field", error.message);
-    }
+    // Identity may already be gone; phone field clear is best-effort.
 
     const verify = await admin.auth.admin.getUserById(input.authUserId);
     const stillHasPhone = Boolean((verify.data.user?.phone ?? "").trim());
@@ -454,36 +451,21 @@ export async function ensureEmployeeAuthProvisioned(input: {
       const { data, error } = await admin.auth.admin.getUserById(input.authUserId);
       if (!error && data.user) {
         if (username) {
-          const emailOk = await ensureAuthLoginEmail({
+          // Soft-fail: profile/role updates must not be blocked by Auth email sync.
+          await ensureAuthLoginEmail({
             authUserId: input.authUserId,
             username,
           });
-          // Soft-fail: profile/role updates must not be blocked by Auth email sync.
-          if (!emailOk.ok) {
-            console.warn(
-              "ensureEmployeeAuthProvisioned email sync",
-              emailOk.message,
-            );
-          }
           // Username-mailbox accounts must stay email-only on Auth.
-          const cleared = await clearAuthUserPhone({
+          await clearAuthUserPhone({
             authUserId: input.authUserId,
           });
-          if (!cleared.ok) {
-            console.warn(
-              "ensureEmployeeAuthProvisioned clear phone",
-              cleared.message,
-            );
-          }
         } else if (phone) {
-          const phoneOk = await updateAuthUserPhone({
+          // Phone sync is best-effort when Auth email login already works.
+          await updateAuthUserPhone({
             authUserId: input.authUserId,
             phone,
           });
-          if (!phoneOk.ok) {
-            // Phone sync is best-effort when Auth email login already works.
-            console.warn("ensureEmployeeAuthProvisioned phone sync", phoneOk.message);
-          }
         }
         return {
           ok: true,
@@ -498,15 +480,9 @@ export async function ensureEmployeeAuthProvisioned(input: {
       const authEmail = authLoginEmailForUsername(username);
       const existingByEmail = await findAuthUserIdByEmail(authEmail);
       if (existingByEmail) {
-        const cleared = await clearAuthUserPhone({
+        await clearAuthUserPhone({
           authUserId: existingByEmail,
         });
-        if (!cleared.ok) {
-          console.warn(
-            "ensureEmployeeAuthProvisioned clear phone",
-            cleared.message,
-          );
-        }
         return {
           ok: true,
           authUserId: existingByEmail,

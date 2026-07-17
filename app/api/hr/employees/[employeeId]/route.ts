@@ -279,16 +279,10 @@ export async function PATCH(
 
       const activateUsername = patch.username ?? existing.username;
       if (activateUsername && authUserId) {
-        const ensuredEmail = await ensureAuthLoginEmail({
+        await ensureAuthLoginEmail({
           authUserId,
           username: activateUsername,
         });
-        if (!ensuredEmail.ok) {
-          console.warn(
-            "PATCH /api/hr/employees ensureAuthLoginEmail soft-fail",
-            ensuredEmail.message,
-          );
-        }
       }
       if (!existing.isActive && nextIsActive) {
         mustResetPassword = true;

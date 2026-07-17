@@ -262,16 +262,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
       // Best-effort only — phone Auth is often disabled; never block role/profile saves.
       if (existing.authUserId && existing.username) {
-        const phoneUpdate = await updateAuthUserPhone({
+        await updateAuthUserPhone({
           authUserId: existing.authUserId,
           phone: validated.data.phone,
         });
-        if (!phoneUpdate.ok) {
-          console.warn(
-            "PATCH /api/employees phone sync skipped",
-            phoneUpdate.message,
-          );
-        }
       }
     }
 
@@ -344,10 +338,6 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
             "AUTH_PROVISION_FAILED",
           );
         }
-        console.warn(
-          "PATCH /api/employees auth provision soft-fail",
-          ensured.message,
-        );
       } else {
         if (ensured.authUserId !== existing.authUserId) {
           const authOwner = await prisma.employee.findFirst({
@@ -380,16 +370,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       const activateAuthUserId =
         updateData.authUserId ?? existing.authUserId ?? null;
       if (activateUsername && activateAuthUserId) {
-        const ensuredEmail = await ensureAuthLoginEmail({
+        await ensureAuthLoginEmail({
           authUserId: activateAuthUserId,
           username: activateUsername,
         });
-        if (!ensuredEmail.ok) {
-          console.warn(
-            "PATCH /api/employees ensureAuthLoginEmail soft-fail",
-            ensuredEmail.message,
-          );
-        }
       }
       if (!existing.isActive && nextActive) {
         updateData.mustResetPassword = true;
