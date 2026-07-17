@@ -164,7 +164,10 @@ export async function updateSession(request: NextRequest) {
   if (!employee) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json(
-        { message: "Employee access is not configured" },
+        {
+          message: "Employee access is not configured",
+          code: "EMPLOYEE_NOT_LINKED",
+        },
         { status: 403 },
       );
     }
@@ -182,7 +185,10 @@ export async function updateSession(request: NextRequest) {
   if (!employee.isActive) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json(
-        { message: "Employee account is disabled" },
+        {
+          message: "Employee account is disabled",
+          code: "EMPLOYEE_DISABLED",
+        },
         { status: 403 },
       );
     }
@@ -207,35 +213,38 @@ export async function updateSession(request: NextRequest) {
   if (!employee.role || !employee.role.isActive) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json(
-        { message: "Insufficient permissions" },
+        {
+          message: "Employee role is not configured",
+          code: "ROLE_NOT_CONFIGURED",
+        },
         { status: 403 },
       );
     }
 
-    const forbiddenUrl = request.nextUrl.clone();
-    forbiddenUrl.pathname = "/forbidden";
-    forbiddenUrl.search = "";
-    return copyResponseCookies(response, NextResponse.redirect(forbiddenUrl));
+    const accessDeniedUrl = request.nextUrl.clone();
+    accessDeniedUrl.pathname = "/access-denied";
+    accessDeniedUrl.search = "";
+    return copyResponseCookies(
+      response,
+      NextResponse.redirect(accessDeniedUrl),
+    );
   }
+
+  const permissionCodes = employee.role.permissions ?? [];
 
   if (pathname.startsWith("/api/")) {
     const requiredPermission = resolveApiPermission(request.method, pathname);
 
     if (
       requiredPermission === null ||
-      !employeeHasApiPermission(
-        employee.role.permissions,
-        requiredPermission,
-      )
+      !employeeHasApiPermission(permissionCodes, requiredPermission)
     ) {
       return NextResponse.json(
         { message: "Insufficient permissions" },
         { status: 403 },
       );
     }
-  } else if (
-    !canAccessPageWithPermissions(employee.role.permissions, pathname)
-  ) {
+  } else if (!canAccessPageWithPermissions(permissionCodes, pathname)) {
     const forbiddenUrl = request.nextUrl.clone();
     forbiddenUrl.pathname = "/forbidden";
     forbiddenUrl.search = "";

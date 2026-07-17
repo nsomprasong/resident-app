@@ -2,7 +2,7 @@
 
 ## Task
 
-Separate supermarket nav into its own menu section
+Fix Application error after login for non-ADMIN users
 
 ## Status
 
@@ -10,16 +10,18 @@ COMPLETED
 
 ## Objective
 
-แยกเมนูซูเปอร์มาร์เก็ตออกจากหมวดงานประจำวัน เป็นหมวดของตัวเอง
+ป้องกัน client exception หลัง login เมื่อ role/permissions/employee ไม่ครบ — แสดง /access-denied แทน
 
 ## Evidence
 
-- Sidebar: section `ซูเปอร์มาร์เก็ต` แยกจาก `งานประจำวัน`
-- Home page: MenuSection แยกเช่นกัน
+- `/api/auth/me` normalize permissions + error codes; safe permission map in `findEmployeeAuthorization`
+- Provider/sidebar/nav/`canAccess*` null-safe (`permissions = []`)
+- ไม่มี role → redirect `/access-denied`; `/set-password` ไม่โหลด Sidebar
+- `tsc` + eslint changed files + `npm run build` pass
 
 ## Next Action
 
-รีเฟรชหน้าแรก / sidebar เพื่อดูหมวดใหม่
+Deploy แล้วทดสอบ login ด้วยบัญชี RECEPTION/KITCHEN ที่ผูก authUserId + roleId + rolePermissions ครบ
 
 ## Deploy
 

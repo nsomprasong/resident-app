@@ -99,7 +99,7 @@ export default function Sidebar({
   const visibleSelfItems = useMemo(
     () =>
       employee
-        ? filterSelfNavItems(employee.permissions).map((item) => ({
+        ? filterSelfNavItems(employee.permissions ?? []).map((item) => ({
             text: item.text,
             icon: item.icon,
             path: item.path,
@@ -138,7 +138,7 @@ export default function Sidebar({
   const visibleHrItems = useMemo(
     () =>
       employee
-        ? filterHrNavItems(employee.permissions).map((item) => ({
+        ? filterHrNavItems(employee.permissions ?? []).map((item) => ({
             text: item.text,
             icon: item.icon,
             path: item.path,

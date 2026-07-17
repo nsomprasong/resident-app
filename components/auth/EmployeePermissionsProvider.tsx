@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useRouter } from "next/navigation";
 
 import {
   canAccessPageWithPermissions,
@@ -34,14 +35,41 @@ type EmployeePermissionsContextValue = {
   canAccessPath: (pathname: string) => boolean;
 };
 
+const ACCESS_DENIED_CODES = new Set([
+  "EMPLOYEE_NOT_LINKED",
+  "AUTH_USER_NOT_LINKED",
+  "ROLE_NOT_CONFIGURED",
+  "EMPLOYEE_DISABLED",
+]);
+
 const EmployeePermissionsContext =
   createContext<EmployeePermissionsContextValue | null>(null);
+
+function normalizeEmployee(raw: unknown): EmployeeIdentity | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const record = raw as Record<string, unknown>;
+  const permissionsRaw = record.permissions;
+  const permissions = Array.isArray(permissionsRaw)
+    ? permissionsRaw.filter(
+        (code): code is string => typeof code === "string" && code.length > 0,
+      )
+    : [];
+
+  return {
+    name: typeof record.name === "string" ? record.name : "",
+    role: typeof record.role === "string" ? record.role : "",
+    roleDisplayName:
+      typeof record.roleDisplayName === "string" ? record.roleDisplayName : "",
+    permissions,
+  };
+}
 
 export function EmployeePermissionsProvider({
   children,
 }: {
   children: ReactNode;
 }) {
+  const router = useRouter();
   const [employee, setEmployee] = useState<EmployeeIdentity | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -56,12 +84,27 @@ export function EmployeePermissionsProvider({
         });
         if (!response.ok) {
           setEmployee(null);
+          if (response.status === 403) {
+            const body = (await response.json().catch(() => null)) as {
+              code?: string;
+            } | null;
+            const code = body?.code;
+            const currentPath =
+              typeof window !== "undefined" ? window.location.pathname : "";
+            if (
+              code &&
+              ACCESS_DENIED_CODES.has(code) &&
+              currentPath !== "/access-denied" &&
+              currentPath !== "/login" &&
+              currentPath !== "/set-password"
+            ) {
+              router.replace("/access-denied");
+            }
+          }
           return;
         }
-        const data = (await response.json()) as {
-          employee?: EmployeeIdentity;
-        };
-        setEmployee(data.employee ?? null);
+        const data = (await response.json()) as { employee?: unknown };
+        setEmployee(normalizeEmployee(data.employee));
       } catch {
         if (!controller.signal.aborted) {
           setEmployee(null);
@@ -75,9 +118,12 @@ export function EmployeePermissionsProvider({
 
     void load();
     return () => controller.abort();
-  }, []);
+  }, [router]);
 
-  const permissions = employee?.permissions ?? [];
+  const permissions = useMemo(
+    () => employee?.permissions ?? [],
+    [employee?.permissions],
+  );
 
   const can = useCallback(
     (permission: Permission) => permissions.includes(permission),
@@ -97,7 +143,7 @@ export function EmployeePermissionsProvider({
   );
 
   const canAccessPath = useCallback(
-    (pathname: string) => canAccessPageWithPermissions(permissions, pathname),
+    (path: string) => canAccessPageWithPermissions(permissions, path),
     [permissions],
   );
 

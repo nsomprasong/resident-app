@@ -33,6 +33,10 @@ export async function findEmployeeAuthorization(authUserId: string) {
 
   if (!employee) return null;
 
+  const permissions = (employee.roleRecord?.permissions ?? [])
+    .map((row) => row.permission?.code)
+    .filter((code): code is string => typeof code === "string" && code.length > 0);
+
   return {
     id: employee.id,
     authUserId: employee.authUserId,
@@ -50,9 +54,7 @@ export async function findEmployeeAuthorization(authUserId: string) {
           code: employee.roleRecord.code,
           displayName: employee.roleRecord.displayName,
           isActive: employee.roleRecord.isActive,
-          permissions: employee.roleRecord.permissions.map(
-            ({ permission }) => permission.code,
-          ),
+          permissions,
         }
       : null,
   };

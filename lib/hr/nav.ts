@@ -77,10 +77,11 @@ export const hrNavItems: readonly HrNavItem[] = [
   },
 ] as const;
 
-export function filterHrNavItems(permissionCodes: readonly string[]) {
+export function filterHrNavItems(permissionCodes: readonly string[] | null | undefined) {
+  const codes = permissionCodes ?? [];
   return hrNavItems.filter((item) => {
     const required = item.menuPermissions ?? [item.permission];
-    return required.some((code) => permissionCodes.includes(code));
+    return required.some((code) => codes.includes(code));
   });
 }
 
@@ -103,6 +104,7 @@ export const selfNavItems: readonly SelfNavItem[] = [
   },
 ] as const;
 
-export function filterSelfNavItems(permissionCodes: readonly string[]) {
-  return selfNavItems.filter((item) => permissionCodes.includes(item.permission));
+export function filterSelfNavItems(permissionCodes: readonly string[] | null | undefined) {
+  const codes = permissionCodes ?? [];
+  return selfNavItems.filter((item) => codes.includes(item.permission));
 }

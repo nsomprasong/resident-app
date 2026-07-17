@@ -341,13 +341,14 @@ export function canAccessPage(roleValue: string, pathname: string): boolean {
 }
 
 export function canAccessPageWithPermissions(
-  permissionCodes: readonly string[],
+  permissionCodes: readonly string[] | null | undefined,
   pathname: string,
 ): boolean {
+  const codes = permissionCodes ?? [];
   const rule = pagePermissionRules.find((item) => item.pattern.test(pathname));
   if (!rule) return false;
   return pagePermissionMatches(rule.permission, (permission) =>
-    permissionCodes.includes(permission),
+    codes.includes(permission),
   );
 }
 
@@ -625,14 +626,15 @@ export function roleCanManageEmployees(role: Role): boolean {
 }
 
 export function employeeHasApiPermission(
-  permissionCodes: readonly string[],
+  permissionCodes: readonly string[] | null | undefined,
   required: ApiPermissionRequirement,
 ): boolean {
+  const codes = permissionCodes ?? [];
   if (required === "identity") return true;
   if (typeof required === "object" && "anyOf" in required) {
-    return required.anyOf.some((code) => permissionCodes.includes(code));
+    return required.anyOf.some((code) => codes.includes(code));
   }
-  return permissionCodes.includes(required);
+  return codes.includes(required);
 }
 
 export function resolveApiPermission(

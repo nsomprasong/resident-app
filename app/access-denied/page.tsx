@@ -9,7 +9,7 @@ export default function AccessDeniedPage() {
         </div>
         <h1 className="text-2xl font-semibold text-foreground">ยังไม่ได้กำหนดสิทธิ์พนักงาน</h1>
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
-          บัญชีนี้เข้าสู่ระบบสำเร็จ แต่ยังไม่ได้เชื่อมกับข้อมูลพนักงาน
+          บัญชีนี้เข้าสู่ระบบสำเร็จ แต่ยังไม่ได้เชื่อมกับข้อมูลพนักงาน หรือยังไม่ได้กำหนดบทบาท/สิทธิ์
           กรุณาติดต่อผู้ดูแลระบบ
         </p>
         <form action="/api/auth/logout" method="post" className="mt-7">
