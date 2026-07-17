@@ -585,7 +585,13 @@ const apiPermissionRules: readonly ApiPermissionRule[] = [
   { method: "POST", pattern: /^\/api\/hr\/holidays$/, permission: "hr.schedule.manage" },
   { method: "GET", pattern: /^\/api\/hr\/attendance$/, permission: "hr.attendance.manage" },
   { method: "POST", pattern: /^\/api\/hr\/attendance$/, permission: "hr.attendance.manage" },
-  { method: "GET", pattern: /^\/api\/hr\/leave-types$/, permission: "hr.leave.request" },
+  {
+    method: "GET",
+    pattern: /^\/api\/hr\/leave-types$/,
+    permission: {
+      anyOf: ["hr.leave.self", "hr.leave.request", "hr.settings.manage"],
+    },
+  },
   { method: "POST", pattern: /^\/api\/hr\/leave-types$/, permission: "hr.settings.manage" },
   { method: "PATCH", pattern: /^\/api\/hr\/leave-types\/[^/]+$/, permission: "hr.settings.manage" },
   { method: "GET", pattern: /^\/api\/hr\/leave-balances$/, permission: "hr.leave.request" },
@@ -722,6 +728,10 @@ export function resolveApiPermission(
 ): ApiPermissionRequirement | null {
   if (method === "GET" && pathname === "/api/auth/me") return "identity";
   if (method === "POST" && pathname === "/api/auth/set-password") {
+    return "identity";
+  }
+  // Temporary client error probe — any authenticated employee may report.
+  if (method === "POST" && pathname === "/api/system/client-error") {
     return "identity";
   }
 

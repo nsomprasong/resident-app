@@ -65,35 +65,41 @@ export function AppTooltip() {
     }
 
     function showFor(el: HTMLElement) {
-      if (isDisabled(el)) {
+      try {
+        if (isDisabled(el)) {
+          hide();
+          return;
+        }
+        const text = resolveTipText(el);
+        if (!text) {
+          hide();
+          return;
+        }
+
+        // Prefer custom tooltip over the delayed native title bubble.
+        if (el.hasAttribute("title")) {
+          removeTitle = el.getAttribute("title");
+          el.removeAttribute("title");
+        } else {
+          removeTitle = null;
+        }
+
+        active = el;
+        const rect = el.getBoundingClientRect();
+        const placement = rect.top < 56 ? "bottom" : "top";
+        const top =
+          placement === "top" ? Math.max(8, rect.top - 8) : rect.bottom + 8;
+        const viewportWidth =
+          typeof window.innerWidth === "number" ? window.innerWidth : 320;
+        const left = Math.min(
+          viewportWidth - 16,
+          Math.max(16, rect.left + rect.width / 2),
+        );
+
+        setTip({ text, left, top, placement });
+      } catch {
         hide();
-        return;
       }
-      const text = resolveTipText(el);
-      if (!text) {
-        hide();
-        return;
-      }
-
-      // Prefer custom tooltip over the delayed native title bubble.
-      if (el.hasAttribute("title")) {
-        removeTitle = el.getAttribute("title");
-        el.removeAttribute("title");
-      } else {
-        removeTitle = null;
-      }
-
-      active = el;
-      const rect = el.getBoundingClientRect();
-      const placement = rect.top < 56 ? "bottom" : "top";
-      const top =
-        placement === "top" ? Math.max(8, rect.top - 8) : rect.bottom + 8;
-      const left = Math.min(
-        window.innerWidth - 16,
-        Math.max(16, rect.left + rect.width / 2),
-      );
-
-      setTip({ text, left, top, placement });
     }
 
     function onPointerOver(event: PointerEvent) {

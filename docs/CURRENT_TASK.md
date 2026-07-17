@@ -2,7 +2,7 @@
 
 ## Task
 
-Fix Application error after login for non-ADMIN users
+Fix Application error after login for non-ADMIN users on mobile
 
 ## Status
 
@@ -10,18 +10,19 @@ COMPLETED
 
 ## Objective
 
-ป้องกัน client exception หลัง login เมื่อ role ไม่อยู่ใน matrix / permissions ว่าง / employee ไม่ครบ — แสดง /access-denied แทน และไม่ fallback เป็น ADMIN
+กัน client exception บนมือถือหลัง login สำหรับ non-admin — ไม่ขอ GPS/กล้องตอนโหลดหน้า, มี fallback browser APIs, เมนูว่าง → /access-denied, และมี client error logging ชั่วคราว
 
 ## Evidence
 
-- Root cause: DB มี role `OWNER`/`SUPERMARKET` นอก hardcoded matrix → `hasPermission` throw `.has` on undefined
-- Active auth users: ADMIN×1, OWNER×2, MANAGER×1 — non-admin ที่เจอบ่อยคือ OWNER
-- เพิ่ม OWNER/SUPERMARKET ใน matrix; harden `hasPermission`; denial codes + Thai `/access-denied?reason=`
-- Tests: `auth-access-denial` 5/5, `rbac-policy` 5/5; `tsc` pass; `npm run build` pass
+- Login redirect ทุก role → `/` (ไม่แยก ADMIN/non-admin)
+- ไม่มี localStorage/sessionStorage ในแอป
+- GPS เคยเสี่ยงบน `/my-work` (เมนูแรกของ MANAGER) — ย้าย leave-types fetch ไปตอนกดปุ่มลา; GPS ใช้ safe wrapper เฉพาะตอนลงเวลา
+- ClientErrorLogger → POST `/api/system/client-error` (message, stack, route, role, userAgent)
+- Unit + rbac-policy + mobile menu policy pass; `tsc` + `npm run build` pass
 
 ## Next Action
 
-Deploy แล้วทดสอบ login ADMIN + OWNER + MANAGER บน production
+Deploy แล้ว login OWNER/MANAGER บนมือถือ — ดู server log `[client-error-report]` หากยังพัง
 
 ## Deploy
 

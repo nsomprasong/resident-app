@@ -160,7 +160,11 @@ test("every current business API method resolves to an explicit permission", () 
     ["POST", "/api/hr/holidays", "hr.schedule.manage"],
     ["GET", "/api/hr/attendance", "hr.attendance.manage"],
     ["POST", "/api/hr/attendance", "hr.attendance.manage"],
-    ["GET", "/api/hr/leave-types", "hr.leave.request"],
+    [
+      "GET",
+      "/api/hr/leave-types",
+      { anyOf: ["hr.leave.self", "hr.leave.request", "hr.settings.manage"] },
+    ],
     ["POST", "/api/hr/leave-types", "hr.settings.manage"],
     ["PATCH", "/api/hr/leave-types/00000000-0000-4000-8000-000000000001", "hr.settings.manage"],
     ["GET", "/api/hr/leave-balances", "hr.leave.request"],

@@ -13,6 +13,7 @@ import {
 import { useCallback, useEffect, useState } from "react";
 
 import DateSelector from "@/components/ui/DateSelector";
+import { requestGeolocationPosition } from "@/lib/browser/safe-apis";
 import {
   formatShiftWallClockTime,
   formatThaiDate,
@@ -104,26 +105,16 @@ type GeoState =
   | { status: "ready"; latitude: number; longitude: number; accuracyMeters: number }
   | { status: "error"; message: string };
 
-function requestPosition(): Promise<GeolocationPosition> {
-  return new Promise((resolve, reject) => {
-    if (typeof window !== "undefined" && !window.isSecureContext) {
-      reject(new Error(describeGeolocationFailure(new Error("insecure"))));
-      return;
-    }
-    if (!("geolocation" in navigator)) {
-      reject(new Error("อุปกรณ์นี้ไม่รองรับการขอตำแหน่ง GPS"));
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      resolve,
-      (error) => reject(new Error(describeGeolocationFailure(error))),
-      {
-        enableHighAccuracy: true,
-        timeout: 15_000,
-        maximumAge: 0,
-      },
-    );
-  });
+async function requestPosition() {
+  try {
+    return await requestGeolocationPosition({
+      enableHighAccuracy: true,
+      timeout: 15_000,
+      maximumAge: 0,
+    });
+  } catch (error) {
+    throw new Error(describeGeolocationFailure(error));
+  }
 }
 
 export function MyWorkBoard() {
@@ -178,13 +169,6 @@ export function MyWorkBoard() {
     void load();
   }, [load]);
 
-  useEffect(() => {
-    fetch("/api/hr/leave-types", { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : []))
-      .then((types: LeaveType[]) => setLeaveTypes(types.filter((type) => type.isActive)))
-      .catch(() => setLeaveTypes([]));
-  }, []);
-
   async function handleClock(type: "CHECK_IN" | "CHECK_OUT") {
     setClocking(true);
     setClockError("");
@@ -192,9 +176,9 @@ export function MyWorkBoard() {
     setGeo({ status: "locating" });
     try {
       const position = await requestPosition();
-      const latitude = position.coords.latitude;
-      const longitude = position.coords.longitude;
-      const accuracyMeters = position.coords.accuracy;
+      const latitude = position.latitude;
+      const longitude = position.longitude;
+      const accuracyMeters = position.accuracyMeters;
       setGeo({ status: "ready", latitude, longitude, accuracyMeters });
 
       const response = await fetch("/api/hr/my-work/clock", {
@@ -225,16 +209,28 @@ export function MyWorkBoard() {
     }
   }
 
-  function openLeaveForm() {
+  async function openLeaveForm() {
+    setLeaveError("");
+    setLeaveMessage("");
     const today = data?.today.workDate ?? "";
+    let active = leaveTypes;
+    if (active.length === 0) {
+      try {
+        const response = await fetch("/api/hr/leave-types", { cache: "no-store" });
+        const types = (response.ok ? await response.json() : []) as LeaveType[];
+        active = types.filter((type) => type.isActive);
+        setLeaveTypes(active);
+      } catch {
+        active = [];
+        setLeaveTypes([]);
+      }
+    }
     setLeaveForm({
-      leaveTypeId: leaveTypes[0]?.id ?? "",
+      leaveTypeId: active[0]?.id ?? "",
       startDate: today,
       endDate: today,
       reason: "",
     });
-    setLeaveError("");
-    setLeaveMessage("");
     setLeaveOpen(true);
   }
 

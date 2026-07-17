@@ -7,19 +7,7 @@ import {
   RGBLuminanceSource,
 } from "@zxing/library";
 
-type DetectedBarcode = { rawValue: string };
-type BarcodeDetectorLike = {
-  detect: (source: ImageBitmapSource) => Promise<DetectedBarcode[]>;
-};
-type BarcodeDetectorCtor = new (options?: {
-  formats?: string[];
-}) => BarcodeDetectorLike;
-
-declare global {
-  interface Window {
-    BarcodeDetector?: BarcodeDetectorCtor;
-  }
-}
+import { getBarcodeDetectorCtor } from "@/lib/browser/safe-apis";
 
 const ZXING_FORMATS = [
   BarcodeFormat.EAN_13,
@@ -145,7 +133,7 @@ function decodeWithZxing(canvas: HTMLCanvasElement): string | null {
 async function decodeWithBarcodeDetector(
   canvas: HTMLCanvasElement,
 ): Promise<string | null> {
-  const Detector = window.BarcodeDetector;
+  const Detector = getBarcodeDetectorCtor();
   if (!Detector) return null;
   try {
     const detector = new Detector({

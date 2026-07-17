@@ -56,6 +56,15 @@ export function describeGeolocationFailure(error: unknown): string {
     return "เบราว์เซอร์อนุญาต GPS เฉพาะบน HTTPS หรือ localhost — เปิดผ่าน https:// หรือ http://localhost แล้วลองใหม่";
   }
 
+  if (error instanceof Error) {
+    if (error.message === "insecure") {
+      return "เบราว์เซอร์อนุญาต GPS เฉพาะบน HTTPS หรือ localhost — เปิดผ่าน https:// หรือ http://localhost แล้วลองใหม่";
+    }
+    if (error.message === "unsupported") {
+      return "อุปกรณ์นี้ไม่รองรับการขอตำแหน่ง GPS";
+    }
+  }
+
   if (
     error &&
     typeof error === "object" &&

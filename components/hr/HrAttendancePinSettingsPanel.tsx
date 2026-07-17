@@ -4,6 +4,7 @@ import { MapPin, Save } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { useEmployeePermissions } from "@/components/auth/EmployeePermissionsProvider";
+import { requestGeolocationPosition } from "@/lib/browser/safe-apis";
 import { describeGeolocationFailure } from "@/lib/hr/geo";
 
 type AttendanceSettings = {
@@ -54,37 +55,29 @@ export function HrAttendancePinSettingsPanel() {
     void load();
   }, [load]);
 
-  function useCurrentLocation() {
+  async function useCurrentLocation() {
     if (!canEdit) return;
-    if (typeof window !== "undefined" && !window.isSecureContext) {
-      setError(describeGeolocationFailure(new Error("insecure")));
-      return;
-    }
-    if (!navigator.geolocation) {
-      setError("อุปกรณ์นี้ไม่รองรับ GPS");
-      return;
-    }
     setLocating(true);
     setError("");
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setSettings((prev) =>
-          prev
-            ? {
-                ...prev,
-                latitude: position.coords.latitude,
-                longitude: position.coords.longitude,
-              }
-            : prev,
-        );
-        setLocating(false);
-      },
-      (geoError) => {
-        setError(describeGeolocationFailure(geoError));
-        setLocating(false);
-      },
-      { enableHighAccuracy: true, timeout: 10000 },
-    );
+    try {
+      const position = await requestGeolocationPosition({
+        enableHighAccuracy: true,
+        timeout: 10_000,
+      });
+      setSettings((prev) =>
+        prev
+          ? {
+              ...prev,
+              latitude: position.latitude,
+              longitude: position.longitude,
+            }
+          : prev,
+      );
+    } catch (geoError) {
+      setError(describeGeolocationFailure(geoError));
+    } finally {
+      setLocating(false);
+    }
   }
 
   async function save() {

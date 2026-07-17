@@ -27,7 +27,9 @@ export default function ListMenu({
         {title}
       </p>
       <ul className="space-y-1">
-        {menuItems.map(({ text, icon: Icon, path }) => {
+        {menuItems
+          .filter((item) => Boolean(item.path) && typeof item.icon === "function")
+          .map(({ text, icon: Icon, path }) => {
           const active =
             pathname === path ||
             (path !== "/hr" && pathname.startsWith(`${path}/`));

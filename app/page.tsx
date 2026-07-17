@@ -18,9 +18,11 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 
+import { hasAllowedMenus } from "@/lib/auth/allowed-menus";
 import { canAccessPageWithPermissions } from "@/lib/auth/authorization";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { filterHrNavItems } from "@/lib/hr/nav";
+import { redirect } from "next/navigation";
 
 type MenuCard = {
   title: string;
@@ -175,6 +177,11 @@ function MenuSection({
 export default async function Home() {
   const currentUser = await getCurrentUser();
   const permissions = currentUser?.employee?.role?.permissions ?? [];
+
+  if (!hasAllowedMenus(permissions)) {
+    redirect("/access-denied?reason=PERMISSIONS_EMPTY");
+  }
+
   const hrCards: MenuCard[] = filterHrNavItems(permissions)
     .filter((item) => item.path === "/hr")
     .map((item) => ({

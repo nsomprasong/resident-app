@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Provider } from "react-redux";
 import { usePathname } from "next/navigation";
 
+import { ClientErrorLogger } from "@/components/auth/ClientErrorLogger";
 import { EmployeePermissionsProvider } from "@/components/auth/EmployeePermissionsProvider";
 import { AppTooltip } from "@/components/ui/AppTooltip";
 import { store } from "../../store";
@@ -21,6 +22,7 @@ export default function MainLayoutClient({ children }: { children: React.ReactNo
   return (
     <Provider store={store}>
       <EmployeePermissionsProvider>
+        <ClientErrorLogger />
         <AppTooltip />
         <Header onMenuClick={() => setSidebarOpen(true)} />
         <div className="flex min-h-screen pt-16 md:pt-0">

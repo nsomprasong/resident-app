@@ -15,6 +15,7 @@ import {
   isAccessDenialCode,
   type AccessDenialCode,
 } from "@/lib/auth/access-denial";
+import { hasAllowedMenus } from "@/lib/auth/allowed-menus";
 import {
   canAccessPageWithPermissions,
   employeeHasApiPermission,
@@ -127,6 +128,22 @@ export function EmployeePermissionsProvider({
                 : "PERMISSIONS_EMPTY";
             router.replace(
               `/access-denied?reason=${encodeURIComponent(reason)}`,
+            );
+          }
+          return;
+        }
+
+        if (!hasAllowedMenus(permissions)) {
+          setEmployee(null);
+          const currentPath =
+            typeof window !== "undefined" ? window.location.pathname : "";
+          if (
+            currentPath !== "/access-denied" &&
+            currentPath !== "/login" &&
+            currentPath !== "/set-password"
+          ) {
+            router.replace(
+              `/access-denied?reason=${encodeURIComponent("PERMISSIONS_EMPTY")}`,
             );
           }
           return;
