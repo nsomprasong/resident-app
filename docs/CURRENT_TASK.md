@@ -2,7 +2,7 @@
 
 ## Task
 
-Fix booking charge template edit (Prisma client stale)
+PromptPay: select multiple recipients when creating booking QR
 
 ## Status
 
@@ -10,10 +10,10 @@ COMPLETED
 
 ## Evidence
 
-- Root cause: `prisma.bookingChargeTemplate` undefined → API 500; UI fell back to local presets that could not be edited
-- Ran `prisma generate`; panel now shows load error + retry instead of fake local rows
-- Inline edit row + sync selected booking lines after catalog save
+- Booking create modal: multi-select person cards + per-person amounts + equal split
+- Creates one payment/QR per selected person; QR modal navigates between recipients
+- POS: clearer person card picker (single recipient per sale)
 
 ## Next Action
 
-Restart Next.js dev server so the new Prisma client is loaded
+—

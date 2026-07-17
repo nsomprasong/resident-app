@@ -1,7 +1,17 @@
 "use client";
 
-import { Camera, Download, Eye, ImagePlus, QrCode, Upload } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Camera,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  Eye,
+  ImagePlus,
+  QrCode,
+  Upload,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { useEmployeePermissions } from "@/components/auth/EmployeePermissionsProvider";
@@ -26,6 +36,17 @@ type QrPayload = {
   accountName: string | null;
   identifierMasked: string | null;
   paymentNumber?: string | null;
+};
+
+type RecipientDraft = {
+  accountId: string;
+  amount: number;
+};
+
+type CreatedQrItem = {
+  paymentId: string;
+  status: string;
+  qr: QrPayload;
 };
 
 const purposeOptions = [
@@ -77,21 +98,31 @@ export function BookingPromptPaySection({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
-  const [accountId, setAccountId] = useState("");
+  const [recipients, setRecipients] = useState<RecipientDraft[]>([]);
   const [purpose, setPurpose] = useState<(typeof purposeOptions)[number]["value"]>("PARTIAL");
-  const [amount, setAmount] = useState(outstanding);
   const [saving, setSaving] = useState(false);
-  const [qr, setQr] = useState<QrPayload | null>(null);
-  const [activePaymentId, setActivePaymentId] = useState<string | null>(null);
-  const [activePaymentStatus, setActivePaymentStatus] = useState<string | null>(
-    null,
-  );
+  const [createdQrs, setCreatedQrs] = useState<CreatedQrItem[]>([]);
+  const [qrIndex, setQrIndex] = useState(0);
   const [slipFile, setSlipFile] = useState<File | null>(null);
   const [slipPreviewUrl, setSlipPreviewUrl] = useState<string | null>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  const activeQr = createdQrs[qrIndex] ?? null;
+  const activePaymentId = activeQr?.paymentId ?? null;
+  const activePaymentStatus = activeQr?.status ?? null;
+  const qr = activeQr?.qr ?? null;
   const canSubmitActive =
     activePaymentStatus === "AWAITING_PAYMENT" && Boolean(activePaymentId);
+
+  const selectedTotal = useMemo(
+    () =>
+      recipients.reduce(
+        (sum, item) => sum + (Number.isFinite(item.amount) ? item.amount : 0),
+        0,
+      ),
+    [recipients],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -116,7 +147,6 @@ export function BookingPromptPaySection({
       setPayments(payBody.payments ?? []);
       if (accRes.ok && Array.isArray(accBody)) {
         setAccounts(accBody);
-        setAccountId((current) => current || accBody.find((a) => a.isPrimary)?.id || accBody[0]?.id || "");
       }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "โหลดไม่สำเร็จ");
@@ -128,10 +158,6 @@ export function BookingPromptPaySection({
   useEffect(() => {
     void load();
   }, [load]);
-
-  useEffect(() => {
-    setAmount(outstanding);
-  }, [outstanding]);
 
   useEffect(() => {
     if (!slipFile || !slipFile.type.startsWith("image/")) {
@@ -147,32 +173,113 @@ export function BookingPromptPaySection({
     setSlipFile(file ?? null);
   };
 
+  const openCreateModal = () => {
+    const primary =
+      accounts.find((account) => account.isPrimary) ?? accounts[0] ?? null;
+    setRecipients(
+      primary
+        ? [{ accountId: primary.id, amount: Math.max(0, outstanding) }]
+        : [],
+    );
+    setPurpose(outstanding > 0 ? "PARTIAL" : "FULL");
+    setError("");
+    setCreateOpen(true);
+  };
+
+  const toggleRecipient = (accountId: string) => {
+    setRecipients((current) => {
+      if (current.some((item) => item.accountId === accountId)) {
+        return current.filter((item) => item.accountId !== accountId);
+      }
+      const used = current.reduce((sum, item) => sum + item.amount, 0);
+      const remaining = Math.max(
+        0,
+        Math.round((outstanding - used) * 100) / 100,
+      );
+      return [...current, { accountId, amount: remaining }];
+    });
+  };
+
+  const setRecipientAmount = (accountId: string, amount: number) => {
+    setRecipients((current) =>
+      current.map((item) =>
+        item.accountId === accountId ? { ...item, amount } : item,
+      ),
+    );
+  };
+
+  const splitEvenly = () => {
+    if (!recipients.length || outstanding <= 0) return;
+    const cents = Math.round(outstanding * 100);
+    const base = Math.floor(cents / recipients.length);
+    const remainder = cents - base * recipients.length;
+    setRecipients(
+      recipients.map((item, index) => ({
+        ...item,
+        amount: (base + (index < remainder ? 1 : 0)) / 100,
+      })),
+    );
+    if (recipients.length > 1) setPurpose("PARTIAL");
+  };
+
   const createPayment = async () => {
+    const lines = recipients.filter((item) => item.amount > 0);
+    if (!lines.length) {
+      setError("กรุณาเลือกผู้รับและระบุจำนวนเงิน");
+      return;
+    }
+    if (selectedTotal > outstanding + 0.001) {
+      setError("ยอดรวมของผู้รับต้องไม่เกินยอดคงเหลือ");
+      return;
+    }
+
     setSaving(true);
     setError("");
     try {
-      const response = await fetch(
-        `/api/bookings/${bookingId}/promptpay-payments`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            promptpayAccountId: accountId,
-            purpose,
-            amount,
-          }),
-        },
-      );
-      const body = (await response.json()) as {
-        message?: string;
-        payment?: PaymentListItem;
-        qr?: QrPayload;
-      };
-      if (!response.ok) throw new Error(body.message ?? "สร้างรายการไม่สำเร็จ");
-      setActivePaymentId(body.payment?.id ?? null);
-      setActivePaymentStatus(body.payment?.status ?? "AWAITING_PAYMENT");
+      const created: CreatedQrItem[] = [];
+      for (const line of lines) {
+        const linePurpose =
+          lines.length === 1 &&
+          purpose === "FULL" &&
+          Math.abs(line.amount - outstanding) < 0.001
+            ? "FULL"
+            : purpose === "FULL"
+              ? "PARTIAL"
+              : purpose;
+        const response = await fetch(
+          `/api/bookings/${bookingId}/promptpay-payments`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              promptpayAccountId: line.accountId,
+              purpose: linePurpose,
+              amount: line.amount,
+            }),
+          },
+        );
+        const body = (await response.json()) as {
+          message?: string;
+          payment?: PaymentListItem;
+          qr?: QrPayload;
+        };
+        if (!response.ok) {
+          throw new Error(body.message ?? "สร้างรายการไม่สำเร็จ");
+        }
+        if (body.payment && body.qr) {
+          created.push({
+            paymentId: body.payment.id,
+            status: body.payment.status,
+            qr: body.qr,
+          });
+        }
+      }
+      if (!created.length) {
+        throw new Error("สร้างรายการไม่สำเร็จ");
+      }
+      setCreatedQrs(created);
+      setQrIndex(0);
       setSlipFile(null);
-      setQr(body.qr ?? null);
       setCreateOpen(false);
       await load();
       onChanged();
@@ -197,9 +304,18 @@ export function BookingPromptPaySection({
       const body = (await response.json()) as { message?: string };
       if (!response.ok) throw new Error(body.message ?? "ส่งตรวจสอบไม่สำเร็จ");
       setSlipFile(null);
-      setQr(null);
-      setActivePaymentId(null);
-      setActivePaymentStatus(null);
+      setCreatedQrs((current) => {
+        const updated = current.map((item, index) =>
+          index === qrIndex
+            ? { ...item, status: "PENDING_VERIFICATION" }
+            : item,
+        );
+        const remaining = updated.filter(
+          (item) => item.status === "AWAITING_PAYMENT",
+        );
+        return remaining;
+      });
+      setQrIndex(0);
       await load();
       onChanged();
     } catch (reason) {
@@ -288,10 +404,15 @@ export function BookingPromptPaySection({
       const body = (await response.json()) as QrPayload & { message?: string };
       if (!response.ok) throw new Error(body.message ?? "โหลด QR ไม่สำเร็จ");
       const current = payments.find((item) => item.id === paymentId);
-      setActivePaymentId(paymentId);
-      setActivePaymentStatus(current?.status ?? null);
+      setCreatedQrs([
+        {
+          paymentId,
+          status: current?.status ?? "AWAITING_PAYMENT",
+          qr: body,
+        },
+      ]);
+      setQrIndex(0);
       setSlipFile(null);
-      setQr(body);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "โหลด QR ไม่สำเร็จ");
     } finally {
@@ -339,12 +460,8 @@ export function BookingPromptPaySection({
         <PermissionGate anyOf={["payment.create", "payment.collect"]}>
           <button
             type="button"
-            disabled={outstanding <= 0}
-            onClick={() => {
-              setAmount(outstanding);
-              setPurpose(outstanding > 0 ? "PARTIAL" : "FULL");
-              setCreateOpen(true);
-            }}
+            disabled={outstanding <= 0 || accounts.length === 0}
+            onClick={openCreateModal}
             className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
           >
             <QrCode size={16} />
@@ -383,6 +500,9 @@ export function BookingPromptPaySection({
                     ฿{payment.amount.toLocaleString()} · {statusLabel(payment.status)}
                   </p>
                   <p className="text-xs text-muted-foreground">
+                    {payment.promptpayAccountNameSnapshot
+                      ? `${payment.promptpayAccountNameSnapshot} · `
+                      : ""}
                     {payment.paymentNumber ?? payment.id.slice(0, 8)} ·{" "}
                     {payment.promptpayIdentifierMasked ?? payment.method}
                   </p>
@@ -456,60 +576,151 @@ export function BookingPromptPaySection({
         title="รับชำระเงิน PromptPay"
       >
         <div className="space-y-3">
-          <label className="block text-sm">
-            บัญชีพร้อมเพย์
-            <select
-              value={accountId}
-              onChange={(e) => setAccountId(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-border px-3 py-2"
-            >
-              {accounts.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.displayName}
-                  {account.isPrimary ? " (หลัก)" : ""} — {account.identifierMasked}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-sm font-medium text-foreground">
+                เลือกผู้รับเงิน
+              </p>
+              {recipients.length > 1 ? (
+                <button
+                  type="button"
+                  onClick={splitEvenly}
+                  className="text-xs font-medium text-primary hover:underline"
+                >
+                  แบ่งเท่ากัน
+                </button>
+              ) : null}
+            </div>
+            <p className="mb-2 text-xs text-muted-foreground">
+              เลือกได้มากกว่า 1 คน — ระบบจะสร้าง QR แยกตามผู้รับ
+            </p>
+            {accounts.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-border px-3 py-4 text-center text-sm text-muted-foreground">
+                ยังไม่มีบัญชีพร้อมเพย์ที่เปิดใช้ — เพิ่มใน Settings ก่อน
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {accounts.map((account) => {
+                  const selected = recipients.find(
+                    (item) => item.accountId === account.id,
+                  );
+                  return (
+                    <div
+                      key={account.id}
+                      className={`rounded-xl border px-3 py-2.5 transition-colors ${
+                        selected
+                          ? "border-primary bg-primary/5"
+                          : "border-border bg-background"
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => toggleRecipient(account.id)}
+                        className="flex w-full items-start gap-2 text-left"
+                      >
+                        <span
+                          className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md border ${
+                            selected
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-border bg-surface"
+                          }`}
+                        >
+                          {selected ? <Check size={12} strokeWidth={3} /> : null}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-medium text-foreground">
+                            {account.displayName}
+                            {account.isPrimary ? " (หลัก)" : ""}
+                          </span>
+                          <span className="block text-xs text-muted-foreground">
+                            {account.accountName} · {account.identifierMasked}
+                          </span>
+                        </span>
+                      </button>
+                      {selected ? (
+                        <label className="mt-2 block pl-7 text-xs text-muted-foreground">
+                          จำนวนเงิน
+                          <NumberInput
+                            min={0}
+                            step={0.01}
+                            emptyValue={0}
+                            value={selected.amount}
+                            onChange={(amount) =>
+                              setRecipientAmount(account.id, amount)
+                            }
+                            className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
+                          />
+                        </label>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           <label className="block text-sm">
             ประเภท
             <select
               value={purpose}
               onChange={(e) => {
                 const next = e.target.value as typeof purpose;
+                if (next === "FULL" && recipients.length > 1) {
+                  setPurpose("PARTIAL");
+                  return;
+                }
                 setPurpose(next);
-                if (next === "FULL") setAmount(outstanding);
+                if (next === "FULL" && recipients.length === 1) {
+                  setRecipientAmount(recipients[0]!.accountId, outstanding);
+                }
               }}
               className="mt-1 w-full rounded-xl border border-border px-3 py-2"
             >
               {purposeOptions.map((option) => (
-                <option key={option.value} value={option.value}>
+                <option
+                  key={option.value}
+                  value={option.value}
+                  disabled={option.value === "FULL" && recipients.length > 1}
+                >
                   {option.label}
+                  {option.value === "FULL" && recipients.length > 1
+                    ? " (ใช้ได้เมื่อเลือก 1 คน)"
+                    : ""}
                 </option>
               ))}
             </select>
           </label>
-          <label className="block text-sm">
-            จำนวนเงิน
-            <NumberInput
-              min={0.01}
-              step={0.01}
-              emptyValue={0}
-              value={amount}
-              onChange={setAmount}
-              className="mt-1 w-full rounded-xl border border-border px-3 py-2"
-            />
-          </label>
-          <p className="text-xs text-muted-foreground">
-            ยอดคงเหลือ ฿{outstanding.toLocaleString()}
-          </p>
+
+          <div className="flex items-center justify-between rounded-xl bg-background px-3 py-2 text-sm">
+            <span className="text-muted-foreground">
+              เลือก {recipients.length} คน · คงเหลือ ฿
+              {outstanding.toLocaleString()}
+            </span>
+            <span
+              className={`font-medium tabular-nums ${
+                selectedTotal > outstanding + 0.001
+                  ? "text-destructive"
+                  : "text-foreground"
+              }`}
+            >
+              รวม ฿{selectedTotal.toLocaleString()}
+            </span>
+          </div>
+
           <button
             type="button"
-            disabled={saving || !accountId || amount <= 0}
+            disabled={
+              saving ||
+              recipients.length === 0 ||
+              selectedTotal <= 0 ||
+              selectedTotal > outstanding + 0.001
+            }
             onClick={() => void createPayment()}
             className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-medium text-primary-foreground disabled:opacity-50"
           >
-            สร้าง QR Code
+            {recipients.length > 1
+              ? `สร้าง QR ${recipients.filter((item) => item.amount > 0).length} รายการ`
+              : "สร้าง QR Code"}
           </button>
         </div>
       </Modal>
@@ -517,9 +728,8 @@ export function BookingPromptPaySection({
       <Modal
         open={Boolean(qr)}
         onClose={() => {
-          setQr(null);
-          setActivePaymentId(null);
-          setActivePaymentStatus(null);
+          setCreatedQrs([]);
+          setQrIndex(0);
           setSlipFile(null);
         }}
         title="ชำระค่าที่พัก"
@@ -527,6 +737,39 @@ export function BookingPromptPaySection({
         {qr ? (
           <div className="space-y-3 text-center">
             <p className="text-sm text-muted-foreground">{bookingReference}</p>
+            {createdQrs.length > 1 ? (
+              <div className="flex items-center justify-between gap-2 rounded-xl border border-border bg-background px-2 py-1.5">
+                <button
+                  type="button"
+                  disabled={qrIndex <= 0}
+                  onClick={() => {
+                    setQrIndex((index) => Math.max(0, index - 1));
+                    setSlipFile(null);
+                  }}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface disabled:opacity-30"
+                  aria-label="QR ก่อนหน้า"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <p className="text-xs font-medium text-foreground">
+                  ผู้รับ {qrIndex + 1} / {createdQrs.length}
+                </p>
+                <button
+                  type="button"
+                  disabled={qrIndex >= createdQrs.length - 1}
+                  onClick={() => {
+                    setQrIndex((index) =>
+                      Math.min(createdQrs.length - 1, index + 1),
+                    );
+                    setSlipFile(null);
+                  }}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface disabled:opacity-30"
+                  aria-label="QR ถัดไป"
+                >
+                  <ChevronRight size={18} />
+                </button>
+              </div>
+            ) : null}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={qr.dataUrl}

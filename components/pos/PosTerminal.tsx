@@ -2,6 +2,7 @@
 
 import {
   Banknote,
+  Check,
   Download,
   Minus,
   Package,
@@ -897,32 +898,61 @@ export function PosTerminal() {
               <div className="space-y-2 rounded-2xl border border-border bg-background p-3">
                 <label className="flex items-center gap-2 text-sm font-medium">
                   <QrCode size={16} className="text-secondary" />
-                  บัญชีพร้อมเพย์
+                  เลือกผู้รับพร้อมเพย์
                 </label>
-                <select
-                  value={promptPayAccountId}
-                  onChange={(event) => {
-                    setPromptPayAccountId(event.target.value);
-                    setPromptPayQr(null);
-                  }}
-                  className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm"
-                >
-                  {promptPayAccounts.length === 0 ? (
-                    <option value="">กำลังโหลดบัญชี...</option>
-                  ) : (
-                    promptPayAccounts.map((account) => (
-                      <option key={account.id} value={account.id}>
-                        {account.displayName}
-                        {account.isPrimary ? " (หลัก)" : ""} —{" "}
-                        {account.identifierMasked}
-                      </option>
-                    ))
-                  )}
-                </select>
+                {promptPayAccounts.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    กำลังโหลดบัญชี...
+                  </p>
+                ) : (
+                  <div className="max-h-48 space-y-1.5 overflow-y-auto">
+                    {promptPayAccounts.map((account) => {
+                      const selected = promptPayAccountId === account.id;
+                      return (
+                        <button
+                          key={account.id}
+                          type="button"
+                          onClick={() => {
+                            setPromptPayAccountId(account.id);
+                            setPromptPayQr(null);
+                          }}
+                          className={`flex w-full items-center gap-2 rounded-xl border px-3 py-2 text-left text-sm transition-colors ${
+                            selected
+                              ? "border-secondary bg-secondary/10"
+                              : "border-border bg-surface hover:border-secondary/40"
+                          }`}
+                        >
+                          <span
+                            className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border ${
+                              selected
+                                ? "border-secondary bg-secondary text-secondary-foreground"
+                                : "border-border"
+                            }`}
+                          >
+                            {selected ? (
+                              <Check size={12} strokeWidth={3} />
+                            ) : null}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block font-medium text-foreground">
+                              {account.displayName}
+                              {account.isPrimary ? " (หลัก)" : ""}
+                            </span>
+                            <span className="block text-xs text-muted-foreground">
+                              {account.identifierMasked}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
                 <PermissionGate permission="pos.sell">
                   <button
                     type="button"
-                    disabled={busy || !cart.length || total <= 0}
+                    disabled={
+                      busy || !cart.length || total <= 0 || !promptPayAccountId
+                    }
                     onClick={() => void openPromptPayQr()}
                     className="w-full rounded-xl border border-secondary/30 bg-secondary/10 px-3 py-2 text-sm font-medium text-secondary disabled:opacity-50"
                   >
