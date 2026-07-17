@@ -30,6 +30,10 @@ describe("login-identifier helpers", () => {
     assert.equal(normalizeUsername("  SomChai "), "somchai");
     assert.equal(isValidUsername("ab"), false);
     assert.equal(isValidUsername("somchai.w"), true);
+    assert.equal(isValidUsername("nonza"), true);
+    assert.equal(isValidUsername("nonza@gmail.com"), false);
+    assert.equal(normalizeUsername("ｎｏｎｚａ"), "nonza");
+    assert.equal(isValidUsername("ｎｏｎｚａ"), true);
   });
 
   it("resolves identifier kinds", () => {

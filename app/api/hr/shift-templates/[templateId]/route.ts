@@ -187,6 +187,14 @@ export async function DELETE(
       return apiErrorResponse("ไม่พบกะ", 404, "NOT_FOUND");
     }
 
+    if (existing._count.defaultForEmployees > 0) {
+      return apiErrorResponse(
+        `ไม่สามารถลบกะได้ เพราะยังมีพนักงาน ${existing._count.defaultForEmployees} คนใช้เป็นกะประจำ — ให้เปลี่ยนกะประจำในหน้าพนักงานก่อน`,
+        409,
+        "HAS_DEFAULT_EMPLOYEES",
+      );
+    }
+
     if (existing._count.memberships > 0) {
       return apiErrorResponse(
         `ไม่สามารถลบกะได้ เพราะยังมีสมาชิก ${existing._count.memberships} คน — ให้ถอดสมาชิกออกก่อน`,

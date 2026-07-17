@@ -1,4 +1,5 @@
 import { apiErrorResponse } from "@/lib/api/validation";
+import { workforceEmployeeWhere } from "@/lib/auth/support-account";
 import { buildDailyStatusRows } from "@/lib/hr/daily-status";
 import { displayEmployeeName } from "@/lib/hr/employees";
 import { buildPaySummaries, type EmployeePayInput } from "@/lib/hr/pay-summary";
@@ -20,7 +21,7 @@ export async function GET(request: NextRequest) {
     }
 
     const employees = await prisma.employee.findMany({
-      where: { hrStatus: { in: ["ACTIVE", "PROBATION"] } },
+      where: workforceEmployeeWhere(),
       select: {
         id: true,
         name: true,
@@ -40,12 +41,22 @@ export async function GET(request: NextRequest) {
 
     const employeeIds = employees.map((item) => item.id);
 
-    const [schedules, attendanceRecords, approvedLeaves] = await Promise.all([
+    const [schedules, scheduledShifts, attendanceRecords, approvedLeaves] =
+      await Promise.all([
       prisma.workSchedule.findMany({
         where: {
           employeeId: { in: employeeIds },
           workDate: { gte: from, lte: to },
           status: "ASSIGNED",
+        },
+        include: { shiftTemplate: { select: { name: true } } },
+      }),
+      prisma.scheduledShift.findMany({
+        where: {
+          employeeId: { in: employeeIds },
+          workDate: { gte: from, lte: to },
+          status: { in: ["SCHEDULED", "COMPLETED", "ABSENT", "LEAVE"] },
+          schedulePeriod: { status: { in: ["PUBLISHED", "CLOSED"] } },
         },
         include: { shiftTemplate: { select: { name: true } } },
       }),
@@ -66,11 +77,19 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
-    const dailyStatusRows = buildDailyStatusRows({
-      employeeIds,
-      fromKey,
-      toKey,
-      schedules: schedules.map((item) => ({
+    const scheduleRows = [
+      ...scheduledShifts.map((item) => ({
+        employeeId: item.employeeId,
+        workDate: item.workDate,
+        isDayOff: false,
+        status: item.status === "LEAVE" ? "ASSIGNED" : item.status,
+        shiftTemplateId: item.shiftTemplateId,
+        shiftName: item.shiftTemplate?.name ?? "กะตามตาราง",
+        startsAt: item.plannedStart,
+        endsAt: item.plannedEnd,
+        priority: 2,
+      })),
+      ...schedules.map((item) => ({
         employeeId: item.employeeId,
         workDate: item.workDate,
         isDayOff: item.isDayOff,
@@ -79,7 +98,15 @@ export async function GET(request: NextRequest) {
         shiftName: item.shiftTemplate?.name ?? null,
         startsAt: item.startsAt,
         endsAt: item.endsAt,
+        priority: 1,
       })),
+    ].sort((a, b) => b.priority - a.priority);
+
+    const dailyStatusRows = buildDailyStatusRows({
+      employeeIds,
+      fromKey,
+      toKey,
+      schedules: scheduleRows,
       attendanceRecords: attendanceRecords.map((item) => ({
         employeeId: item.employeeId,
         workDate: item.workDate,

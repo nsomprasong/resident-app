@@ -5,6 +5,8 @@ export type PayrollSettingsMap = {
   holidayMultiplier: number;
   lateDeductionPerMinute: number;
   standardWorkMinutesPerDay: number;
+  /** ตัวหาร prorate เงินเดือนรายเดือน (เช่น 30 = ครึ่งเดือน 15 วัน ≈ 50%) */
+  standardDaysPerMonth: number;
   /** Business payday (1–31). Employee forms no longer override this. */
   payDayOfMonth: number;
 };
@@ -14,6 +16,7 @@ export const DEFAULT_PAYROLL_SETTINGS: PayrollSettingsMap = {
   holidayMultiplier: 2,
   lateDeductionPerMinute: 0,
   standardWorkMinutesPerDay: 480,
+  standardDaysPerMonth: 30,
   payDayOfMonth: 25,
 };
 
@@ -39,6 +42,11 @@ export const PAYROLL_SETTING_DEFS = [
     defaultValue: String(DEFAULT_PAYROLL_SETTINGS.standardWorkMinutesPerDay),
   },
   {
+    key: "standard_days_per_month",
+    labelTh: "จำนวนวันต่อเดือนสำหรับ prorate เงินเดือน",
+    defaultValue: String(DEFAULT_PAYROLL_SETTINGS.standardDaysPerMonth),
+  },
+  {
     key: "pay_day_of_month",
     labelTh: "วันจ่ายเงินเดือนของกิจการ",
     defaultValue: String(DEFAULT_PAYROLL_SETTINGS.payDayOfMonth),
@@ -59,6 +67,10 @@ export function parsePayrollSettings(
     }
     if (row.key === "standard_work_minutes_per_day") {
       map.standardWorkMinutesPerDay = value;
+    }
+    if (row.key === "standard_days_per_month") {
+      const days = Math.trunc(value);
+      if (days >= 1 && days <= 31) map.standardDaysPerMonth = days;
     }
     if (row.key === "pay_day_of_month") {
       const day = Math.trunc(value);
@@ -96,6 +108,8 @@ export type CompensationLike = {
   mealAllowance: number;
   housingAllowance: number;
   travelAllowance: number;
+  /** Employee.otHourlyRate when set — preferred OT rate for pay + snapshot. */
+  otHourlyRate?: number | null;
 };
 
 export type AttendanceAgg = {
@@ -147,6 +161,11 @@ export type PayrollCalcResult = {
   absentDays: number;
   unpaidLeaveDays: number;
   lateMinutes: number;
+  hourlyRateSnapshot: number;
+  otHourlyRateSnapshot: number;
+  otMultiplierSnapshot: number;
+  dailyRateSnapshot: number;
+  monthlySalarySnapshot: number;
 };
 
 function effectiveHourlyRate(comp: CompensationLike): number {
@@ -161,28 +180,50 @@ function effectiveHourlyRate(comp: CompensationLike): number {
   return 0;
 }
 
+function salaryMonthDayDivisor(
+  settings: PayrollSettingsMap,
+  monthDays: number,
+): number {
+  const std = settings.standardDaysPerMonth;
+  if (std > 0) return std;
+  return monthDays > 0 ? monthDays : 30;
+}
+
 export function calculatePayrollEntry(input: PayrollCalcInput): PayrollCalcResult {
   const { compensation: comp, attendance, leave, adjustments, settings } = input;
   const hourly = effectiveHourlyRate(comp);
+  const otMultiplier = settings.otMultiplier;
+  const otHourly =
+    comp.otHourlyRate != null && comp.otHourlyRate > 0
+      ? comp.otHourlyRate
+      : money(hourly * otMultiplier);
   const dayMinutes = settings.standardWorkMinutesPerDay || 480;
+  const monthDivisor = salaryMonthDayDivisor(settings, input.monthDays);
 
   let basePay = 0;
   if (comp.employmentType === "DAILY") {
     if (comp.dailyRate > 0) {
-      const workedDays = attendance.workedMinutes / dayMinutes;
-      basePay = money(workedDays * comp.dailyRate);
+      // Phase 21: ค่าจ้างพื้นฐาน = วันที่ได้รับรองในรอบ × ค่าแรงรายวัน
+      // (ไม่ prorate จาก workedMinutes — OT แยกตาม otApprovedMinutes)
+      const billableDays = Math.max(
+        0,
+        input.periodCalendarDays -
+          leave.unpaidLeaveDays -
+          attendance.absentDays,
+      );
+      basePay = money(billableDays * comp.dailyRate);
     } else {
       basePay = money((attendance.workedMinutes / 60) * hourly);
     }
   } else {
     const ratio =
-      input.monthDays > 0
-        ? Math.min(1, input.periodCalendarDays / input.monthDays)
+      monthDivisor > 0
+        ? Math.min(1, input.periodCalendarDays / monthDivisor)
         : 1;
     basePay = money(comp.monthlySalary * ratio);
   }
 
-  const otPay = money((attendance.otMinutes / 60) * hourly * settings.otMultiplier);
+  const otPay = money((attendance.otMinutes / 60) * otHourly);
   const holidayPay = money(
     (attendance.holidayWorkedMinutes / 60) * hourly * Math.max(0, settings.holidayMultiplier - 1),
   );
@@ -193,25 +234,31 @@ export function calculatePayrollEntry(input: PayrollCalcInput): PayrollCalcResul
       comp.housingAllowance +
       comp.travelAllowance) *
       (comp.employmentType === "MONTHLY"
-        ? Math.min(1, input.periodCalendarDays / Math.max(1, input.monthDays))
+        ? Math.min(1, input.periodCalendarDays / Math.max(1, monthDivisor))
         : attendance.workedMinutes > 0
           ? 1
           : 0),
   );
 
-  const unpaidLeaveDeduction = money(
-    leave.unpaidLeaveDays *
-      (comp.employmentType === "DAILY"
-        ? comp.dailyRate || hourly * (dayMinutes / 60)
-        : comp.monthlySalary / Math.max(1, input.monthDays)),
-  );
+  const unpaidLeaveDeduction =
+    comp.employmentType === "DAILY" && comp.dailyRate > 0
+      ? 0
+      : money(
+          leave.unpaidLeaveDays *
+            (comp.employmentType === "DAILY"
+              ? comp.dailyRate || hourly * (dayMinutes / 60)
+              : comp.monthlySalary / Math.max(1, monthDivisor)),
+        );
 
-  const absenceDeduction = money(
-    attendance.absentDays *
-      (comp.employmentType === "DAILY"
-        ? comp.dailyRate || hourly * (dayMinutes / 60)
-        : comp.monthlySalary / Math.max(1, input.monthDays)),
-  );
+  const absenceDeduction =
+    comp.employmentType === "DAILY" && comp.dailyRate > 0
+      ? 0
+      : money(
+          attendance.absentDays *
+            (comp.employmentType === "DAILY"
+              ? comp.dailyRate || hourly * (dayMinutes / 60)
+              : comp.monthlySalary / Math.max(1, monthDivisor)),
+        );
 
   const lateDeduction = money(
     attendance.lateMinutes * settings.lateDeductionPerMinute,
@@ -251,6 +298,11 @@ export function calculatePayrollEntry(input: PayrollCalcInput): PayrollCalcResul
     absentDays: attendance.absentDays,
     unpaidLeaveDays: leave.unpaidLeaveDays,
     lateMinutes: attendance.lateMinutes,
+    hourlyRateSnapshot: hourly,
+    otHourlyRateSnapshot: otHourly,
+    otMultiplierSnapshot: otMultiplier,
+    dailyRateSnapshot: comp.dailyRate,
+    monthlySalarySnapshot: comp.monthlySalary,
   };
 }
 

@@ -54,6 +54,8 @@ export const permissionThaiLabels = {
   "hr.payroll.calculate": "คำนวณค่าจ้างและเงินเดือน",
   "hr.payroll.approve": "อนุมัติการจ่ายเงิน",
   "hr.payroll.mark_paid": "บันทึกการจ่ายเงินแล้ว",
+  "hr.payroll.adjust": "ปรับยอดค่าจ้าง",
+  "hr.payroll.unlock": "ปลดล็อกรอบค่าจ้าง",
   "hr.document.manage": "จัดการเอกสารพนักงาน",
   "hr.report.view": "ดูรายงานบุคลากร",
   "hr.settings.manage": "ตั้งค่าระบบบุคลากร",

@@ -6,11 +6,13 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useEmployeePermissions } from "@/components/auth/EmployeePermissionsProvider";
 import DateSelector from "@/components/ui/DateSelector";
 import { useConfirmDialog } from "@/hooks/useConfirmDialog";
+import { normalizeUsername } from "@/lib/auth/login-identifier";
 import {
   employeeHrStatuses,
   employeeHrStatusLabels,
   employmentTypeLabels,
   employmentTypes,
+  hrEmployeeValidationFeedback,
   type HrEmployeeRecord,
 } from "@/lib/hr/employees";
 
@@ -115,6 +117,24 @@ function FieldLabel({
   );
 }
 
+function FieldIssue({
+  path,
+  errors,
+}: {
+  path: string;
+  errors: Record<string, string>;
+}) {
+  const message = errors[path];
+  if (!message) return null;
+  return <p className="mt-1 text-xs text-destructive">{message}</p>;
+}
+
+function inputClassName(path: string, errors: Record<string, string>) {
+  return errors[path]
+    ? `${fieldClassName} border-destructive focus:border-destructive focus:ring-destructive/20`
+    : fieldClassName;
+}
+
 export function HrEmployeesManager() {
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const { permissions } = useEmployeePermissions();
@@ -138,6 +158,9 @@ export function HrEmployeesManager() {
   } | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+  const [formFieldErrors, setFormFieldErrors] = useState<Record<string, string>>(
+    {},
+  );
   const [roleOptions, setRoleOptions] = useState<RoleOption[]>([]);
   const [shiftTemplateOptions, setShiftTemplateOptions] = useState<
     ShiftTemplateOption[]
@@ -216,6 +239,7 @@ export function HrEmployeesManager() {
     setEditingMeta(null);
     setForm(emptyForm);
     setFormError("");
+    setFormFieldErrors({});
     setModalOpen(true);
   }
 
@@ -251,17 +275,20 @@ export function HrEmployeesManager() {
       bankAccountNumber: item.bankAccountNumber ?? "",
       promptPay: item.promptPay ?? "",
       otHourlyRate: item.otHourlyRate !== null ? String(item.otHourlyRate) : "",
-      dailyRate: "",
-      monthlySalary: "",
+      dailyRate: item.dailyRate != null ? String(item.dailyRate) : "",
+      monthlySalary:
+        item.monthlySalary != null ? String(item.monthlySalary) : "",
       compensationEffectiveFrom: "",
     });
     setFormError("");
+    setFormFieldErrors({});
     setModalOpen(true);
   }
 
   async function save() {
     setSaving(true);
     setFormError("");
+    setFormFieldErrors({});
     try {
       const payload: Record<string, unknown> = {
         firstName: form.firstName,
@@ -290,11 +317,11 @@ export function HrEmployeesManager() {
         // Payday is business-level (payroll settings), not per employee.
         payDayOfMonth: null,
       };
+      if (form.dailyRate) payload.dailyRate = Number(form.dailyRate);
+      if (form.monthlySalary) payload.monthlySalary = Number(form.monthlySalary);
       if (!editingId) {
-        payload.username = form.username.trim();
+        payload.username = normalizeUsername(form.username.trim());
         payload.phone = form.phone.trim();
-        if (form.dailyRate) payload.dailyRate = Number(form.dailyRate);
-        if (form.monthlySalary) payload.monthlySalary = Number(form.monthlySalary);
         if (form.compensationEffectiveFrom) {
           payload.compensationEffectiveFrom = form.compensationEffectiveFrom;
         }
@@ -309,10 +336,14 @@ export function HrEmployeesManager() {
       );
       const body = (await response.json().catch(() => null)) as {
         message?: string;
+        issues?: Array<{ path: string; message: string }>;
       } | null;
       if (!response.ok) {
-        throw new Error(body?.message ?? "บันทึกไม่สำเร็จ");
+        const feedback = hrEmployeeValidationFeedback(body ?? {});
+        setFormFieldErrors(feedback.byPath);
+        throw new Error(feedback.summary);
       }
+      setFormFieldErrors({});
       setModalOpen(false);
       await load();
     } catch (saveError) {
@@ -555,8 +586,9 @@ export function HrEmployeesManager() {
                           firstName: event.target.value,
                         }))
                       }
-                      className={fieldClassName}
+                      className={inputClassName("firstName", formFieldErrors)}
                     />
+                    <FieldIssue path="firstName" errors={formFieldErrors} />
                   </label>
                   <label>
                     <FieldLabel>นามสกุล</FieldLabel>
@@ -568,8 +600,9 @@ export function HrEmployeesManager() {
                           lastName: event.target.value,
                         }))
                       }
-                      className={fieldClassName}
+                      className={inputClassName("lastName", formFieldErrors)}
                     />
+                    <FieldIssue path="lastName" errors={formFieldErrors} />
                   </label>
                   <label>
                     <FieldLabel hint="ไม่บังคับ">ชื่อเล่น</FieldLabel>
@@ -606,6 +639,7 @@ export function HrEmployeesManager() {
                         setForm((current) => ({ ...current, birthDate }))
                       }
                     />
+                    <FieldIssue path="birthDate" errors={formFieldErrors} />
                   </label>
                   <label className="sm:col-span-2">
                     <FieldLabel hint="ไม่บังคับ">ที่อยู่</FieldLabel>
@@ -683,15 +717,19 @@ export function HrEmployeesManager() {
                     <input
                       required={!editingId}
                       value={form.username}
+                      autoComplete="off"
+                      autoCorrect="off"
+                      spellCheck={false}
                       onChange={(event) =>
                         setForm((current) => ({
                           ...current,
                           username: event.target.value,
                         }))
                       }
-                      className={fieldClassName}
-                      placeholder="เช่น somchai.w"
+                      className={inputClassName("username", formFieldErrors)}
+                      placeholder="เช่น nonza (a-z 0-9 . _ - 3–40 ตัว)"
                     />
+                    <FieldIssue path="username" errors={formFieldErrors} />
                   </label>
                   <label>
                     <FieldLabel>{`เบอร์โทรศัพท์${editingId ? "" : " *"}`}</FieldLabel>
@@ -704,9 +742,10 @@ export function HrEmployeesManager() {
                           phone: event.target.value,
                         }))
                       }
-                      className={fieldClassName}
-                      placeholder="08xxxxxxxx"
+                      className={inputClassName("phone", formFieldErrors)}
+                      placeholder="08xxxxxxxx หรือ 668xxxxxxxx"
                     />
+                    <FieldIssue path="phone" errors={formFieldErrors} />
                   </label>
                   <label className="sm:col-span-2">
                     <FieldLabel hint="ไม่บังคับ">อีเมล</FieldLabel>
@@ -720,12 +759,13 @@ export function HrEmployeesManager() {
                           email: event.target.value,
                         }))
                       }
-                      className={`${fieldClassName} ${
+                      className={`${inputClassName("email", formFieldErrors)} ${
                         editingMeta?.email
                           ? "bg-muted text-muted-foreground"
                           : ""
                       }`}
                     />
+                    <FieldIssue path="email" errors={formFieldErrors} />
                     <span className="mt-1.5 block text-xs text-muted-foreground">
                       {editingMeta?.email
                         ? "บัญชีเดิมนี้ยังใช้ Email สำหรับเข้าสู่ระบบ"
@@ -751,7 +791,7 @@ export function HrEmployeesManager() {
                             roleId: event.target.value,
                           }))
                         }
-                        className={fieldClassName}
+                        className={inputClassName("roleId", formFieldErrors)}
                       >
                         <option value="">ไม่กำหนด</option>
                         {roleOptions
@@ -762,6 +802,7 @@ export function HrEmployeesManager() {
                             </option>
                           ))}
                       </select>
+                      <FieldIssue path="roleId" errors={formFieldErrors} />
                     </label>
                   ) : null}
                   <label>
@@ -774,7 +815,7 @@ export function HrEmployeesManager() {
                           hrStatus: event.target.value,
                         }))
                       }
-                      className={fieldClassName}
+                      className={inputClassName("hrStatus", formFieldErrors)}
                     >
                       {employeeHrStatuses.map((status) => (
                         <option key={status} value={status}>
@@ -782,6 +823,7 @@ export function HrEmployeesManager() {
                         </option>
                       ))}
                     </select>
+                    <FieldIssue path="hrStatus" errors={formFieldErrors} />
                   </label>
                   {editingMeta ? (
                     <div className="sm:col-span-2 rounded-xl border border-border bg-muted/50 px-3.5 py-3 text-xs text-muted-foreground">
@@ -824,7 +866,7 @@ export function HrEmployeesManager() {
                             | "MONTHLY",
                         }))
                       }
-                      className={fieldClassName}
+                      className={inputClassName("employmentType", formFieldErrors)}
                     >
                       {employmentTypes.map((type) => (
                         <option key={type} value={type}>
@@ -832,6 +874,7 @@ export function HrEmployeesManager() {
                         </option>
                       ))}
                     </select>
+                    <FieldIssue path="employmentType" errors={formFieldErrors} />
                   </label>
                   <label>
                     <FieldLabel>กะประจำ</FieldLabel>
@@ -843,7 +886,10 @@ export function HrEmployeesManager() {
                           defaultShiftTemplateId: event.target.value,
                         }))
                       }
-                      className={fieldClassName}
+                      className={inputClassName(
+                        "defaultShiftTemplateId",
+                        formFieldErrors,
+                      )}
                     >
                       <option value="">ไม่กำหนด</option>
                       {shiftTemplateOptions
@@ -855,6 +901,14 @@ export function HrEmployeesManager() {
                           </option>
                         ))}
                     </select>
+                    <FieldIssue
+                      path="defaultShiftTemplateId"
+                      errors={formFieldErrors}
+                    />
+                    <span className="mt-1 block text-xs text-muted-foreground">
+                      ใช้เป็นค่าเริ่มต้นเมื่อสร้างตารางงานใหม่เท่านั้น
+                      การเปลี่ยนกะรายวันให้จัดที่เมนู “ตารางงาน”
+                    </span>
                   </label>
                   <label>
                     <FieldLabel hint="ไม่บังคับ">วันที่เริ่มงาน</FieldLabel>
@@ -864,6 +918,7 @@ export function HrEmployeesManager() {
                         setForm((current) => ({ ...current, hiredAt }))
                       }
                     />
+                    <FieldIssue path="hiredAt" errors={formFieldErrors} />
                   </label>
                   <label>
                     <FieldLabel hint="ไม่บังคับ">สาขา/จุดบริการ</FieldLabel>
@@ -900,60 +955,74 @@ export function HrEmployeesManager() {
                           otHourlyRate: event.target.value,
                         }))
                       }
-                      className={fieldClassName}
+                      className={inputClassName("otHourlyRate", formFieldErrors)}
+                    />
+                    <FieldIssue path="otHourlyRate" errors={formFieldErrors} />
+                  </label>
+                  <label>
+                    <FieldLabel>
+                      {form.employmentType === "DAILY"
+                        ? "ค่าจ้างต่อวัน"
+                        : "เงินเดือน"}
+                    </FieldLabel>
+                    {form.employmentType === "DAILY" ? (
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={form.dailyRate}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            dailyRate: event.target.value,
+                          }))
+                        }
+                        className={inputClassName("dailyRate", formFieldErrors)}
+                      />
+                    ) : (
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={form.monthlySalary}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            monthlySalary: event.target.value,
+                          }))
+                        }
+                        className={inputClassName(
+                          "monthlySalary",
+                          formFieldErrors,
+                        )}
+                      />
+                    )}
+                    <FieldIssue
+                      path={
+                        form.employmentType === "DAILY"
+                          ? "dailyRate"
+                          : "monthlySalary"
+                      }
+                      errors={formFieldErrors}
                     />
                   </label>
                   {!editingId ? (
-                    <>
-                      <label>
-                        <FieldLabel>
-                          {form.employmentType === "DAILY"
-                            ? "ค่าจ้างต่อวัน"
-                            : "เงินเดือน"}
-                        </FieldLabel>
-                        {form.employmentType === "DAILY" ? (
-                          <input
-                            type="number"
-                            min={0}
-                            step="0.01"
-                            value={form.dailyRate}
-                            onChange={(event) =>
-                              setForm((current) => ({
-                                ...current,
-                                dailyRate: event.target.value,
-                              }))
-                            }
-                            className={fieldClassName}
-                          />
-                        ) : (
-                          <input
-                            type="number"
-                            min={0}
-                            step="0.01"
-                            value={form.monthlySalary}
-                            onChange={(event) =>
-                              setForm((current) => ({
-                                ...current,
-                                monthlySalary: event.target.value,
-                              }))
-                            }
-                            className={fieldClassName}
-                          />
-                        )}
-                      </label>
-                      <label className="sm:col-span-2">
-                        <FieldLabel>มีผลตั้งแต่วันที่</FieldLabel>
-                        <DateSelector
-                          date={form.compensationEffectiveFrom}
-                          setDate={(compensationEffectiveFrom) =>
-                            setForm((current) => ({
-                              ...current,
-                              compensationEffectiveFrom,
-                            }))
-                          }
-                        />
-                      </label>
-                    </>
+                    <label className="sm:col-span-2">
+                      <FieldLabel>มีผลตั้งแต่วันที่</FieldLabel>
+                      <DateSelector
+                        date={form.compensationEffectiveFrom}
+                        setDate={(compensationEffectiveFrom) =>
+                          setForm((current) => ({
+                            ...current,
+                            compensationEffectiveFrom,
+                          }))
+                        }
+                      />
+                      <FieldIssue
+                        path="compensationEffectiveFrom"
+                        errors={formFieldErrors}
+                      />
+                    </label>
                   ) : null}
                 </div>
               </section>
@@ -1021,7 +1090,10 @@ export function HrEmployeesManager() {
 
             <div className="border-t border-border bg-surface px-5 py-4 sm:px-6">
               {formError ? (
-                <p className="mb-3 text-sm text-destructive" role="alert">
+                <p
+                  className="mb-3 whitespace-pre-line text-sm text-destructive"
+                  role="alert"
+                >
                   {formError}
                 </p>
               ) : null}

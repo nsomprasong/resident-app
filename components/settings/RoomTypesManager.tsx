@@ -1,9 +1,14 @@
 "use client";
 
-import { Pencil, Plus } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { BedDouble, Pencil, Plus, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useConfirmDialog } from "@/hooks/useConfirmDialog";
+import {
+  BED_LAYOUTS,
+  resolveBedLayout,
+  type BedLayout,
+} from "@/lib/settings/bed-types";
 import type { RoomTypeRecord } from "@/lib/settings/room-types";
 
 type FormState = {
@@ -14,13 +19,25 @@ type FormState = {
   bedType: string;
 };
 
-const emptyForm: FormState = {
-  name: "",
-  description: "",
-  basePrice: "",
-  capacity: "2",
-  bedType: "",
+const DEFAULT_PRICES: Record<BedLayout["code"], number> = {
+  SINGLE: 900,
+  DOUBLE: 1200,
+  TRIPLE: 1600,
+  QUAD: 2000,
+  DORM: 4800,
 };
+
+function emptyFormFor(layout: BedLayout): FormState {
+  return {
+    name: layout.label,
+    description: `ห้อง${layout.label} สำหรับ ${layout.capacity} ท่าน`,
+    basePrice: String(DEFAULT_PRICES[layout.code]),
+    capacity: String(layout.capacity),
+    bedType: layout.label,
+  };
+}
+
+const emptyForm: FormState = emptyFormFor(BED_LAYOUTS[1]!);
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("th-TH", {
@@ -40,6 +57,7 @@ export function RoomTypesManager() {
   const [items, setItems] = useState<RoomTypeRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -73,21 +91,32 @@ export function RoomTypesManager() {
     void loadItems();
   }, [loadItems]);
 
-  const openCreate = () => {
+  const existingByBed = useMemo(() => {
+    const map = new Map<string, RoomTypeRecord>();
+    for (const item of items) {
+      const layout = resolveBedLayout(item.bedType, item.capacity);
+      if (!layout) continue;
+      if (!map.has(layout.code)) map.set(layout.code, item);
+    }
+    return map;
+  }, [items]);
+
+  const openCreate = (layout?: BedLayout) => {
     setEditingId(null);
-    setForm(emptyForm);
+    setForm(layout ? emptyFormFor(layout) : emptyForm);
     setFormError("");
     setModalOpen(true);
   };
 
   const openEdit = (item: RoomTypeRecord) => {
+    const layout = resolveBedLayout(item.bedType, item.capacity);
     setEditingId(item.id);
     setForm({
       name: item.name,
       description: item.description ?? "",
       basePrice: String(item.basePrice),
       capacity: String(item.capacity),
-      bedType: item.bedType ?? "",
+      bedType: layout?.label ?? "เตียงคู่",
     });
     setFormError("");
     setModalOpen(true);
@@ -102,6 +131,7 @@ export function RoomTypesManager() {
     event.preventDefault();
     setSaving(true);
     setFormError("");
+    setMessage("");
     try {
       const payload = {
         name: form.name.trim(),
@@ -122,18 +152,56 @@ export function RoomTypesManager() {
 
       const body = (await response.json()) as RoomTypeRecord | ApiErrorBody;
       if (!response.ok) {
-        const message =
-          !("id" in body) && body.message
-            ? body.message
-            : "บันทึกไม่สำเร็จ";
-        setFormError(message);
+        const messageText =
+          !("id" in body) && body.message ? body.message : "บันทึกไม่สำเร็จ";
+        setFormError(messageText);
         return;
       }
 
       setModalOpen(false);
+      setMessage(editingId ? "แก้ไขประเภทห้องแล้ว" : "เพิ่มประเภทห้องแล้ว");
       await loadItems();
     } catch {
       setFormError("บันทึกไม่สำเร็จ");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const quickAdd = async (layout: BedLayout) => {
+    const existing = existingByBed.get(layout.code);
+    if (existing) {
+      openEdit(existing);
+      return;
+    }
+    setSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      const draft = emptyFormFor(layout);
+      const response = await fetch("/api/room-types", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: draft.name,
+          description: draft.description,
+          basePrice: Number(draft.basePrice),
+          capacity: layout.capacity,
+          bedType: layout.label,
+        }),
+      });
+      const body = (await response.json()) as RoomTypeRecord | ApiErrorBody;
+      if (!response.ok) {
+        throw new Error(
+          !("id" in body) && body.message
+            ? body.message
+            : `เพิ่ม${layout.label}ไม่สำเร็จ`,
+        );
+      }
+      setMessage(`เพิ่มประเภท “${layout.label}” แล้ว`);
+      await loadItems();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "เพิ่มไม่สำเร็จ");
     } finally {
       setSaving(false);
     }
@@ -177,83 +245,177 @@ export function RoomTypesManager() {
     }
   };
 
+  const deleteItem = async (item: RoomTypeRecord) => {
+    const confirmed = await confirm({
+      title: `ลบประเภทห้อง “${item.name}”?`,
+      description: "ลบได้เฉพาะเมื่อยังไม่มีห้องใช้ประเภทนี้",
+      confirmLabel: "ลบ",
+      tone: "danger",
+    });
+    if (!confirmed) return;
+
+    setSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      const response = await fetch(`/api/room-types/${item.id}`, {
+        method: "DELETE",
+      });
+      const body = (await response.json().catch(() => null)) as ApiErrorBody | null;
+      if (!response.ok) {
+        throw new Error(body?.message ?? "ลบไม่สำเร็จ");
+      }
+      setMessage(`ลบประเภท “${item.name}” แล้ว`);
+      await loadItems();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "ลบไม่สำเร็จ");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <div className="mt-4">
+    <div className="space-y-5">
       {confirmDialog}
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <p className="text-sm font-medium text-foreground">ประเภทห้อง</p>
-        <button
-          type="button"
-          onClick={openCreate}
-          className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-        >
-          <Plus size={16} />
-          เพิ่ม
-        </button>
+
+      <div className="rounded-3xl border border-border bg-gradient-to-br from-primary/8 via-surface to-secondary/10 p-4 sm:p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium text-primary">ประเภทห้อง / เตียง</p>
+            <h2 className="mt-1 text-xl font-semibold text-foreground">
+              จัดการเตียงเดี่ยว · คู่ · 3 เตียง · 4 เตียง · บ้านรวมพัก 12 คน
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              เพิ่มหรือลบประเภทห้องตรงนี้ แล้วไปเมนูห้องพักเพื่อผูกกับเลขห้อง
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => openCreate()}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            <Plus size={16} />
+            เพิ่มประเภทอื่น
+          </button>
+        </div>
+
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          {BED_LAYOUTS.map((layout) => {
+            const existing = existingByBed.get(layout.code);
+            return (
+              <button
+                key={layout.code}
+                type="button"
+                disabled={saving}
+                onClick={() => void quickAdd(layout)}
+                className={`rounded-2xl border px-3 py-3 text-left transition hover:border-primary/40 hover:bg-background disabled:opacity-50 ${
+                  existing
+                    ? "border-success/40 bg-success/10"
+                    : "border-border bg-surface"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary/10 text-primary">
+                    <BedDouble size={16} />
+                  </span>
+                  <div>
+                    <p className="font-medium text-foreground">{layout.label}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {existing
+                        ? `มีแล้ว · ${formatCurrency(existing.basePrice)}`
+                        : `เพิ่มด่วน · ${layout.capacity} คน`}
+                    </p>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {loading ? (
         <p className="text-sm text-muted-foreground">กำลังโหลดประเภทห้อง...</p>
       ) : null}
       {error ? (
-        <p className="mb-2 text-sm text-destructive" role="alert">
+        <p className="rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">
           {error}
         </p>
       ) : null}
+      {message ? (
+        <p className="rounded-2xl border border-success/30 bg-success/10 px-4 py-3 text-sm text-success">
+          {message}
+        </p>
+      ) : null}
       {!loading && items.length === 0 ? (
-        <p className="text-sm text-muted-foreground">ยังไม่มีประเภทห้อง</p>
+        <p className="rounded-3xl border border-dashed border-border bg-surface p-8 text-center text-sm text-muted-foreground">
+          ยังไม่มีประเภทห้อง — กดปุ่มเตียงด้านบนเพื่อเพิ่ม 4 แบบหลัก
+        </p>
       ) : null}
 
       <div className="space-y-2">
-        {items.map((type) => (
-          <div
-            key={type.id}
-            className={`rounded-2xl border p-3 ${
-              type.isActive
-                ? "border-border"
-                : "border-border bg-background opacity-80"
-            }`}
-          >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <p className="font-medium text-foreground">{type.name}</p>
-                  {!type.isActive ? (
-                    <span className="rounded-full bg-border px-2 py-0.5 text-xs text-muted-foreground">
-                      ปิดใช้งาน
+        {items.map((type) => {
+          const layout = resolveBedLayout(type.bedType, type.capacity);
+          return (
+            <div
+              key={type.id}
+              className={`rounded-2xl border p-3 ${
+                type.isActive
+                  ? "border-border bg-surface"
+                  : "border-border bg-background opacity-80"
+              }`}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-medium text-foreground">{type.name}</p>
+                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                      {layout?.label ?? type.bedType ?? "ไม่ระบุเตียง"}
                     </span>
-                  ) : null}
+                    {!type.isActive ? (
+                      <span className="rounded-full bg-border px-2 py-0.5 text-xs text-muted-foreground">
+                        ปิดใช้งาน
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    ความจุ {type.capacity} คน
+                    {type.description ? ` · ${type.description}` : ""}
+                  </p>
                 </div>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  ความจุ {type.capacity} คน
-                  {type.bedType ? ` · ${type.bedType}` : ""}
-                  {type.description ? ` · ${type.description}` : ""}
+                <p className="text-sm font-medium text-primary">
+                  {formatCurrency(type.basePrice)}
                 </p>
               </div>
-              <p className="text-sm font-medium text-primary">
-                {formatCurrency(type.basePrice)}
-              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => openEdit(type)}
+                  className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+                >
+                  <Pencil size={14} />
+                  แก้ไข
+                </button>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => void toggleActive(type)}
+                  className="rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50"
+                >
+                  {type.isActive ? "ปิดใช้งาน" : "เปิดใช้งาน"}
+                </button>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => void deleteItem(type)}
+                  className="inline-flex items-center gap-1 rounded-lg border border-destructive/30 px-2.5 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50"
+                >
+                  <Trash2 size={14} />
+                  ลบ
+                </button>
+              </div>
             </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => openEdit(type)}
-                className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-surface-muted"
-              >
-                <Pencil size={14} />
-                แก้ไข
-              </button>
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() => void toggleActive(type)}
-                className="rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-surface-muted disabled:opacity-50"
-              >
-                {type.isActive ? "ปิดใช้งาน" : "เปิดใช้งาน"}
-              </button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {modalOpen ? (
@@ -333,16 +495,34 @@ export function RoomTypesManager() {
               </div>
               <label className="block text-sm">
                 ประเภทเตียง
-                <input
+                <select
+                  required
                   value={form.bedType}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    const bedType = e.target.value;
+                    const layout = resolveBedLayout(bedType);
                     setForm((current) => ({
                       ...current,
-                      bedType: e.target.value,
-                    }))
-                  }
+                      bedType,
+                      // Suggest default capacity for the bed type; user can still edit
+                      capacity: layout
+                        ? String(layout.capacity)
+                        : current.capacity,
+                      name:
+                        !editingId &&
+                        BED_LAYOUTS.some((item) => item.label === current.name)
+                          ? bedType
+                          : current.name,
+                    }));
+                  }}
                   className="mt-1 w-full rounded-xl border border-border px-3 py-2"
-                />
+                >
+                  {BED_LAYOUTS.map((layout) => (
+                    <option key={layout.code} value={layout.label}>
+                      {layout.label} (แนะนำ {layout.capacity} คน)
+                    </option>
+                  ))}
+                </select>
               </label>
               {formError ? (
                 <p className="text-sm text-destructive" role="alert">

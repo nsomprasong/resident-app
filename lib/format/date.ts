@@ -70,6 +70,13 @@ export function formatThaiTime(
   return `${pad2(parts.hour)}:${pad2(parts.minute)}`;
 }
 
+/** เวลากะ/ลงเวลา HR — เก็บเป็น wall-clock บน UTC (เช่น 08:00Z = 08:00 น.) */
+export function formatShiftWallClockTime(
+  value: string | Date | null | undefined,
+): string {
+  return formatThaiTime(value, { timeZone: "UTC" });
+}
+
 /** วันเดือนปี + เวลา → วว/ดด/ปปปป ชม:นท */
 export function formatThaiDateTime(
   value: string | Date | null | undefined,

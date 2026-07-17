@@ -45,6 +45,7 @@ const protectedHandlers = [
   { method: "GET", path: "/api/room-types" },
   { method: "POST", path: "/api/room-types" },
   { method: "PATCH", path: "/api/room-types/" + id },
+  { method: "DELETE", path: "/api/room-types/" + id },
   { method: "GET", path: "/api/zones" },
   { method: "POST", path: "/api/zones" },
   { method: "PATCH", path: "/api/zones/" + id },

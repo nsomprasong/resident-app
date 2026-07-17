@@ -74,3 +74,61 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return apiErrorResponse("อัปเดตประเภทห้องไม่สำเร็จ", 500, "INTERNAL_ERROR");
   }
 }
+
+export async function DELETE(_request: NextRequest, context: RouteContext) {
+  try {
+    const { roomTypeId } = await context.params;
+    if (!isUuid(roomTypeId)) {
+      return apiErrorResponse("ไม่พบประเภทห้อง", 404, "NOT_FOUND");
+    }
+
+    const currentUser = await getCurrentUser();
+    const existing = await prisma.roomType.findUnique({
+      where: { id: roomTypeId },
+      include: { _count: { select: { rooms: true } } },
+    });
+    if (!existing) {
+      return apiErrorResponse("ไม่พบประเภทห้อง", 404, "NOT_FOUND");
+    }
+
+    if (existing._count.rooms > 0) {
+      return apiErrorResponse(
+        `ลบไม่ได้ เพราะยังมีห้อง ${existing._count.rooms} ห้องใช้ประเภทนี้ — ย้ายหรือลบห้องก่อน`,
+        409,
+        "ROOM_TYPE_IN_USE",
+      );
+    }
+
+    await prisma.roomType.delete({ where: { id: roomTypeId } });
+
+    await recordAuditLog({
+      actor: {
+        employeeId: currentUser?.employee?.id,
+        authUserId: currentUser?.user.id,
+      },
+      action: "ROOM_TYPE_DELETED",
+      entityType: "ROOM_TYPE",
+      entityId: roomTypeId,
+      metadata: {
+        name: existing.name,
+        bedType: existing.bedType,
+        capacity: existing.capacity,
+      },
+    });
+
+    return NextResponse.json({ ok: true, id: roomTypeId });
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2003"
+    ) {
+      return apiErrorResponse(
+        "ลบไม่ได้ เพราะยังมีข้อมูลที่อ้างอิงประเภทห้องนี้",
+        409,
+        "DEPENDENCY_BLOCKED",
+      );
+    }
+    console.error("DELETE /api/room-types/[roomTypeId] failed", error);
+    return apiErrorResponse("ลบประเภทห้องไม่สำเร็จ", 500, "INTERNAL_ERROR");
+  }
+}

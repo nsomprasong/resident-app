@@ -68,12 +68,6 @@ const dailyCards: MenuCard[] = [
     icon: House,
   },
   {
-    title: "ซูเปอร์มาร์เก็ต",
-    description: "ขายหน้าร้าน จัดการสินค้า สต๊อก และกะเงินสด",
-    href: "/pos",
-    icon: ShoppingCart,
-  },
-  {
     title: "บัญชีและแดชบอร์ด",
     description: "ภาพรวมรายได้และการเข้าพัก",
     href: "/dashboard",
@@ -84,6 +78,15 @@ const dailyCards: MenuCard[] = [
     description: "รายงานสรุปการดำเนินงาน",
     href: "/report",
     icon: ClipboardList,
+  },
+];
+
+const supermarketCards: MenuCard[] = [
+  {
+    title: "ซูเปอร์มาร์เก็ต",
+    description: "ขายหน้าร้าน จัดการสินค้า สต๊อก และกะเงินสด",
+    href: "/pos",
+    icon: ShoppingCart,
   },
 ];
 
@@ -184,11 +187,17 @@ export default async function Home() {
   const visibleDaily = dailyCards.filter((card) =>
     canAccessPageWithPermissions(permissions, card.href),
   );
+  const visibleSupermarket = supermarketCards.filter((card) =>
+    canAccessPageWithPermissions(permissions, card.href),
+  );
   const visibleSystem = systemCards.filter((card) =>
     canAccessPageWithPermissions(permissions, card.href),
   );
   const hasAny =
-    visibleDaily.length > 0 || visibleSystem.length > 0 || hrCards.length > 0;
+    visibleDaily.length > 0 ||
+    visibleSupermarket.length > 0 ||
+    visibleSystem.length > 0 ||
+    hrCards.length > 0;
 
   return (
     <div className="mx-auto max-w-6xl space-y-8 p-4 sm:p-8">
@@ -231,8 +240,13 @@ export default async function Home() {
         <div className="space-y-8">
           <MenuSection
             title="งานประจำวัน"
-            description="จอง อาหาร แม่บ้าน ซูเปอร์มาร์เก็ต และรายงาน"
+            description="จอง อาหาร ครัว แม่บ้าน และรายงาน"
             items={visibleDaily}
+          />
+          <MenuSection
+            title="ซูเปอร์มาร์เก็ต"
+            description="ขายหน้าร้าน สินค้า สต๊อก และกะเงินสด"
+            items={visibleSupermarket}
           />
           <MenuSection
             title="บริหารพนักงาน"

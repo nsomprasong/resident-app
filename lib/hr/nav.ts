@@ -1,8 +1,11 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  Banknote,
   CalendarDays,
+  ClipboardCheck,
   Clock3,
   LayoutDashboard,
+  Settings2,
   UsersRound,
 } from "lucide-react";
 
@@ -14,11 +17,12 @@ export type HrNavItem = {
   path: string;
   icon: LucideIcon;
   permission: Permission;
+  /** แสดงในเมนูเมื่อมีสิทธิ์ใดสิทธิ์หนึ่ง (ไม่ระบุ = ใช้ permission เดียว) */
+  menuPermissions?: readonly Permission[];
 };
 
 /**
- * Admin HR menu — trimmed to 4 items per Phase 21 (attendance/leave/OT/payroll
- * summary now live as tabs inside "เวลาและค่าจ้าง" instead of separate pages).
+ * Admin HR menu — core HR pages (schedule + time/pay + payroll period summary).
  */
 export const hrNavItems: readonly HrNavItem[] = [
   {
@@ -37,7 +41,7 @@ export const hrNavItems: readonly HrNavItem[] = [
   },
   {
     text: "ตารางงาน",
-    description: "แม่แบบกะและจัดตารางเวรรายสัปดาห์/รายเดือน",
+    description: "ตารางครึ่งเดือน ทำแทน/ควบกะ และประกาศรอบ",
     path: "/hr/schedules",
     icon: CalendarDays,
     permission: "hr.schedule.manage",
@@ -49,10 +53,35 @@ export const hrNavItems: readonly HrNavItem[] = [
     icon: Clock3,
     permission: "hr.attendance.manage",
   },
+  {
+    text: "ตรวจสอบเวลาเข้า–ออก",
+    description: "รายการรอตรวจ มาสาย ไม่ลงออก นอกตาราง และอนุมัติแก้ไข",
+    path: "/hr/attendance-review",
+    icon: ClipboardCheck,
+    permission: "hr.attendance.manage",
+  },
+  {
+    text: "สรุปรอบจ่าย",
+    description: "สร้างรอบ คำนวณ อนุมัติ ล็อก จ่ายแล้ว และส่งออกสลิป/CSV",
+    path: "/hr/payroll",
+    icon: Banknote,
+    permission: "hr.compensation.view",
+  },
+  {
+    text: "ตั้งค่าระบบพนักงาน",
+    description: "แม่แบบกะ สูตรค่าจ้าง และหมุด GPS",
+    path: "/hr/settings",
+    icon: Settings2,
+    permission: "hr.settings.manage",
+    menuPermissions: ["hr.settings.manage", "hr.schedule.manage"],
+  },
 ] as const;
 
 export function filterHrNavItems(permissionCodes: readonly string[]) {
-  return hrNavItems.filter((item) => permissionCodes.includes(item.permission));
+  return hrNavItems.filter((item) => {
+    const required = item.menuPermissions ?? [item.permission];
+    return required.some((code) => permissionCodes.includes(code));
+  });
 }
 
 export type SelfNavItem = {

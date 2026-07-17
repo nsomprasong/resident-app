@@ -13,12 +13,14 @@ import {
   isProtectedSupportEmployeeRecord,
   supportAccountForbiddenResponseMessage,
 } from "@/lib/auth/support-account";
+import { syncActiveEmployeeCompensation } from "@/lib/hr/employee-compensation";
 import {
   buildEmployeeDisplayName,
   isLoginEligibleStatus,
   parseHrEmployeeInput,
   serializeHrEmployee,
 } from "@/lib/hr/employees";
+import { syncMembershipFromDefaultShift } from "@/lib/hr/shift-memberships";
 import { prisma } from "@/lib/prisma";
 import { ensureEmployeeAuthProvisioned } from "@/lib/supabase/admin";
 import { NextRequest, NextResponse } from "next/server";
@@ -28,6 +30,12 @@ const employeeInclude = {
   position: { select: { id: true, name: true } },
   roleRecord: { select: { id: true, displayName: true } },
   defaultShiftTemplate: { select: { id: true, name: true } },
+  compensations: {
+    where: { isActive: true },
+    orderBy: { effectiveFrom: "desc" as const },
+    take: 1,
+    select: { dailyRate: true, monthlySalary: true, hourlyRate: true },
+  },
 } as const;
 
 export async function GET(
@@ -206,6 +214,26 @@ export async function PATCH(
       }
     }
 
+    if (patch.defaultShiftTemplateId) {
+      const template = await prisma.shiftTemplate.findUnique({
+        where: { id: patch.defaultShiftTemplateId },
+        select: { id: true, isActive: true },
+      });
+      if (!template) {
+        return validationErrorResponse("กรุณาตรวจสอบข้อมูลพนักงาน", [
+          { path: "defaultShiftTemplateId", message: "ไม่พบกะที่เลือก" },
+        ]);
+      }
+      if (!template.isActive) {
+        return validationErrorResponse("กรุณาตรวจสอบข้อมูลพนักงาน", [
+          {
+            path: "defaultShiftTemplateId",
+            message: "กะประจำต้องเป็นกะที่ยังใช้งานได้",
+          },
+        ]);
+      }
+    }
+
     const nextIsActive = isLoginEligibleStatus(hrStatus);
     let authUserId = existing.authUserId;
     let mustResetPassword: boolean | undefined;
@@ -246,9 +274,10 @@ export async function PATCH(
       }
     }
 
-    const updated = await prisma.employee.update({
-      where: { id: employeeId },
-      data: {
+    const updated = await prisma.$transaction(async (tx) => {
+      const row = await tx.employee.update({
+        where: { id: employeeId },
+        data: {
         ...(patch.firstName !== undefined ? { firstName: patch.firstName } : {}),
         ...(patch.lastName !== undefined ? { lastName: patch.lastName } : {}),
         ...(patch.nickname !== undefined ? { nickname: patch.nickname } : {}),
@@ -322,6 +351,44 @@ export async function PATCH(
       },
       include: employeeInclude,
     });
+
+      const shouldSyncComp =
+        patch.employmentType !== undefined ||
+        patch.hourlyRate !== undefined ||
+        patch.dailyRate !== undefined ||
+        patch.monthlySalary !== undefined;
+
+      if (shouldSyncComp) {
+        await syncActiveEmployeeCompensation(tx, employeeId, {
+          employmentType: row.employmentType,
+          hourlyRate:
+            patch.hourlyRate !== undefined
+              ? patch.hourlyRate
+              : row.hourlyRate == null
+                ? null
+                : Number(row.hourlyRate),
+          dailyRate: patch.dailyRate,
+          monthlySalary: patch.monthlySalary,
+          effectiveFrom: patch.compensationEffectiveFrom ?? new Date(),
+        });
+      }
+
+      if (shouldSyncComp) {
+        return tx.employee.findUniqueOrThrow({
+          where: { id: employeeId },
+          include: employeeInclude,
+        });
+      }
+
+      return row;
+    });
+
+    if (patch.defaultShiftTemplateId !== undefined) {
+      await syncMembershipFromDefaultShift(
+        updated.id,
+        updated.defaultShiftTemplateId,
+      );
+    }
 
     await recordAuditLog({
       actor: {

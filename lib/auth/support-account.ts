@@ -170,6 +170,34 @@ export function isSystemAdminRoleCode(
   return (roleCode?.trim().toUpperCase() ?? "") === SYSTEM_ADMIN_ROLE_CODE;
 }
 
+/**
+ * Prisma filter: exclude system ADMIN accounts from workforce / payroll.
+ * Admins are system operators, not billable staff.
+ */
+export function excludeSystemAdminEmployeeWhere(): Prisma.EmployeeWhereInput {
+  return {
+    NOT: {
+      roleRecord: { code: SYSTEM_ADMIN_ROLE_CODE },
+    },
+  };
+}
+
+/** Active workforce used for schedules, attendance, and payroll. */
+export function workforceEmployeeWhere(
+  extra: Prisma.EmployeeWhereInput = {},
+): Prisma.EmployeeWhereInput {
+  return {
+    AND: [
+      excludeSystemAdminEmployeeWhere(),
+      {
+        isActive: true,
+        hrStatus: { in: ["ACTIVE", "PROBATION"] },
+      },
+      extra,
+    ],
+  };
+}
+
 export function assertActorMayAssignRoleCode(
   actorEmail: string | null | undefined,
   roleCode: string | null | undefined,

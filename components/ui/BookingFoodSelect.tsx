@@ -10,6 +10,17 @@ export interface BookingFoodItem {
   productId: string;
   quantity: number;
   isExtra?: boolean;
+  /** Selected option labels for kitchen, e.g. "ไก่" or "เส้นแก้ว" */
+  note?: string;
+  /** Override from food set: force / skip option selection */
+  requireOptions?: boolean;
+}
+
+interface ProductOptionGroup {
+  id: string;
+  name: string;
+  isRequired: boolean;
+  options: Array<{ id: string; label: string }>;
 }
 
 interface Product {
@@ -19,6 +30,7 @@ interface Product {
   typeId?: string;
   typeName?: string;
   isMinibar?: boolean;
+  optionGroups?: ProductOptionGroup[];
 }
 
 const PAGE_SIZE = 40;
@@ -89,6 +101,9 @@ export default function BookingFoodSelect({
   }, [query, category]);
 
   const setQuantity = (id: string, value: number) => {
+    const product = productMap.get(id);
+    const needsOption =
+      product?.optionGroups?.some((group) => group.isRequired) ?? false;
     onChange(
       value <= 0
         ? items.filter((item) => item.productId !== id)
@@ -102,6 +117,7 @@ export default function BookingFoodSelect({
                 productId: id,
                 quantity: value,
                 isExtra: allowPackagePricing ? defaultIsExtra : true,
+                ...(needsOption ? { requireOptions: true } : {}),
               },
             ],
     );
@@ -113,6 +129,24 @@ export default function BookingFoodSelect({
         item.productId === id ? { ...item, isExtra } : item,
       ),
     );
+  };
+
+  const setItemNote = (id: string, note: string) => {
+    onChange(
+      items.map((item) =>
+        item.productId === id
+          ? { ...item, note: note.trim() || undefined }
+          : item,
+      ),
+    );
+  };
+
+  const itemNeedsOption = (item: BookingFoodItem, product: Product) => {
+    const groups = product.optionGroups ?? [];
+    if (!groups.length) return false;
+    if (item.requireOptions === true) return true;
+    if (item.requireOptions === false) return false;
+    return groups.some((group) => group.isRequired);
   };
 
   const addFromPicker = (id: string) => {
@@ -252,6 +286,52 @@ export default function BookingFoodSelect({
                           value={isExtra}
                           onChange={(next) => setItemExtra(row.productId, next)}
                         />
+                      </div>
+                    ) : null}
+                    {(row.product.optionGroups?.length ?? 0) > 0 ? (
+                      <div className="space-y-2 border-t border-border/60 pt-2">
+                        {row.product.optionGroups!.map((group) => {
+                          const required = itemNeedsOption(row, row.product);
+                          return (
+                            <div key={group.id} className="space-y-1.5">
+                              <p className="text-xs font-medium text-foreground">
+                                {group.name}
+                                {required ? (
+                                  <span className="text-destructive"> *</span>
+                                ) : (
+                                  <span className="text-muted-foreground">
+                                    {" "}
+                                    (ไม่บังคับ)
+                                  </span>
+                                )}
+                              </p>
+                              <div className="flex flex-wrap gap-2">
+                                {group.options.map((option) => {
+                                  const selected = row.note === option.label;
+                                  return (
+                                    <button
+                                      key={option.id}
+                                      type="button"
+                                      onClick={() =>
+                                        setItemNote(
+                                          row.productId,
+                                          selected ? "" : option.label,
+                                        )
+                                      }
+                                      className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
+                                        selected
+                                          ? "border-primary bg-primary/10 text-primary"
+                                          : "border-border bg-surface text-foreground hover:border-primary/40"
+                                      }`}
+                                    >
+                                      {option.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     ) : null}
                   </div>

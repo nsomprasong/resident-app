@@ -4,10 +4,13 @@ import test from "node:test";
 import {
   canActorAccessSupportEmployee,
   canActorManageSystemAdminRole,
+  excludeSystemAdminEmployeeWhere,
   getProtectedSupportEmails,
   isProtectedSupportEmail,
+  isSystemAdminRoleCode,
   protectedSupportEmployeeListFilter,
   systemAdminRoleListFilter,
+  workforceEmployeeWhere,
 } from "@/lib/auth/support-account";
 
 test("protects configured support emails case-insensitively", () => {
@@ -60,4 +63,21 @@ test("system admin role is hidden from non-support actors", () => {
     NOT: { code: "ADMIN" },
   });
   assert.deepEqual(systemAdminRoleListFilter("nsomprasong@gmail.com"), {});
+});
+
+test("excludes ADMIN role from workforce and payroll queries", () => {
+  assert.equal(isSystemAdminRoleCode("ADMIN"), true);
+  assert.equal(isSystemAdminRoleCode("MANAGER"), false);
+  assert.deepEqual(excludeSystemAdminEmployeeWhere(), {
+    NOT: { roleRecord: { code: "ADMIN" } },
+  });
+  const where = workforceEmployeeWhere();
+  assert.ok(Array.isArray(where.AND));
+  assert.deepEqual(where.AND?.[0], {
+    NOT: { roleRecord: { code: "ADMIN" } },
+  });
+  assert.deepEqual(where.AND?.[1], {
+    isActive: true,
+    hrStatus: { in: ["ACTIVE", "PROBATION"] },
+  });
 });

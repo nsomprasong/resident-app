@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   calculateAttendanceMetrics,
   isDateInLockedPeriod,
+  resolveAttendanceShiftName,
 } from "@/lib/hr/attendance";
 
 describe("hr attendance metrics", () => {
@@ -18,10 +19,23 @@ describe("hr attendance metrics", () => {
     });
     assert.equal(metrics.status, "COMPLETE");
     assert.equal(metrics.breakMinutes, 60);
-    assert.equal(metrics.workedMinutes, 525);
+    assert.equal(metrics.workedMinutes, 465);
     assert.equal(metrics.lateMinutes, 15);
     assert.equal(metrics.earlyLeaveMinutes, 0);
     assert.equal(metrics.otMinutes, 60);
+  });
+
+  it("counts regular work inside shift only (early in / late out)", () => {
+    const metrics = calculateAttendanceMetrics({
+      scheduledStart: new Date("2026-07-01T08:00:00.000Z"),
+      scheduledEnd: new Date("2026-07-01T17:00:00.000Z"),
+      clockIn: new Date("2026-07-01T07:30:00.000Z"),
+      clockOut: new Date("2026-07-01T17:30:00.000Z"),
+    });
+    assert.equal(metrics.lateMinutes, 0);
+    assert.equal(metrics.workedMinutes, 540);
+    assert.equal(metrics.otMinutes, 30);
+    assert.equal(metrics.earlyLeaveMinutes, 0);
   });
 
   it("marks open, incomplete and absent correctly", () => {
@@ -45,5 +59,23 @@ describe("hr attendance metrics", () => {
       },
     ]);
     assert.equal(locked, true);
+  });
+
+  it("resolves shift name from scheduled shift first", () => {
+    assert.equal(
+      resolveAttendanceShiftName({
+        scheduledShiftId: "x",
+        scheduledShift: { shiftTemplate: { name: "กะเช้า" } },
+        workSchedule: { shiftTemplate: { name: "เก่า" } },
+      }),
+      "กะเช้า",
+    );
+    assert.equal(
+      resolveAttendanceShiftName({
+        status: "PENDING_REVIEW",
+        scheduledShiftId: null,
+      }),
+      "นอกตาราง",
+    );
   });
 });

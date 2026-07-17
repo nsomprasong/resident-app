@@ -13,7 +13,9 @@ import {
   DataResetDependencyError,
   DataResetSafetyError,
   countDataResetTargets,
-  executeDataReset,
+  executeDataResetIndependently,
+  hrResetTargetLabels,
+  hrResetTargets,
   masterResetTargetLabels,
   masterResetTargets,
   resolveDataResetTargets,
@@ -21,9 +23,32 @@ import {
   serviceResetTargets,
   supermarketResetTargetLabels,
   supermarketResetTargets,
+  systemResetTargetLabels,
+  systemResetTargets,
   type DataResetCategory,
+  type DataResetTarget,
 } from "@/lib/system/data-reset";
 import { NextRequest, NextResponse } from "next/server";
+
+function targetLabel(category: DataResetCategory, target: DataResetTarget) {
+  if (category === "service") {
+    return serviceResetTargetLabels[target as keyof typeof serviceResetTargetLabels] ?? target;
+  }
+  if (category === "hr") {
+    return hrResetTargetLabels[target as keyof typeof hrResetTargetLabels] ?? target;
+  }
+  if (category === "master") {
+    return masterResetTargetLabels[target as keyof typeof masterResetTargetLabels] ?? target;
+  }
+  if (category === "supermarket") {
+    return (
+      supermarketResetTargetLabels[
+        target as keyof typeof supermarketResetTargetLabels
+      ] ?? target
+    );
+  }
+  return systemResetTargetLabels[target as keyof typeof systemResetTargetLabels] ?? target;
+}
 
 function serializeCatalog() {
   return {
@@ -31,6 +56,10 @@ function serializeCatalog() {
     service: serviceResetTargets.map((id) => ({
       id,
       label: serviceResetTargetLabels[id],
+    })),
+    hr: hrResetTargets.map((id) => ({
+      id,
+      label: hrResetTargetLabels[id],
     })),
     master: masterResetTargets.map((id) => ({
       id,
@@ -40,11 +69,21 @@ function serializeCatalog() {
       id,
       label: supermarketResetTargetLabels[id],
     })),
+    system: systemResetTargets.map((id) => ({
+      id,
+      label: systemResetTargetLabels[id],
+    })),
   };
 }
 
 function isDataResetCategory(value: unknown): value is DataResetCategory {
-  return value === "service" || value === "master" || value === "supermarket";
+  return (
+    value === "service" ||
+    value === "hr" ||
+    value === "master" ||
+    value === "supermarket" ||
+    value === "system"
+  );
 }
 
 export async function GET() {
@@ -78,7 +117,7 @@ export async function POST(request: NextRequest) {
     if (!isDataResetCategory(categoryValue)) {
       issues.push({
         path: "category",
-        message: "Category must be service, master, or supermarket",
+        message: "Category must be service, hr, master, supermarket, or system",
       });
     }
     if (confirmValue !== DATA_RESET_CONFIRM_PHRASE) {
@@ -119,12 +158,11 @@ export async function POST(request: NextRequest) {
       ? [currentUser.employee.id]
       : [];
 
-    const result = await prisma.$transaction(
-      async (tx) =>
-        executeDataReset(tx, category, resolved.targets, {
-          preserveEmployeeIds,
-        }),
-      { timeout: 60_000 },
+    const result = await executeDataResetIndependently(
+      prisma,
+      category,
+      resolved.targets,
+      { preserveEmployeeIds },
     );
 
     const authCleanup: Array<{ authUserId: string; ok: boolean }> = [];
@@ -140,6 +178,20 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const deletedTotal = Object.values(result.deleted).reduce(
+      (sum, value) => sum + (value ?? 0),
+      0,
+    );
+
+    if (deletedTotal === 0 && result.failed.length > 0) {
+      const first = result.failed[0];
+      return apiErrorResponse(
+        first?.message ?? "ไม่สามารถล้างข้อมูลได้",
+        409,
+        "DEPENDENCY_BLOCKED",
+      );
+    }
+
     await recordAuditLog({
       actor: {
         employeeId: currentUser?.employee?.id,
@@ -152,13 +204,22 @@ export async function POST(request: NextRequest) {
         category,
         targets: result.targets,
         deleted: result.deleted,
+        failed: result.failed,
         authCleanup,
       },
     });
 
     const counts = await countDataResetTargets(prisma);
+    const failedMessages = result.failed.map(
+      (item) => `${targetLabel(category, item.target)}: ${item.message}`,
+    );
     return NextResponse.json({
       ok: true,
+      partial: result.failed.length > 0,
+      message:
+        result.failed.length > 0
+          ? `บางรายการลบไม่สำเร็จ — ${failedMessages.join(" | ")}`
+          : undefined,
       ...result,
       counts,
       catalog: serializeCatalog(),
@@ -181,7 +242,7 @@ export async function POST(request: NextRequest) {
 
     if (prismaCode === "P2003") {
       return apiErrorResponse(
-        "ไม่สามารถลบได้ เพราะยังมีข้อมูลที่อ้างอิงอยู่ — ลบข้อมูลขายซูเปอร์มาร์เก็ตหรือข้อมูลบริการที่เกี่ยวข้องก่อน",
+        "ไม่สามารถลบได้ เพราะยังมีข้อมูลที่อ้างอิงอยู่ — ลบข้อมูลที่ขึ้นกับรายการนั้นก่อน (เช่น ขาย POS, ลงเวลา, การจอง)",
         409,
         "DEPENDENCY_BLOCKED",
       );

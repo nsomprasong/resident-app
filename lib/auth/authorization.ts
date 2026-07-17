@@ -59,6 +59,8 @@ export const permissions = [
   "hr.payroll.calculate",
   "hr.payroll.approve",
   "hr.payroll.mark_paid",
+  "hr.payroll.adjust",
+  "hr.payroll.unlock",
   "hr.document.manage",
   "hr.report.view",
   "hr.settings.manage",
@@ -172,6 +174,8 @@ const rolePermissions: Readonly<Record<Role, ReadonlySet<Permission>>> = {
     "ops.read",
     "hr.compensation.view",
     "hr.payroll.calculate",
+    "hr.payroll.adjust",
+    "hr.payroll.unlock",
     "hr.report.view",
     "pos.view",
     "pos.report.view",
@@ -261,8 +265,29 @@ export function hasPermission(role: Role, permission: Permission): boolean {
 
 type PagePermissionRule = {
   pattern: RegExp;
-  permission: Permission | "known-role";
+  permission: Permission | "known-role" | { readonly anyOf: readonly Permission[] };
 };
+
+function pagePermissionMatches(
+  requirement: PagePermissionRule["permission"],
+  has: (permission: Permission) => boolean,
+): boolean {
+  if (requirement === "known-role") return true;
+  if (typeof requirement === "object" && "anyOf" in requirement) {
+    return requirement.anyOf.some(has);
+  }
+  return has(requirement);
+}
+
+function resolvePagePermissionFromRule(
+  requirement: PagePermissionRule["permission"],
+): Permission | "known-role" | null {
+  if (requirement === "known-role") return "known-role";
+  if (typeof requirement === "object" && "anyOf" in requirement) {
+    return requirement.anyOf[0] ?? null;
+  }
+  return requirement;
+}
 
 const pagePermissionRules: readonly PagePermissionRule[] = [
   { pattern: /^\/$/, permission: "known-role" },
@@ -281,12 +306,13 @@ const pagePermissionRules: readonly PagePermissionRule[] = [
   { pattern: /^\/hr$/, permission: "hr.employee.view" },
   { pattern: /^\/hr\/employees(?:\/.*)?$/, permission: "hr.employee.view" },
   { pattern: /^\/hr\/schedules(?:\/.*)?$/, permission: "hr.schedule.manage" },
+  { pattern: /^\/hr\/attendance-review(?:\/.*)?$/, permission: "hr.attendance.manage" },
   { pattern: /^\/hr\/attendance(?:\/.*)?$/, permission: "hr.attendance.manage" },
   { pattern: /^\/hr\/leave(?:\/.*)?$/, permission: "hr.leave.request" },
   { pattern: /^\/hr\/payroll(?:\/.*)?$/, permission: "hr.compensation.view" },
   { pattern: /^\/hr\/documents(?:\/.*)?$/, permission: "hr.document.manage" },
   { pattern: /^\/hr\/reports(?:\/.*)?$/, permission: "hr.report.view" },
-  { pattern: /^\/hr\/settings(?:\/.*)?$/, permission: "hr.settings.manage" },
+  { pattern: /^\/hr\/settings(?:\/.*)?$/, permission: { anyOf: ["hr.settings.manage", "hr.schedule.manage"] } },
   { pattern: /^\/hr\/time-pay(?:\/.*)?$/, permission: "hr.attendance.manage" },
   { pattern: /^\/my-work$/, permission: "hr.attendance.self" },
   { pattern: /^\/pos\/products(?:\/.*)?$/, permission: "pos.product.view" },
@@ -300,29 +326,28 @@ const pagePermissionRules: readonly PagePermissionRule[] = [
 export function resolvePagePermission(
   pathname: string,
 ): Permission | "known-role" | null {
-  return (
-    pagePermissionRules.find((rule) => rule.pattern.test(pathname))?.permission ??
-    null
-  );
+  const rule = pagePermissionRules.find((item) => item.pattern.test(pathname));
+  if (!rule) return null;
+  return resolvePagePermissionFromRule(rule.permission);
 }
 
 export function canAccessPage(roleValue: string, pathname: string): boolean {
   const role = resolveRole(roleValue);
-  const requiredPermission = resolvePagePermission(pathname);
-
-  if (!role || !requiredPermission) return false;
-  return requiredPermission === "known-role" || hasPermission(role, requiredPermission);
+  const rule = pagePermissionRules.find((item) => item.pattern.test(pathname));
+  if (!role || !rule) return false;
+  return pagePermissionMatches(rule.permission, (permission) =>
+    hasPermission(role, permission),
+  );
 }
 
 export function canAccessPageWithPermissions(
   permissionCodes: readonly string[],
   pathname: string,
 ): boolean {
-  const requiredPermission = resolvePagePermission(pathname);
-  if (!requiredPermission) return false;
-  return (
-    requiredPermission === "known-role" ||
-    permissionCodes.includes(requiredPermission)
+  const rule = pagePermissionRules.find((item) => item.pattern.test(pathname));
+  if (!rule) return false;
+  return pagePermissionMatches(rule.permission, (permission) =>
+    permissionCodes.includes(permission),
   );
 }
 
@@ -397,6 +422,18 @@ const apiPermissionRules: readonly ApiPermissionRule[] = [
   { method: "POST", pattern: /^\/api\/products\/images$/, permission: "catalog.manage" },
   { method: "PATCH", pattern: /^\/api\/products\/[^/]+$/, permission: "catalog.manage" },
   { method: "GET", pattern: /^\/api\/products$/, permission: "catalog.read" },
+  { method: "GET", pattern: /^\/api\/food-sets$/, permission: {
+    anyOf: ["catalog.read", "settings.manage"],
+  } },
+  { method: "POST", pattern: /^\/api\/food-sets$/, permission: "catalog.manage" },
+  { method: "GET", pattern: /^\/api\/food-sets\/[^/]+$/, permission: {
+    anyOf: ["catalog.read", "settings.manage"],
+  } },
+  { method: "PATCH", pattern: /^\/api\/food-sets\/[^/]+$/, permission: "catalog.manage" },
+  { method: "DELETE", pattern: /^\/api\/food-sets\/[^/]+$/, permission: "catalog.manage" },
+  { method: "GET", pattern: /^\/api\/tour-groups\/[^/]+\/food-set$/, permission: "order.write" },
+  { method: "PUT", pattern: /^\/api\/tour-groups\/[^/]+\/food-set$/, permission: "order.write" },
+  { method: "DELETE", pattern: /^\/api\/tour-groups\/[^/]+\/food-set$/, permission: "order.write" },
   { method: "GET", pattern: /^\/api\/food-categories$/, permission: "catalog.read" },
   { method: "POST", pattern: /^\/api\/food-categories$/, permission: "catalog.manage" },
   { method: "GET", pattern: /^\/api\/product-types$/, permission: "catalog.read" },
@@ -409,6 +446,7 @@ const apiPermissionRules: readonly ApiPermissionRule[] = [
   { method: "GET", pattern: /^\/api\/room-types$/, permission: "settings.manage" },
   { method: "POST", pattern: /^\/api\/room-types$/, permission: "settings.manage" },
   { method: "PATCH", pattern: /^\/api\/room-types\/[^/]+$/, permission: "settings.manage" },
+  { method: "DELETE", pattern: /^\/api\/room-types\/[^/]+$/, permission: "settings.manage" },
   { method: "GET", pattern: /^\/api\/zones$/, permission: "settings.manage" },
   { method: "POST", pattern: /^\/api\/zones$/, permission: "settings.manage" },
   { method: "PATCH", pattern: /^\/api\/zones\/[^/]+$/, permission: "settings.manage" },
@@ -448,6 +486,21 @@ const apiPermissionRules: readonly ApiPermissionRule[] = [
   },
   { method: "GET", pattern: /^\/api\/hr\/schedules$/, permission: "hr.schedule.manage" },
   { method: "POST", pattern: /^\/api\/hr\/schedules$/, permission: "hr.schedule.manage" },
+  { method: "GET", pattern: /^\/api\/hr\/schedule-periods$/, permission: "hr.schedule.manage" },
+  { method: "POST", pattern: /^\/api\/hr\/schedule-periods$/, permission: "hr.schedule.manage" },
+  { method: "GET", pattern: /^\/api\/hr\/schedule-periods\/[^/]+$/, permission: "hr.schedule.manage" },
+  { method: "PATCH", pattern: /^\/api\/hr\/schedule-periods\/[^/]+$/, permission: "hr.schedule.manage" },
+  { method: "POST", pattern: /^\/api\/hr\/schedule-periods\/[^/]+\/generate-from-defaults$/, permission: "hr.schedule.manage" },
+  { method: "POST", pattern: /^\/api\/hr\/schedule-periods\/[^/]+\/bulk-assign$/, permission: "hr.schedule.manage" },
+  { method: "POST", pattern: /^\/api\/hr\/schedule-periods\/[^/]+\/clear-row$/, permission: "hr.schedule.manage" },
+  { method: "POST", pattern: /^\/api\/hr\/schedule-periods\/[^/]+\/copy-row$/, permission: "hr.schedule.manage" },
+  { method: "GET", pattern: /^\/api\/hr\/schedule-periods\/[^/]+\/change-logs$/, permission: "hr.schedule.manage" },
+  { method: "POST", pattern: /^\/api\/hr\/schedule-periods\/[^/]+\/copy-from\/[^/]+$/, permission: "hr.schedule.manage" },
+  { method: "GET", pattern: /^\/api\/hr\/schedule-periods\/[^/]+\/shifts$/, permission: "hr.schedule.manage" },
+  { method: "POST", pattern: /^\/api\/hr\/schedule-periods\/[^/]+\/shifts$/, permission: "hr.schedule.manage" },
+  { method: "PATCH", pattern: /^\/api\/hr\/schedule-periods\/[^/]+\/shifts\/[^/]+$/, permission: "hr.schedule.manage" },
+  { method: "DELETE", pattern: /^\/api\/hr\/schedule-periods\/[^/]+\/shifts\/[^/]+$/, permission: "hr.schedule.manage" },
+  { method: "POST", pattern: /^\/api\/hr\/schedule-periods\/[^/]+\/shifts\/[^/]+\/replace$/, permission: "hr.schedule.manage" },
   { method: "GET", pattern: /^\/api\/hr\/holidays$/, permission: "hr.schedule.manage" },
   { method: "POST", pattern: /^\/api\/hr\/holidays$/, permission: "hr.schedule.manage" },
   { method: "GET", pattern: /^\/api\/hr\/attendance$/, permission: "hr.attendance.manage" },
@@ -474,6 +527,7 @@ const apiPermissionRules: readonly ApiPermissionRule[] = [
   { method: "GET", pattern: /^\/api\/hr\/reports$/, permission: "hr.report.view" },
   { method: "GET", pattern: /^\/api\/hr\/my-work$/, permission: "hr.attendance.self" },
   { method: "POST", pattern: /^\/api\/hr\/my-work\/clock$/, permission: "hr.attendance.self" },
+  { method: "POST", pattern: /^\/api\/hr\/my-work\/ot-request$/, permission: "hr.attendance.self" },
   { method: "POST", pattern: /^\/api\/hr\/my-work\/leave$/, permission: "hr.leave.self" },
   { method: "GET", pattern: /^\/api\/hr\/attendance-settings$/, permission: {
     anyOf: ["hr.attendance.manage", "hr.settings.manage"],

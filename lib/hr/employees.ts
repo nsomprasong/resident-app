@@ -1,6 +1,7 @@
 import type {
   Department,
   Employee,
+  EmployeeCompensation,
   EmployeeHrStatus,
   EmploymentType,
   Position,
@@ -10,7 +11,7 @@ import type {
 
 import type { ValidationIssue } from "@/lib/api/validation";
 import {
-  isValidUsername,
+  describeUsernameIssue,
   normalizeThaiPhone,
   normalizeUsername,
 } from "@/lib/auth/login-identifier";
@@ -83,6 +84,8 @@ export type HrEmployeeRecord = {
   payDayOfMonth: number | null;
   defaultShiftTemplateId: string | null;
   defaultShiftTemplateName: string | null;
+  dailyRate: number | null;
+  monthlySalary: number | null;
   isActive: boolean;
 };
 
@@ -91,6 +94,9 @@ type EmployeeWithHr = Employee & {
   position: Pick<Position, "id" | "name"> | null;
   roleRecord: Pick<Role, "id" | "displayName"> | null;
   defaultShiftTemplate: Pick<ShiftTemplate, "id" | "name"> | null;
+  compensations?: Array<
+    Pick<EmployeeCompensation, "dailyRate" | "monthlySalary" | "hourlyRate">
+  >;
 };
 
 function dateOnly(value: Date | null | undefined): string | null {
@@ -149,6 +155,7 @@ export function isLoginEligibleStatus(status: EmployeeHrStatus) {
 }
 
 export function serializeHrEmployee(employee: EmployeeWithHr): HrEmployeeRecord {
+  const activeComp = employee.compensations?.[0] ?? null;
   return {
     id: employee.id,
     employeeCode: employee.employeeCode,
@@ -195,6 +202,12 @@ export function serializeHrEmployee(employee: EmployeeWithHr): HrEmployeeRecord 
     payDayOfMonth: employee.payDayOfMonth,
     defaultShiftTemplateId: employee.defaultShiftTemplateId,
     defaultShiftTemplateName: employee.defaultShiftTemplate?.name ?? null,
+    dailyRate:
+      activeComp?.dailyRate == null ? null : Number(activeComp.dailyRate),
+    monthlySalary:
+      activeComp?.monthlySalary == null
+        ? null
+        : Number(activeComp.monthlySalary),
     isActive: employee.isActive,
   };
 }
@@ -271,6 +284,50 @@ function isUuid(value: string) {
   );
 }
 
+export const HR_EMPLOYEE_FIELD_LABELS: Record<string, string> = {
+  firstName: "ชื่อ",
+  lastName: "นามสกุล",
+  nickname: "ชื่อเล่น",
+  username: "Username",
+  phone: "เบอร์โทรศัพท์",
+  email: "อีเมล",
+  employmentType: "ประเภทการจ้าง",
+  hrStatus: "สถานะพนักงาน",
+  roleId: "บทบาท",
+  defaultShiftTemplateId: "กะประจำ",
+  otHourlyRate: "อัตรา OT ต่อชั่วโมง",
+  dailyRate: "ค่าจ้างต่อวัน",
+  monthlySalary: "เงินเดือน",
+  compensationEffectiveFrom: "มีผลตั้งแต่วันที่",
+  birthDate: "วันเกิด",
+  hiredAt: "วันที่เริ่มงาน",
+  probationEndsAt: "ครบทดลองงาน",
+  endedAt: "วันสิ้นสุด",
+  employeeCode: "รหัสพนักงาน",
+  body: "ข้อมูลแบบฟอร์ม",
+};
+
+/** Map API validation issues to Thai field labels for employee forms. */
+export function hrEmployeeValidationFeedback(body: {
+  message?: string;
+  issues?: ValidationIssue[];
+}): { summary: string; byPath: Record<string, string> } {
+  const byPath: Record<string, string> = {};
+  if (!body.issues?.length) {
+    return { summary: body.message ?? "บันทึกไม่สำเร็จ", byPath };
+  }
+  for (const issue of body.issues) {
+    byPath[issue.path] = issue.message;
+  }
+  const summary = body.issues
+    .map((issue) => {
+      const label = HR_EMPLOYEE_FIELD_LABELS[issue.path] ?? issue.path;
+      return `${label}: ${issue.message}`;
+    })
+    .join("\n");
+  return { summary, byPath };
+}
+
 export function parseHrEmployeeInput(
   body: FieldSource,
   mode: "create" | "update",
@@ -318,27 +375,21 @@ export function parseHrEmployeeInput(
       if (!usernameRaw) {
         issues.push({ path: "username", message: "กรุณาระบุ Username" });
       } else {
-        const username = normalizeUsername(usernameRaw);
-        if (!isValidUsername(username)) {
-          issues.push({
-            path: "username",
-            message: "Username ต้องเป็น a-z 0-9 . _ - ความยาว 3–40 ตัว",
-          });
+        const usernameIssue = describeUsernameIssue(usernameRaw);
+        if (usernameIssue) {
+          issues.push({ path: "username", message: usernameIssue });
         } else {
-          data.username = username;
+          data.username = normalizeUsername(usernameRaw);
         }
       }
     } else if (usernameRaw === undefined || usernameRaw === "") {
       data.username = null;
     } else {
-      const username = normalizeUsername(usernameRaw);
-      if (!isValidUsername(username)) {
-        issues.push({
-          path: "username",
-          message: "Username ต้องเป็น a-z 0-9 . _ - ความยาว 3–40 ตัว",
-        });
+      const usernameIssue = describeUsernameIssue(usernameRaw);
+      if (usernameIssue) {
+        issues.push({ path: "username", message: usernameIssue });
       } else {
-        data.username = username;
+        data.username = normalizeUsername(usernameRaw);
       }
     }
   }

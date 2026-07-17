@@ -19,6 +19,7 @@ import {
   parseHrEmployeeInput,
   serializeHrEmployee,
 } from "@/lib/hr/employees";
+import { syncActiveEmployeeCompensation } from "@/lib/hr/employee-compensation";
 import { prisma } from "@/lib/prisma";
 import {
   createEmployeeAuthUser,
@@ -33,6 +34,12 @@ const employeeInclude = {
   position: { select: { id: true, name: true } },
   roleRecord: { select: { id: true, displayName: true } },
   defaultShiftTemplate: { select: { id: true, name: true } },
+  compensations: {
+    where: { isActive: true },
+    orderBy: { effectiveFrom: "desc" as const },
+    take: 1,
+    select: { dailyRate: true, monthlySalary: true, hourlyRate: true },
+  },
 } as const;
 
 export async function GET(request: NextRequest) {
@@ -200,11 +207,19 @@ export async function POST(request: NextRequest) {
     if (rest.defaultShiftTemplateId) {
       const template = await prisma.shiftTemplate.findUnique({
         where: { id: rest.defaultShiftTemplateId },
-        select: { id: true },
+        select: { id: true, isActive: true },
       });
       if (!template) {
         return validationErrorResponse("กรุณาตรวจสอบข้อมูลพนักงาน", [
           { path: "defaultShiftTemplateId", message: "ไม่พบกะที่เลือก" },
+        ]);
+      }
+      if (!template.isActive) {
+        return validationErrorResponse("กรุณาตรวจสอบข้อมูลพนักงาน", [
+          {
+            path: "defaultShiftTemplateId",
+            message: "กะประจำต้องเป็นกะที่ยังใช้งานได้",
+          },
         ]);
       }
     }
@@ -283,22 +298,34 @@ export async function POST(request: NextRequest) {
           include: employeeInclude,
         });
 
-        if (rest.dailyRate !== undefined || rest.monthlySalary !== undefined) {
-          await tx.employeeCompensation.create({
+        if (
+          rest.dailyRate !== undefined ||
+          rest.monthlySalary !== undefined ||
+          rest.hourlyRate !== undefined
+        ) {
+          await syncActiveEmployeeCompensation(tx, employee.id, {
+            employmentType,
+            hourlyRate: rest.hourlyRate ?? null,
+            dailyRate: rest.dailyRate,
+            monthlySalary: rest.monthlySalary,
+            effectiveFrom:
+              rest.compensationEffectiveFrom ?? rest.hiredAt ?? new Date(),
+          });
+        }
+
+        if (rest.defaultShiftTemplateId) {
+          await tx.shiftMembership.create({
             data: {
               employeeId: employee.id,
-              employmentType,
-              dailyRate: rest.dailyRate ?? 0,
-              hourlyRate: rest.hourlyRate ?? 0,
-              monthlySalary: rest.monthlySalary ?? 0,
-              effectiveFrom:
-                rest.compensationEffectiveFrom ?? rest.hiredAt ?? new Date(),
-              isActive: true,
+              shiftTemplateId: rest.defaultShiftTemplateId,
             },
           });
         }
 
-        return employee;
+        return tx.employee.findUniqueOrThrow({
+          where: { id: employee.id },
+          include: employeeInclude,
+        });
       });
     } catch (createError) {
       await deleteAuthUserById(authResolved.authUserId);

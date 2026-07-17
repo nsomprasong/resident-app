@@ -275,11 +275,19 @@ export async function POST(request: NextRequest) {
     const productMap = new Map(
       products.map((product) => [product.id, product]),
     );
-    const orderNote = isGroup
-      ? targetRoomId
-        ? "สั่งแยกห้อง"
-        : "สั่งลงบิลกรุ๊ป"
-      : "สั่งอาหารรูมเซอร์วิส";
+    const orderNoteParts = [
+      isGroup
+        ? targetRoomId
+          ? "สั่งแยกห้อง"
+          : "สั่งลงบิลกรุ๊ป"
+        : "สั่งอาหารรูมเซอร์วิส",
+    ];
+    const clientNote =
+      typeof parsed.body.note === "string" ? parsed.body.note.trim() : "";
+    if (clientNote) {
+      orderNoteParts.push(clientNote);
+    }
+    const orderNote = orderNoteParts.join(" · ");
 
     const order = await prisma.order.create({
       data: {

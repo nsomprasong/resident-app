@@ -68,6 +68,41 @@ describe("hr employees validation", () => {
     assert.equal(isLoginEligibleStatus("ARCHIVED"), false);
   });
 
+  it("saves default shift template id or clears to ไม่กำหนด", () => {
+    const clearDefault = parseHrEmployeeInput(
+      {
+        firstName: "A",
+        lastName: "B",
+        employmentType: "MONTHLY",
+        hrStatus: "ACTIVE",
+        defaultShiftTemplateId: "",
+      },
+      "update",
+    );
+    assert.equal(clearDefault.ok, true);
+    if (clearDefault.ok) {
+      assert.equal(clearDefault.data.defaultShiftTemplateId, null);
+    }
+
+    const setDefault = parseHrEmployeeInput(
+      {
+        firstName: "A",
+        lastName: "B",
+        employmentType: "MONTHLY",
+        hrStatus: "ACTIVE",
+        defaultShiftTemplateId: "11111111-1111-4111-8111-111111111111",
+      },
+      "update",
+    );
+    assert.equal(setDefault.ok, true);
+    if (setDefault.ok) {
+      assert.equal(
+        setDefault.data.defaultShiftTemplateId,
+        "11111111-1111-4111-8111-111111111111",
+      );
+    }
+  });
+
   it("prefers personal name over email-shaped name values", () => {
     assert.equal(
       displayEmployeeName({

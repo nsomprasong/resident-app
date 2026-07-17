@@ -181,7 +181,7 @@ async function main() {
     update: { basePrice: 1200, capacity: 2, bedType: "เตียงคู่" },
     create: {
       name: "Standard",
-      description: "ห้องมาตรฐานสำหรับ 2 ท่าน",
+      description: "ห้องเตียงคู่สำหรับ 2 ท่าน",
       basePrice: 1200,
       capacity: 2,
       bedType: "เตียงคู่",
@@ -198,42 +198,65 @@ async function main() {
       bedType: "เตียงเดี่ยว",
     },
   });
-  const deluxe = await prisma.roomType.upsert({
+  const triple = await prisma.roomType.upsert({
+    where: { name: "Triple" },
+    update: { basePrice: 1600, capacity: 3, bedType: "3 เตียง" },
+    create: {
+      name: "Triple",
+      description: "ห้อง 3 เตียงสำหรับครอบครัวเล็ก",
+      basePrice: 1600,
+      capacity: 3,
+      bedType: "3 เตียง",
+    },
+  });
+  const quad = await prisma.roomType.upsert({
+    where: { name: "Family" },
+    update: { basePrice: 2000, capacity: 4, bedType: "4 เตียง" },
+    create: {
+      name: "Family",
+      description: "ห้อง 4 เตียงสำหรับครอบครัว",
+      basePrice: 2000,
+      capacity: 4,
+      bedType: "4 เตียง",
+    },
+  });
+  // Keep legacy Deluxe name but map to 3 beds for existing rooms
+  await prisma.roomType.upsert({
     where: { name: "Deluxe" },
-    update: { basePrice: 1800, capacity: 3, bedType: "เตียงคิงไซส์" },
+    update: { basePrice: 1600, capacity: 3, bedType: "3 เตียง" },
     create: {
       name: "Deluxe",
-      description: "ห้องขนาดใหญ่พร้อมพื้นที่พักผ่อน",
-      basePrice: 1800,
+      description: "ห้อง 3 เตียง",
+      basePrice: 1600,
       capacity: 3,
-      bedType: "เตียงคิงไซส์",
+      bedType: "3 เตียง",
     },
   });
 
   for (let index = 1; index <= 10; index += 1) {
     const number = `${100 + index}`;
+    const roomTypeId =
+      index % 5 === 1
+        ? single.id
+        : index % 5 === 2
+          ? standard.id
+          : index % 5 === 3
+            ? triple.id
+            : index % 5 === 4
+              ? quad.id
+              : standard.id;
     await prisma.room.upsert({
       where: { number },
       update: {
         floor: 1,
         zoneId: index <= 6 ? mainZone.id : zoneB.id,
-        roomTypeId:
-          index % 4 === 1
-            ? single.id
-            : index % 3 === 0
-              ? deluxe.id
-              : standard.id,
+        roomTypeId,
       },
       create: {
         number,
         floor: 1,
         zoneId: index <= 6 ? mainZone.id : zoneB.id,
-        roomTypeId:
-          index % 4 === 1
-            ? single.id
-            : index % 3 === 0
-              ? deluxe.id
-              : standard.id,
+        roomTypeId,
       },
     });
   }

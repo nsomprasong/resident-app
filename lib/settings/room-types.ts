@@ -1,6 +1,11 @@
 import type { RoomType } from "@/generated/prisma/client";
 
 import type { ValidationIssue } from "@/lib/api/validation";
+import {
+  isKnownBedLayoutLabel,
+  normalizeBedTypeInput,
+  resolveBedLayout,
+} from "@/lib/settings/bed-types";
 
 export type RoomTypeRecord = {
   id: string;
@@ -122,7 +127,30 @@ export function parseRoomTypeInput(
 
   if ("bedType" in body) {
     const bedType = readTrimmedString(body, "bedType");
-    data.bedType = bedType === "" ? null : bedType ?? null;
+    if (bedType && !isKnownBedLayoutLabel(bedType)) {
+      issues.push({
+        path: "bedType",
+        message:
+          "ประเภทเตียงต้องเป็น เตียงเดี่ยว, เตียงคู่, 3 เตียง, 4 เตียง หรือ บ้านรวมพัก",
+      });
+    } else {
+      data.bedType = normalizeBedTypeInput(bedType);
+      // Default capacity from bed layout only when create omits capacity
+      if (
+        mode === "create" &&
+        data.capacity === undefined &&
+        capacity === undefined
+      ) {
+        const layout = resolveBedLayout(data.bedType);
+        if (layout) {
+          data.capacity = layout.capacity;
+          const capacityIssueIndex = issues.findIndex(
+            (issue) => issue.path === "capacity",
+          );
+          if (capacityIssueIndex >= 0) issues.splice(capacityIssueIndex, 1);
+        }
+      }
+    }
   }
 
   const isActive = readBoolean(body, "isActive");

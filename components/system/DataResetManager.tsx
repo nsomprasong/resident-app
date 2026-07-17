@@ -12,18 +12,24 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   DATA_RESET_CONFIRM_PHRASE,
   dataResetCategoryLabel,
+  hrResetTargetLabels,
+  hrResetTargets,
   masterResetTargetLabels,
   masterResetTargets,
   serviceResetTargetLabels,
   serviceResetTargets,
   supermarketResetTargetLabels,
   supermarketResetTargets,
+  systemResetTargetLabels,
+  systemResetTargets,
   type DataResetCategory,
   type DataResetCounts,
   type DataResetTarget,
+  type HrResetTarget,
   type MasterResetTarget,
   type ServiceResetTarget,
   type SupermarketResetTarget,
+  type SystemResetTarget,
 } from "@/lib/system/data-reset";
 
 type CatalogItem = { id: string; label: string };
@@ -31,8 +37,10 @@ type CatalogItem = { id: string; label: string };
 type ResetPayload = {
   confirmPhrase: string;
   service: CatalogItem[];
+  hr: CatalogItem[];
   master: CatalogItem[];
   supermarket: CatalogItem[];
+  system: CatalogItem[];
   counts: DataResetCounts;
 };
 
@@ -152,7 +160,11 @@ function CategoryPanel({
             onClick={() => onSubmit("selected")}
             className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-destructive px-4 py-2.5 text-sm font-medium text-destructive-foreground disabled:opacity-50"
           >
-            {busy ? <LoaderCircle size={16} className="animate-spin" /> : <Eraser size={16} />}
+            {busy ? (
+              <LoaderCircle size={16} className="animate-spin" />
+            ) : (
+              <Eraser size={16} />
+            )}
             ลบรายการที่เลือก ({formatCount(selectedCount)})
           </button>
           <button
@@ -165,12 +177,21 @@ function CategoryPanel({
           </button>
         </div>
         <p className="text-xs text-muted-foreground">
-          หมวด {dataResetCategoryLabel(category)} · การลบไม่สามารถย้อนกลับได้
+          หมวด {dataResetCategoryLabel(category)} · ระบบจัดลำดับลบให้อัตโนมัติตาม
+          foreign key · การลบไม่สามารถย้อนกลับได้
         </p>
       </div>
     </section>
   );
 }
+
+const ALL_TARGET_IDS = [
+  ...serviceResetTargets,
+  ...hrResetTargets,
+  ...masterResetTargets,
+  ...supermarketResetTargets,
+  ...systemResetTargets,
+] as const;
 
 export default function DataResetManager() {
   const [payload, setPayload] = useState<ResetPayload | null>(null);
@@ -183,13 +204,17 @@ export default function DataResetManager() {
   const [serviceSelected, setServiceSelected] = useState<Set<string>>(
     new Set(),
   );
+  const [hrSelected, setHrSelected] = useState<Set<string>>(new Set());
   const [masterSelected, setMasterSelected] = useState<Set<string>>(new Set());
   const [supermarketSelected, setSupermarketSelected] = useState<Set<string>>(
     new Set(),
   );
+  const [systemSelected, setSystemSelected] = useState<Set<string>>(new Set());
   const [serviceConfirm, setServiceConfirm] = useState("");
+  const [hrConfirm, setHrConfirm] = useState("");
   const [masterConfirm, setMasterConfirm] = useState("");
   const [supermarketConfirm, setSupermarketConfirm] = useState("");
+  const [systemConfirm, setSystemConfirm] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -228,6 +253,15 @@ export default function DataResetManager() {
       })),
     [payload],
   );
+  const hrItems = useMemo(
+    () =>
+      payload?.hr ??
+      hrResetTargets.map((id) => ({
+        id,
+        label: hrResetTargetLabels[id as HrResetTarget],
+      })),
+    [payload],
+  );
   const masterItems = useMemo(
     () =>
       payload?.master ??
@@ -246,14 +280,19 @@ export default function DataResetManager() {
       })),
     [payload],
   );
+  const systemItems = useMemo(
+    () =>
+      payload?.system ??
+      systemResetTargets.map((id) => ({
+        id,
+        label: systemResetTargetLabels[id as SystemResetTarget],
+      })),
+    [payload],
+  );
 
   const emptyCounts = useMemo(() => {
     const counts = {} as DataResetCounts;
-    for (const id of [
-      ...serviceResetTargets,
-      ...masterResetTargets,
-      ...supermarketResetTargets,
-    ]) {
+    for (const id of ALL_TARGET_IDS) {
       counts[id] = 0;
     }
     return counts;
@@ -261,14 +300,18 @@ export default function DataResetManager() {
 
   function selectedFor(category: DataResetCategory) {
     if (category === "service") return serviceSelected;
+    if (category === "hr") return hrSelected;
     if (category === "master") return masterSelected;
-    return supermarketSelected;
+    if (category === "supermarket") return supermarketSelected;
+    return systemSelected;
   }
 
   function confirmFor(category: DataResetCategory) {
     if (category === "service") return serviceConfirm;
+    if (category === "hr") return hrConfirm;
     if (category === "master") return masterConfirm;
-    return supermarketConfirm;
+    if (category === "supermarket") return supermarketConfirm;
+    return systemConfirm;
   }
 
   function clearSelection(category: DataResetCategory) {
@@ -277,13 +320,23 @@ export default function DataResetManager() {
       setServiceConfirm("");
       return;
     }
+    if (category === "hr") {
+      setHrSelected(new Set());
+      setHrConfirm("");
+      return;
+    }
     if (category === "master") {
       setMasterSelected(new Set());
       setMasterConfirm("");
       return;
     }
-    setSupermarketSelected(new Set());
-    setSupermarketConfirm("");
+    if (category === "supermarket") {
+      setSupermarketSelected(new Set());
+      setSupermarketConfirm("");
+      return;
+    }
+    setSystemSelected(new Set());
+    setSystemConfirm("");
   }
 
   async function runReset(
@@ -308,6 +361,8 @@ export default function DataResetManager() {
       const body = (await response.json().catch(() => null)) as {
         message?: string;
         deleted?: Partial<Record<string, number>>;
+        failed?: Array<{ target: string; message: string }>;
+        partial?: boolean;
         counts?: DataResetCounts;
       } | null;
       if (!response.ok) {
@@ -323,9 +378,15 @@ export default function DataResetManager() {
         (sum: number, value) => sum + (value ?? 0),
         0,
       );
-      setMessage(
-        `ลบสำเร็จ ${formatCount(deletedTotal)} รายการในหมวด${dataResetCategoryLabel(category)}`,
-      );
+      if (body?.partial && body.message) {
+        setMessage(
+          `ลบสำเร็จ ${formatCount(deletedTotal)} รายการ — ${body.message}`,
+        );
+      } else {
+        setMessage(
+          `ลบสำเร็จ ${formatCount(deletedTotal)} รายการในหมวด${dataResetCategoryLabel(category)}`,
+        );
+      }
     } catch (submitError) {
       setError(
         submitError instanceof Error
@@ -341,9 +402,13 @@ export default function DataResetManager() {
     const setter =
       category === "service"
         ? setServiceSelected
-        : category === "master"
-          ? setMasterSelected
-          : setSupermarketSelected;
+        : category === "hr"
+          ? setHrSelected
+          : category === "master"
+            ? setMasterSelected
+            : category === "supermarket"
+              ? setSupermarketSelected
+              : setSystemSelected;
     setter((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -361,6 +426,8 @@ export default function DataResetManager() {
     );
   }
 
+  const counts = payload?.counts ?? emptyCounts;
+
   return (
     <div className="space-y-4">
       {error ? (
@@ -376,10 +443,10 @@ export default function DataResetManager() {
 
       <CategoryPanel
         title="1. ข้อมูลการเข้ารับบริการ"
-        description="ลบประวัติการจอง ลูกค้า กรุ๊ป ข้อมูลการทำงาน HR (ลงเวลา/ลา/สาย) หรือพนักงาน — คง support/ผู้ทำรายการ และไม่แตะหมุดหรือประเภทลา"
+        description="ลบประวัติการจอง ลูกค้า และกรุ๊ปทัวร์ — ไม่รวมข้อมูลพนักงาน"
         category="service"
         items={serviceItems}
-        counts={payload?.counts ?? emptyCounts}
+        counts={counts}
         selected={serviceSelected}
         onToggle={(id) => toggle("service", id)}
         onSelectAll={() =>
@@ -393,11 +460,29 @@ export default function DataResetManager() {
       />
 
       <CategoryPanel
-        title="2. ข้อมูลหลัก"
-        description="ลบโครงสร้างที่พัก สินค้า ช่องทางรับชำระ และแคตตาล็อก — ควรลบข้อมูลบริการที่เกี่ยวข้องก่อน"
+        title="2. ข้อมูลพนักงาน"
+        description="ลบลงเวลา ลา ตารางงาน รอบจ่าย แม่แบบกะ หมุด GPS สูตรค่าจ้าง เอกสาร และพนักงาน — คง support/ผู้ทำรายการ · ไม่แตะบทบาท/สิทธิ์ · ลบพนักงานจะล้างกะ/บิล POS ที่อ้างอิงด้วย"
+        category="hr"
+        items={hrItems}
+        counts={counts}
+        selected={hrSelected}
+        onToggle={(id) => toggle("hr", id)}
+        onSelectAll={() =>
+          setHrSelected(new Set(hrItems.map((item) => item.id)))
+        }
+        onClear={() => setHrSelected(new Set())}
+        onSubmit={(mode) => void runReset("hr", mode)}
+        busy={busyCategory === "hr"}
+        confirm={hrConfirm}
+        onConfirmChange={setHrConfirm}
+      />
+
+      <CategoryPanel
+        title="3. ข้อมูลหลัก"
+        description="ลบโครงสร้างที่พัก สินค้า ช่องทางรับชำระ บัญชี PromptPay และแคตตาล็อก — ควรลบข้อมูลบริการที่เกี่ยวข้องก่อน"
         category="master"
         items={masterItems}
-        counts={payload?.counts ?? emptyCounts}
+        counts={counts}
         selected={masterSelected}
         onToggle={(id) => toggle("master", id)}
         onSelectAll={() =>
@@ -411,11 +496,11 @@ export default function DataResetManager() {
       />
 
       <CategoryPanel
-        title="3. ซูเปอร์มาร์เก็ต"
-        description="ลบข้อมูลขาย สินค้า และหมวดหมู่ของ POS — ลบข้อมูลขายก่อน หากจะลบสินค้าหรือหมวดหมู่"
+        title="4. ซูเปอร์มาร์เก็ต"
+        description="ลบข้อมูลขาย สินค้า หมวดหมู่ และตั้งค่า POS — ลบข้อมูลขายก่อน หากจะลบสินค้าหรือหมวดหมู่"
         category="supermarket"
         items={supermarketItems}
-        counts={payload?.counts ?? emptyCounts}
+        counts={counts}
         selected={supermarketSelected}
         onToggle={(id) => toggle("supermarket", id)}
         onSelectAll={() =>
@@ -428,6 +513,24 @@ export default function DataResetManager() {
         busy={busyCategory === "supermarket"}
         confirm={supermarketConfirm}
         onConfirmChange={setSupermarketConfirm}
+      />
+
+      <CategoryPanel
+        title="5. ระบบ"
+        description="ลบบันทึกตรวจสอบระบบ — ไม่กระทบบทบาทและสิทธิ์"
+        category="system"
+        items={systemItems}
+        counts={counts}
+        selected={systemSelected}
+        onToggle={(id) => toggle("system", id)}
+        onSelectAll={() =>
+          setSystemSelected(new Set(systemItems.map((item) => item.id)))
+        }
+        onClear={() => setSystemSelected(new Set())}
+        onSubmit={(mode) => void runReset("system", mode)}
+        busy={busyCategory === "system"}
+        confirm={systemConfirm}
+        onConfirmChange={setSystemConfirm}
       />
     </div>
   );

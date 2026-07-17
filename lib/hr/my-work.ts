@@ -1,6 +1,11 @@
 import type { AttendanceEventType } from "@/generated/prisma/client";
 
 import { calculateAttendanceMetrics } from "@/lib/hr/attendance";
+import {
+  attendanceStatusForMatch,
+  findCandidateScheduledShifts,
+  pickNearest,
+} from "@/lib/hr/attendance-matching";
 import { getAttendanceSetting } from "@/lib/hr/attendance-settings";
 import { haversineDistanceMeters, validateCoordinates } from "@/lib/hr/geo";
 import { dateKeyUtc, parseDateKey } from "@/lib/hr/schedules";
@@ -20,6 +25,34 @@ export function todayDateKeyInTimezone(timezone: string): string {
   return `${get("year")}-${get("month")}-${get("day")}`;
 }
 
+export async function listPublishedScheduledShiftsForEmployee(
+  employeeId: string,
+  at: Date,
+) {
+  const windowStart = new Date(at.getTime() - 18 * 60 * 60_000);
+  const windowEnd = new Date(at.getTime() + 18 * 60 * 60_000);
+  return prisma.scheduledShift.findMany({
+    where: {
+      employeeId,
+      status: "SCHEDULED",
+      plannedStart: { lte: windowEnd },
+      plannedEnd: { gte: windowStart },
+      schedulePeriod: { status: "PUBLISHED" },
+    },
+    include: {
+      shiftTemplate: {
+        select: {
+          id: true,
+          name: true,
+          lateGraceMinutes: true,
+          earlyLeaveGraceMinutes: true,
+        },
+      },
+    },
+    orderBy: { plannedStart: "asc" },
+  });
+}
+
 export async function getTodayScheduleForEmployee(
   employeeId: string,
   timezone: string,
@@ -28,14 +61,58 @@ export async function getTodayScheduleForEmployee(
   const workDate = parseDateKey(todayKey);
   if (!workDate) return null;
 
-  // Prefer permanent shift membership (every day until changed / validity ends).
+  const published = await listPublishedScheduledShiftsForEmployee(
+    employeeId,
+    new Date(),
+  );
+  const todayShifts = published.filter(
+    (shift) => dateKeyUtc(shift.workDate) === todayKey,
+  );
+  if (todayShifts[0]) {
+    const shift = todayShifts[0];
+    return {
+      id: shift.id,
+      employeeId: shift.employeeId,
+      workDate: shift.workDate,
+      startsAt: shift.plannedStart,
+      endsAt: shift.plannedEnd,
+      isDayOff: false,
+      status: "ASSIGNED" as const,
+      shiftTemplateId: shift.shiftTemplateId,
+      shiftTemplate: shift.shiftTemplate
+        ? {
+            id: shift.shiftTemplate.id,
+            name: shift.shiftTemplate.name,
+            startMinutes: 0,
+            endMinutes: 0,
+            breakMinutes: shift.breakMinutes,
+            lateGraceMinutes: shift.lateGraceMinutes,
+            earlyLeaveGraceMinutes:
+              shift.shiftTemplate.earlyLeaveGraceMinutes ?? 0,
+          }
+        : {
+            id: shift.id,
+            name: "กะตามตาราง",
+            startMinutes: 0,
+            endMinutes: 0,
+            breakMinutes: shift.breakMinutes,
+            lateGraceMinutes: shift.lateGraceMinutes,
+            earlyLeaveGraceMinutes: 0,
+          },
+      source: "scheduled_shift" as const,
+      scheduledShiftId: shift.id,
+    };
+  }
+
   const fromMembership = await ensureWorkScheduleFromMembership(
     employeeId,
     workDate,
   );
-  if (fromMembership) return fromMembership;
+  if (fromMembership) {
+    return { ...fromMembership, source: "work_schedule" as const };
+  }
 
-  return prisma.workSchedule.findFirst({
+  const legacy = await prisma.workSchedule.findFirst({
     where: { employeeId, workDate, status: "ASSIGNED" },
     include: {
       shiftTemplate: {
@@ -51,6 +128,7 @@ export async function getTodayScheduleForEmployee(
       },
     },
   });
+  return legacy ? { ...legacy, source: "work_schedule" as const } : null;
 }
 
 export type ClockInput = {
@@ -60,6 +138,7 @@ export type ClockInput = {
   longitude: number;
   accuracyMeters?: number | null;
   userAgent?: string | null;
+  scheduledShiftId?: string | null;
 };
 
 export class ClockError extends Error {
@@ -74,8 +153,8 @@ export class ClockError extends Error {
 
 /**
  * Record a CHECK_IN/CHECK_OUT event for the employee, validating GPS accuracy,
- * geofence radius and duplicate/ordering rules server-side. Server time is
- * the source of truth; only the reported coordinates come from the client.
+ * geofence radius and duplicate/ordering rules server-side. Prefers published
+ * ScheduledShift, then falls back to WorkSchedule / membership.
  */
 export async function clockAttendance(input: ClockInput) {
   const coordCheck = validateCoordinates(input.latitude, input.longitude);
@@ -130,25 +209,81 @@ export async function clockAttendance(input: ClockInput) {
     throw new ClockError("INTERNAL_ERROR", "ไม่สามารถระบุวันที่ปัจจุบันได้");
   }
 
-  const schedule = await prisma.workSchedule.findFirst({
-    where: { employeeId: input.employeeId, workDate, status: "ASSIGNED" },
-    include: { shiftTemplate: true },
-  });
+  const now = new Date();
+  const publishedShifts = await listPublishedScheduledShiftsForEmployee(
+    input.employeeId,
+    now,
+  );
+  const candidates = findCandidateScheduledShifts(
+    publishedShifts,
+    input.employeeId,
+    now,
+  );
 
-  if (!schedule && !settings.allowClockWithoutSchedule) {
+  let matchedShift =
+    input.scheduledShiftId != null
+      ? (candidates.find((item) => item.id === input.scheduledShiftId) ?? null)
+      : null;
+
+  if (!matchedShift && candidates.length === 1) {
+    matchedShift = candidates[0] ?? null;
+  } else if (!matchedShift && candidates.length > 1) {
+    if (input.type === "CHECK_IN" && !input.scheduledShiftId) {
+      throw new ClockError(
+        "SHIFT_SELECTION_REQUIRED",
+        "มีหลายกะในช่วงนี้ — กรุณาเลือกกะก่อนลงเวลา",
+      );
+    }
+    matchedShift = pickNearest(candidates, now);
+  }
+
+  const fullMatched = matchedShift
+    ? (publishedShifts.find((item) => item.id === matchedShift.id) ?? null)
+    : null;
+
+  const legacySchedule = fullMatched
+    ? null
+    : await prisma.workSchedule.findFirst({
+        where: { employeeId: input.employeeId, workDate, status: "ASSIGNED" },
+        include: { shiftTemplate: true },
+      });
+
+  if (!fullMatched && !legacySchedule && !settings.allowClockWithoutSchedule) {
     throw new ClockError("NO_SCHEDULE", "ยังไม่มีตารางกะของวันนี้");
   }
 
-  if (schedule?.isDayOff) {
+  if (legacySchedule?.isDayOff) {
     throw new ClockError("DAY_OFF", "วันนี้เป็นวันหยุดตามตารางงาน");
   }
+
+  const initialStatus = attendanceStatusForMatch(
+    fullMatched
+      ? {
+          id: fullMatched.id,
+          employeeId: fullMatched.employeeId,
+          plannedStart: fullMatched.plannedStart,
+          plannedEnd: fullMatched.plannedEnd,
+          status: fullMatched.status,
+        }
+      : legacySchedule
+        ? {
+            id: legacySchedule.id,
+            employeeId: legacySchedule.employeeId,
+            plannedStart: legacySchedule.startsAt,
+            plannedEnd: legacySchedule.endsAt,
+            status: "SCHEDULED",
+          }
+        : null,
+  );
 
   return prisma.$transaction(async (tx) => {
     let record = await tx.attendanceRecord.findFirst({
       where: {
         employeeId: input.employeeId,
         workDate,
-        workScheduleId: schedule?.id ?? null,
+        ...(fullMatched
+          ? { scheduledShiftId: fullMatched.id }
+          : { workScheduleId: legacySchedule?.id ?? null }),
       },
     });
 
@@ -156,11 +291,15 @@ export async function clockAttendance(input: ClockInput) {
       record = await tx.attendanceRecord.create({
         data: {
           employeeId: input.employeeId,
-          workScheduleId: schedule?.id ?? null,
+          workScheduleId: legacySchedule?.id ?? null,
+          scheduledShiftId: fullMatched?.id ?? null,
+          source: "MOBILE",
           workDate,
-          scheduledStart: schedule?.startsAt ?? null,
-          scheduledEnd: schedule?.endsAt ?? null,
-          status: "OPEN",
+          scheduledStart:
+            fullMatched?.plannedStart ?? legacySchedule?.startsAt ?? null,
+          scheduledEnd:
+            fullMatched?.plannedEnd ?? legacySchedule?.endsAt ?? null,
+          status: initialStatus === "PENDING_REVIEW" ? "PENDING_REVIEW" : "OPEN",
         },
       });
     }
@@ -169,8 +308,10 @@ export async function clockAttendance(input: ClockInput) {
       throw new ClockError("PERIOD_LOCKED", "ช่วงเวลานี้ถูกล็อกแล้ว");
     }
 
-    const now = new Date();
-    const lateGraceMinutes = schedule?.shiftTemplate?.lateGraceMinutes ?? 0;
+    const lateGraceMinutes =
+      fullMatched?.lateGraceMinutes ??
+      legacySchedule?.shiftTemplate?.lateGraceMinutes ??
+      0;
 
     if (input.type === "CHECK_IN") {
       if (record.clockIn) {
@@ -190,7 +331,13 @@ export async function clockAttendance(input: ClockInput) {
         data: {
           clockIn: now,
           lateMinutes: metrics.lateMinutes,
-          status: record.clockOut ? metrics.status : "OPEN",
+          status:
+            record.status === "PENDING_REVIEW"
+              ? "PENDING_REVIEW"
+              : record.clockOut
+                ? metrics.status
+                : "OPEN",
+          source: "MOBILE",
         },
       });
     } else {
@@ -220,9 +367,37 @@ export async function clockAttendance(input: ClockInput) {
           lateMinutes: metrics.lateMinutes,
           earlyLeaveMinutes: metrics.earlyLeaveMinutes,
           otMinutes: metrics.otMinutes,
-          status: metrics.status,
+          status:
+            record.status === "PENDING_REVIEW"
+              ? "PENDING_REVIEW"
+              : metrics.status,
+          source: "MOBILE",
         },
       });
+
+      // Auto-suggest OT when clock-out exceeds scheduled end (payroll still uses approved only).
+      if (metrics.otMinutes > 0) {
+        const pendingOt = await tx.attendanceAdjustment.findFirst({
+          where: {
+            attendanceRecordId: record.id,
+            type: "OT_REQUEST",
+            status: "PENDING",
+          },
+          select: { id: true },
+        });
+        if (!pendingOt) {
+          await tx.attendanceAdjustment.create({
+            data: {
+              attendanceRecordId: record.id,
+              type: "OT_REQUEST",
+              status: "PENDING",
+              reason: "ระบบเสนอ OT จากเวลาออกงานเกินตาราง",
+              proposedOtMinutes: metrics.otMinutes,
+              requestedById: input.employeeId,
+            },
+          });
+        }
+      }
     }
 
     const event = await tx.attendanceEvent.create({
@@ -239,7 +414,12 @@ export async function clockAttendance(input: ClockInput) {
       },
     });
 
-    return { record, event, distanceMeters };
+    return {
+      record,
+      event,
+      distanceMeters,
+      matchedShiftId: fullMatched?.id ?? null,
+    };
   });
 }
 
@@ -252,6 +432,9 @@ export async function getMyWorkHistory(employeeId: string, days = 14) {
     where: { employeeId, workDate: { gte: since } },
     include: {
       workSchedule: {
+        select: { shiftTemplate: { select: { name: true } } },
+      },
+      scheduledShift: {
         select: { shiftTemplate: { select: { name: true } } },
       },
     },
@@ -272,11 +455,15 @@ export function serializeAttendanceRecordSummary(record: {
   otApprovedMinutes: number;
   status: string;
   workSchedule?: { shiftTemplate: { name: string } | null } | null;
+  scheduledShift?: { shiftTemplate: { name: string } | null } | null;
 }) {
   return {
     id: record.id,
     workDate: dateKeyUtc(record.workDate),
-    shiftName: record.workSchedule?.shiftTemplate?.name ?? null,
+    shiftName:
+      record.scheduledShift?.shiftTemplate?.name ??
+      record.workSchedule?.shiftTemplate?.name ??
+      null,
     clockIn: record.clockIn?.toISOString() ?? null,
     clockOut: record.clockOut?.toISOString() ?? null,
     workedMinutes: record.workedMinutes,

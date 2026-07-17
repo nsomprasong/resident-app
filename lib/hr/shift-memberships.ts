@@ -30,6 +30,24 @@ export async function findActiveMembershipForDate(employeeId: string) {
 }
 
 /**
+ * Keep ShiftMembership aligned with Employee.defaultShiftTemplateId.
+ * Membership APIs remain for compatibility; กะประจำ is the source of truth in UI.
+ */
+export async function syncMembershipFromDefaultShift(
+  employeeId: string,
+  defaultShiftTemplateId: string | null,
+) {
+  await prisma.shiftMembership.deleteMany({ where: { employeeId } });
+  if (!defaultShiftTemplateId) return;
+  await prisma.shiftMembership.create({
+    data: {
+      employeeId,
+      shiftTemplateId: defaultShiftTemplateId,
+    },
+  });
+}
+
+/**
  * Resolve today's operational WorkSchedule from permanent shift membership.
  * Creates a concrete WorkSchedule once; does not rewrite existing days when
  * template times change (history stays on the row; new dates use effective periods).
@@ -39,10 +57,27 @@ export async function ensureWorkScheduleFromMembership(
   workDate: Date,
 ) {
   const membership = await findActiveMembershipForDate(employeeId);
-  if (!membership) return null;
+  let templateId = membership?.shiftTemplateId ?? null;
 
-  const template = membership.shiftTemplate;
-  const times = await resolveShiftTimesForDate(template.id, workDate);
+  if (!templateId) {
+    const employee = await prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: {
+        defaultShiftTemplateId: true,
+        defaultShiftTemplate: { select: { id: true, isActive: true } },
+      },
+    });
+    if (
+      employee?.defaultShiftTemplateId &&
+      employee.defaultShiftTemplate?.isActive
+    ) {
+      templateId = employee.defaultShiftTemplateId;
+    }
+  }
+
+  if (!templateId) return null;
+
+  const times = await resolveShiftTimesForDate(templateId, workDate);
   if (!times) return null;
 
   const range = buildScheduleRange(
@@ -71,7 +106,7 @@ export async function ensureWorkScheduleFromMembership(
       employeeId,
       workDate: dateOnly(workDate),
       status: "ASSIGNED",
-      shiftTemplateId: template.id,
+      shiftTemplateId: templateId,
     },
     include,
   });
@@ -83,7 +118,7 @@ export async function ensureWorkScheduleFromMembership(
   return prisma.workSchedule.create({
     data: {
       employeeId,
-      shiftTemplateId: template.id,
+      shiftTemplateId: templateId,
       workDate: dateOnly(workDate),
       startsAt: range.startsAt,
       endsAt: range.endsAt,

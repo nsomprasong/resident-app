@@ -100,6 +100,7 @@ export async function GET(
       contactName: booking.tourGroup?.contactName,
       phone: booking.tourGroup?.phone ?? booking.guest?.phone ?? "-",
       mode: booking.tourGroupId ? "group" : "solo",
+      tourGroupId: booking.tourGroupId,
       guestCount: booking.guestCount,
       pricePerPerson: booking.pricePerPerson
         ? Number(booking.pricePerPerson)

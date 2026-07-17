@@ -50,11 +50,6 @@ const dailyMenuItems = [
     path: "/houseKeeperMinibar",
   },
   {
-    text: "ซูเปอร์มาร์เก็ต",
-    icon: ShoppingCart,
-    path: "/pos",
-  },
-  {
     text: "บัญชีและแดชบอร์ด",
     icon: BarChart3,
     path: "/dashboard",
@@ -63,6 +58,14 @@ const dailyMenuItems = [
     text: "รายงานรวม",
     icon: ClipboardList,
     path: "/report",
+  },
+];
+
+const supermarketMenuItems = [
+  {
+    text: "ซูเปอร์มาร์เก็ต",
+    icon: ShoppingCart,
+    path: "/pos",
   },
 ];
 
@@ -114,6 +117,14 @@ export default function Sidebar({
           ]
         : [],
     [employee, canAccessPath, visibleSelfItems],
+  );
+
+  const visibleSupermarketItems = useMemo(
+    () =>
+      employee
+        ? supermarketMenuItems.filter((item) => canAccessPath(item.path))
+        : [],
+    [employee, canAccessPath],
   );
 
   const visibleSystemItems = useMemo(
@@ -196,6 +207,14 @@ export default function Sidebar({
               menuItems={visibleDailyItems}
               onClose={onClose}
               title="งานประจำวัน"
+            />
+          ) : null}
+
+          {visibleSupermarketItems.length > 0 ? (
+            <ListMenu
+              menuItems={visibleSupermarketItems}
+              onClose={onClose}
+              title="ซูเปอร์มาร์เก็ต"
             />
           ) : null}
 

@@ -191,6 +191,7 @@ model TourGroup {
   contactName String    @map("contact_name")
   phone       String
   bookings    Booking[]
+  foodSet    TourGroupFoodSet?
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
@@ -341,6 +342,9 @@ model Product {
   imageUrl    String?       @map("image_url")
   isActive    Boolean       @default(true) @map("is_active")
   orderItems  OrderItem[]
+  foodSetItems FoodSetItem[]
+  tourGroupFoodSetItems TourGroupFoodSetItem[]
+  optionGroups ProductOptionGroup[]
   createdAt   DateTime      @default(now()) @map("created_at")
   updatedAt   DateTime      @updatedAt @map("updated_at")
 
@@ -348,6 +352,101 @@ model Product {
   @@index([isMinibar, isActive])
   @@index([typeId, categoryId, isActive])
   @@map("products")
+}
+
+model ProductOptionGroup {
+  id         String          @id @default(uuid()) @db.Uuid
+  productId  String          @map("product_id") @db.Uuid
+  name       String
+  isRequired Boolean         @default(true) @map("is_required")
+  sortOrder  Int             @default(0) @map("sort_order")
+  product    Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  options    ProductOption[]
+  createdAt  DateTime        @default(now()) @map("created_at")
+  updatedAt  DateTime        @updatedAt @map("updated_at")
+
+  @@unique([productId, name])
+  @@index([productId, sortOrder])
+  @@map("product_option_groups")
+}
+
+model ProductOption {
+  id        String             @id @default(uuid()) @db.Uuid
+  groupId   String             @map("group_id") @db.Uuid
+  label     String
+  sortOrder Int                @default(0) @map("sort_order")
+  isActive  Boolean            @default(true) @map("is_active")
+  group     ProductOptionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdAt DateTime           @default(now()) @map("created_at")
+  updatedAt DateTime           @updatedAt @map("updated_at")
+
+  @@unique([groupId, label])
+  @@index([groupId, sortOrder])
+  @@map("product_options")
+}
+
+model FoodSet {
+  id          String        @id @default(uuid()) @db.Uuid
+  name        String        @unique
+  description String?
+  isActive    Boolean       @default(true) @map("is_active")
+  items       FoodSetItem[]
+  tourGroupSets TourGroupFoodSet[]
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  @@index([isActive, name])
+  @@map("food_sets")
+}
+
+model FoodSetItem {
+  id             String  @id @default(uuid()) @db.Uuid
+  foodSetId      String  @map("food_set_id") @db.Uuid
+  productId      String  @map("product_id") @db.Uuid
+  quantity       Int     @default(1)
+  sortOrder      Int     @default(0) @map("sort_order")
+  requireOptions Boolean @default(false) @map("require_options")
+  foodSet        FoodSet @relation(fields: [foodSetId], references: [id], onDelete: Cascade)
+  product        Product @relation(fields: [productId], references: [id])
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@unique([foodSetId, productId])
+  @@index([productId])
+  @@index([foodSetId, sortOrder])
+  @@map("food_set_items")
+}
+
+model TourGroupFoodSet {
+  id             String                 @id @default(uuid()) @db.Uuid
+  tourGroupId    String                 @unique @map("tour_group_id") @db.Uuid
+  sourceFoodSetId String?               @map("source_food_set_id") @db.Uuid
+  name           String
+  tourGroup      TourGroup              @relation(fields: [tourGroupId], references: [id], onDelete: Cascade)
+  sourceFoodSet  FoodSet?               @relation(fields: [sourceFoodSetId], references: [id], onDelete: SetNull)
+  items          TourGroupFoodSetItem[]
+  createdAt      DateTime               @default(now()) @map("created_at")
+  updatedAt      DateTime               @updatedAt @map("updated_at")
+
+  @@index([sourceFoodSetId])
+  @@map("tour_group_food_sets")
+}
+
+model TourGroupFoodSetItem {
+  id                 String           @id @default(uuid()) @db.Uuid
+  tourGroupFoodSetId String           @map("tour_group_food_set_id") @db.Uuid
+  productId          String           @map("product_id") @db.Uuid
+  quantity           Int              @default(1)
+  isExtra            Boolean          @default(false) @map("is_extra")
+  optionNote         String?          @map("option_note")
+  tourGroupFoodSet   TourGroupFoodSet @relation(fields: [tourGroupFoodSetId], references: [id], onDelete: Cascade)
+  product            Product          @relation(fields: [productId], references: [id])
+  createdAt          DateTime         @default(now()) @map("created_at")
+  updatedAt          DateTime         @updatedAt @map("updated_at")
+
+  @@unique([tourGroupFoodSetId, productId])
+  @@index([productId])
+  @@map("tour_group_food_set_items")
 }
 
 model Order {
@@ -623,6 +722,13 @@ model Employee {
   shifts                    WorkShift[]
   workSchedules             WorkSchedule[]
   shiftMemberships          ShiftMembership[]
+  scheduledShifts           ScheduledShift[]       @relation("ScheduledShiftEmployee")
+  replacedScheduledShifts   ScheduledShift[]       @relation("ScheduledShiftReplacedEmployee")
+  scheduledShiftsCreated    ScheduledShift[]       @relation("ScheduledShiftCreator")
+  scheduledShiftsUpdated    ScheduledShift[]       @relation("ScheduledShiftUpdater")
+  schedulePeriodsCreated    SchedulePeriod[]       @relation("SchedulePeriodCreator")
+  schedulePeriodsUpdated    SchedulePeriod[]       @relation("SchedulePeriodUpdater")
+  scheduleChangeLogs        ScheduleChangeLog[]    @relation("ScheduleChangeActor")
   attendanceRecords         AttendanceRecord[]
   attendanceEvents          AttendanceEvent[]
   attendanceAdjustments     AttendanceAdjustment[] @relation("AdjustmentRequester")
@@ -690,6 +796,7 @@ model ShiftTemplate {
   defaultForEmployees    Employee[]        @relation("EmployeeDefaultShift")
   memberships            ShiftMembership[]
   timePeriods            ShiftTemplateTimePeriod[]
+  scheduledShifts        ScheduledShift[]
   createdAt              DateTime          @default(now()) @map("created_at")
   updatedAt              DateTime          @updatedAt @map("updated_at")
 
@@ -759,6 +866,118 @@ model WorkSchedule {
   @@map("work_schedules")
 }
 
+enum SchedulePeriodStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+}
+
+enum ScheduledShiftAssignmentType {
+  NORMAL
+  REPLACEMENT
+  DOUBLE_SHIFT
+  EXTRA_SHIFT
+}
+
+enum ScheduledShiftStatus {
+  SCHEDULED
+  CANCELLED
+  COMPLETED
+  ABSENT
+  LEAVE
+  REPLACED
+}
+
+enum ScheduleChangeType {
+  CREATE
+  UPDATE
+  CANCEL
+  REPLACE
+  COPY
+  PUBLISH
+  CLOSE
+}
+
+model SchedulePeriod {
+  id             String               @id @default(uuid()) @db.Uuid
+  name           String
+  startDate      DateTime             @map("start_date") @db.Date
+  endDate        DateTime             @map("end_date") @db.Date
+  status         SchedulePeriodStatus @default(DRAFT)
+  publishedAt    DateTime?            @map("published_at")
+  closedAt       DateTime?            @map("closed_at")
+  createdById    String?              @map("created_by_id") @db.Uuid
+  updatedById    String?              @map("updated_by_id") @db.Uuid
+  createdBy      Employee?            @relation("SchedulePeriodCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy      Employee?            @relation("SchedulePeriodUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  scheduledShifts ScheduledShift[]
+  changeLogs     ScheduleChangeLog[]
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
+
+  @@index([startDate, endDate])
+  @@index([status])
+  @@map("schedule_periods")
+}
+
+model ScheduledShift {
+  id                    String                       @id @default(uuid()) @db.Uuid
+  schedulePeriodId      String                       @map("schedule_period_id") @db.Uuid
+  employeeId            String                       @map("employee_id") @db.Uuid
+  shiftTemplateId       String?                      @map("shift_template_id") @db.Uuid
+  workDate              DateTime                     @map("work_date") @db.Date
+  plannedStart          DateTime                     @map("planned_start")
+  plannedEnd            DateTime                     @map("planned_end")
+  breakMinutes          Int                          @default(0) @map("break_minutes")
+  lateGraceMinutes      Int                          @default(0) @map("late_grace_minutes")
+  assignmentType        ScheduledShiftAssignmentType @default(NORMAL) @map("assignment_type")
+  status                ScheduledShiftStatus         @default(SCHEDULED)
+  /** True when edited as a per-day exception; bulk assign skips unless replaceOverrides. */
+  isDailyOverride       Boolean                      @default(false) @map("is_daily_override")
+  replacedEmployeeId    String?                      @map("replaced_employee_id") @db.Uuid
+  sourceScheduledShiftId String?                     @map("source_scheduled_shift_id") @db.Uuid
+  note                  String?
+  createdById           String?                      @map("created_by_id") @db.Uuid
+  updatedById           String?                      @map("updated_by_id") @db.Uuid
+  schedulePeriod        SchedulePeriod               @relation(fields: [schedulePeriodId], references: [id], onDelete: Cascade)
+  employee              Employee                     @relation("ScheduledShiftEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
+  shiftTemplate         ShiftTemplate?               @relation(fields: [shiftTemplateId], references: [id], onDelete: SetNull)
+  replacedEmployee      Employee?                    @relation("ScheduledShiftReplacedEmployee", fields: [replacedEmployeeId], references: [id], onDelete: SetNull)
+  sourceScheduledShift  ScheduledShift?              @relation("ScheduledShiftReplacementSource", fields: [sourceScheduledShiftId], references: [id], onDelete: SetNull)
+  replacementShifts     ScheduledShift[]             @relation("ScheduledShiftReplacementSource")
+  createdBy             Employee?                    @relation("ScheduledShiftCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy             Employee?                    @relation("ScheduledShiftUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  attendanceRecords     AttendanceRecord[]
+  changeLogs            ScheduleChangeLog[]
+  createdAt             DateTime                     @default(now()) @map("created_at")
+  updatedAt             DateTime                     @updatedAt @map("updated_at")
+
+  @@index([schedulePeriodId, workDate])
+  @@index([employeeId, workDate])
+  @@index([status])
+  @@map("scheduled_shifts")
+}
+
+model ScheduleChangeLog {
+  id               String             @id @default(uuid()) @db.Uuid
+  schedulePeriodId String?            @map("schedule_period_id") @db.Uuid
+  scheduledShiftId String?            @map("scheduled_shift_id") @db.Uuid
+  changeType       ScheduleChangeType @map("change_type")
+  beforeData       Json?              @map("before_data")
+  afterData        Json?              @map("after_data")
+  reason           String?
+  changedById      String             @map("changed_by_id") @db.Uuid
+  changedAt        DateTime           @default(now()) @map("changed_at")
+  schedulePeriod   SchedulePeriod?    @relation(fields: [schedulePeriodId], references: [id], onDelete: SetNull)
+  scheduledShift   ScheduledShift?    @relation(fields: [scheduledShiftId], references: [id], onDelete: SetNull)
+  changedBy        Employee           @relation("ScheduleChangeActor", fields: [changedById], references: [id], onDelete: Cascade)
+
+  @@index([schedulePeriodId])
+  @@index([scheduledShiftId])
+  @@index([changedById, changedAt])
+  @@map("schedule_change_logs")
+}
+
 enum AttendanceEventType {
   CHECK_IN
   CHECK_OUT
@@ -805,6 +1024,7 @@ enum AttendanceStatus {
   INCOMPLETE
   ABSENT
   LOCKED
+  PENDING_REVIEW
 }
 
 enum AttendanceAdjustmentType {
@@ -823,6 +1043,8 @@ model AttendanceRecord {
   id                String                 @id @default(uuid()) @db.Uuid
   employeeId        String                 @map("employee_id") @db.Uuid
   workScheduleId    String?                @map("work_schedule_id") @db.Uuid
+  scheduledShiftId  String?                @map("scheduled_shift_id") @db.Uuid
+  source            String?
   workDate          DateTime               @map("work_date") @db.Date
   clockIn           DateTime?              @map("clock_in")
   clockOut          DateTime?              @map("clock_out")
@@ -841,6 +1063,7 @@ model AttendanceRecord {
   notes             String?
   employee          Employee               @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   workSchedule      WorkSchedule?          @relation(fields: [workScheduleId], references: [id], onDelete: SetNull)
+  scheduledShift    ScheduledShift?        @relation(fields: [scheduledShiftId], references: [id], onDelete: SetNull)
   adjustments       AttendanceAdjustment[]
   events            AttendanceEvent[]
   createdAt         DateTime               @default(now()) @map("created_at")
@@ -849,6 +1072,7 @@ model AttendanceRecord {
   @@unique([employeeId, workDate, workScheduleId])
   @@index([workDate, status])
   @@index([employeeId, workDate])
+  @@index([scheduledShiftId])
   @@map("attendance_records")
 }
 
@@ -1098,6 +1322,14 @@ model PayrollEntry {
   absentDays           Decimal             @default(0) @map("absent_days") @db.Decimal(8, 2)
   unpaidLeaveDays      Decimal             @default(0) @map("unpaid_leave_days") @db.Decimal(8, 2)
   lateMinutes          Int                 @default(0) @map("late_minutes")
+  /** Rates frozen at calculate time (additive Phase 21). */
+  hourlyRateSnapshot   Decimal?            @map("hourly_rate_snapshot") @db.Decimal(12, 2)
+  otHourlyRateSnapshot Decimal?            @map("ot_hourly_rate_snapshot") @db.Decimal(12, 2)
+  otMultiplierSnapshot Decimal?            @map("ot_multiplier_snapshot") @db.Decimal(8, 4)
+  dailyRateSnapshot    Decimal?            @map("daily_rate_snapshot") @db.Decimal(12, 2)
+  monthlySalarySnapshot Decimal?           @map("monthly_salary_snapshot") @db.Decimal(12, 2)
+  replacementShiftCount Int                @default(0) @map("replacement_shift_count")
+  doubleShiftCount     Int                 @default(0) @map("double_shift_count")
   notes                String?
   period               PayrollPeriod       @relation(fields: [periodId], references: [id], onDelete: Cascade)
   employee             Employee            @relation(fields: [employeeId], references: [id], onDelete: Cascade)

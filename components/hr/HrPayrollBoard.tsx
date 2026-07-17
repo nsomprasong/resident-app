@@ -11,6 +11,7 @@ import {
   Unlock,
   Wallet,
   X,
+  MoreHorizontal,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
@@ -37,24 +38,40 @@ type Entry = {
   employmentType: string;
   basePay: number;
   otPay: number;
+  holidayPay: number;
+  allowances: number;
+  bonuses: number;
+  deductions: number;
+  advances: number;
+  unpaidLeaveDeduction: number;
+  absenceDeduction: number;
+  lateDeduction: number;
   grossPay: number;
   netPay: number;
+  workedMinutes: number;
+  otMinutes: number;
+  absentDays: number;
+  unpaidLeaveDays: number;
+  lateMinutes: number;
+  hourlyRateSnapshot: number | null;
+  otHourlyRateSnapshot: number | null;
+  otMultiplierSnapshot: number | null;
+  dailyRateSnapshot: number | null;
+  monthlySalarySnapshot: number | null;
+  replacementShiftCount: number;
+  doubleShiftCount: number;
   hasPayslip: boolean;
 };
 
-type Compensation = {
+type PayrollAdjustmentRow = {
   id: string;
   employeeId: string;
-  employeeName: string | null;
-  employmentType: string;
-  dailyRate: number;
-  hourlyRate: number;
-  monthlySalary: number;
+  type: string;
+  amount: number;
+  reason: string;
 };
 
 type EmployeeOption = { id: string; name: string };
-
-type Setting = { key: string; value: string; labelTh: string | null };
 
 function todayKey() {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -75,19 +92,52 @@ function money(value: number) {
   });
 }
 
+function totalEarnings(entry: Entry) {
+  return (
+    entry.basePay +
+    entry.otPay +
+    entry.holidayPay +
+    entry.allowances +
+    entry.bonuses
+  );
+}
+
+function totalDeductions(entry: Entry) {
+  return (
+    entry.unpaidLeaveDeduction +
+    entry.absenceDeduction +
+    entry.lateDeduction +
+    entry.deductions +
+    entry.advances
+  );
+}
+
+function deductionCell(value: number) {
+  if (value <= 0) {
+    return <span className="text-muted-foreground">-</span>;
+  }
+  return <span className="text-destructive">{money(value)}</span>;
+}
+
+function earningCell(value: number) {
+  if (value <= 0) {
+    return <span className="text-muted-foreground">-</span>;
+  }
+  return <span>{money(value)}</span>;
+}
+
 export function HrPayrollBoard() {
   const { can } = useEmployeePermissions();
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const canCalculate = can("hr.payroll.calculate");
   const canApprove = can("hr.payroll.approve");
+  const canUnlock = can("hr.payroll.unlock");
   const canMarkPaid = can("hr.payroll.mark_paid");
-  const canSettings = can("hr.settings.manage");
   const [periods, setPeriods] = useState<Period[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
-  const [compensations, setCompensations] = useState<Compensation[]>([]);
+  const [adjustments, setAdjustments] = useState<PayrollAdjustmentRow[]>([]);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
-  const [settings, setSettings] = useState<Setting[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -98,34 +148,27 @@ export function HrPayrollBoard() {
   const [periodStart, setPeriodStart] = useState(todayKey().slice(0, 8) + "01");
   const [periodEnd, setPeriodEnd] = useState(todayKey());
 
-  const [compEmployeeId, setCompEmployeeId] = useState("");
-  const [compType, setCompType] = useState("MONTHLY");
-  const [dailyRate, setDailyRate] = useState("0");
-  const [hourlyRate, setHourlyRate] = useState("0");
-  const [monthlySalary, setMonthlySalary] = useState("15000");
-
   const [adjEmployeeId, setAdjEmployeeId] = useState("");
   const [adjType, setAdjType] = useState("BONUS");
   const [adjAmount, setAdjAmount] = useState("0");
   const [adjReason, setAdjReason] = useState("");
+  const [periodFormOpen, setPeriodFormOpen] = useState(false);
+  const [adjPanelOpen, setAdjPanelOpen] = useState(false);
+  const [moreActionsOpen, setMoreActionsOpen] = useState(false);
 
   const loadList = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const [periodRes, compRes, empRes, setRes] = await Promise.all([
+      const [periodRes, empRes] = await Promise.all([
         fetch("/api/hr/payroll/periods", { cache: "no-store" }),
-        fetch("/api/hr/compensations", { cache: "no-store" }),
         fetch("/api/hr/employees?pageSize=100", { cache: "no-store" }),
-        fetch("/api/hr/payroll/settings", { cache: "no-store" }),
       ]);
-      if (!periodRes.ok || !compRes.ok) {
+      if (!periodRes.ok) {
         throw new Error("โหลดข้อมูลค่าจ้างไม่สำเร็จ");
       }
       const periodData = (await periodRes.json()) as { periods: Period[] };
-      const compData = (await compRes.json()) as { items: Compensation[] };
       setPeriods(periodData.periods);
-      setCompensations(compData.items);
       if (empRes.ok) {
         const empData = (await empRes.json()) as {
           items: Array<{
@@ -144,12 +187,7 @@ export function HrPayrollBoard() {
             name: displayEmployeeName(item),
           })),
         );
-        setCompEmployeeId((prev) => prev || empData.items[0]?.id || "");
         setAdjEmployeeId((prev) => prev || empData.items[0]?.id || "");
-      }
-      if (setRes.ok) {
-        const setData = (await setRes.json()) as { items: Setting[] };
-        setSettings(setData.items);
       }
       if (!selectedId && periodData.periods[0]) {
         setSelectedId(periodData.periods[0].id);
@@ -170,8 +208,10 @@ export function HrPayrollBoard() {
     const data = (await response.json()) as {
       period: Period;
       entries: Entry[];
+      adjustments?: PayrollAdjustmentRow[];
     };
     setEntries(data.entries);
+    setAdjustments(data.adjustments ?? []);
   }, []);
 
   useEffect(() => {
@@ -234,6 +274,21 @@ export function HrPayrollBoard() {
     return status === "APPROVED" || status === "PAID";
   }
 
+  function openCreatePeriod() {
+    resetPeriodForm();
+    setPeriodFormOpen(true);
+  }
+
+  function openEditPeriodForm(item: Period) {
+    startEditPeriod(item);
+    setPeriodFormOpen(true);
+  }
+
+  async function savePeriodAndClose() {
+    const ok = await savePeriod();
+    if (ok) setPeriodFormOpen(false);
+  }
+
   async function savePeriod() {
     const ok = await postMode(
       editingPeriodId
@@ -260,6 +315,7 @@ export function HrPayrollBoard() {
       }
       resetPeriodForm();
     }
+    return ok;
   }
 
   async function deletePeriod(item: Period) {
@@ -292,157 +348,147 @@ export function HrPayrollBoard() {
   const selected = periods.find((item) => item.id === selectedId) ?? null;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {confirmDialog}
       {error ? (
-        <p className="rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+        <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {error}
         </p>
       ) : null}
       {message ? (
-        <p className="rounded-2xl border border-success/30 bg-success/10 px-4 py-3 text-sm text-success">
+        <p className="rounded-xl border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
           {message}
         </p>
       ) : null}
 
-      {canCalculate ? (
-        <section className="rounded-3xl border border-border bg-surface p-4 shadow-sm">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="font-semibold">
-              {editingPeriodId ? "แก้ไขรอบจ่าย" : "สร้างรอบจ่าย"}
-            </h2>
-            {editingPeriodId ? (
+      {canCalculate && periodFormOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/40 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-4 shadow-lg">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="font-semibold">
+                {editingPeriodId ? "แก้ไขรอบจ่าย" : "สร้างรอบจ่าย"}
+              </h2>
               <button
                 type="button"
-                onClick={resetPeriodForm}
-                className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-muted-foreground hover:bg-muted"
+                onClick={() => {
+                  setPeriodFormOpen(false);
+                  if (!selectedId) resetPeriodForm();
+                }}
+                className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted"
+                aria-label="ปิด"
               >
-                <X size={14} />
-                ยกเลิกแก้ไข
+                <X size={18} />
               </button>
-            ) : null}
+            </div>
+            <div className="mt-3 grid gap-2">
+              <input
+                value={periodName}
+                onChange={(event) => setPeriodName(event.target.value)}
+                className="rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                placeholder="ชื่อรอบ"
+              />
+              <select
+                value={periodType}
+                onChange={(event) => setPeriodType(event.target.value)}
+                className="rounded-lg border border-border bg-background px-3 py-2 text-sm"
+              >
+                <option value="DAILY">รายวัน</option>
+                <option value="WEEKLY">รายสัปดาห์</option>
+                <option value="SEMI_MONTHLY">ครึ่งเดือน</option>
+                <option value="MONTHLY">รายเดือน</option>
+                <option value="CUSTOM">กำหนดเอง</option>
+              </select>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <DateSelector
+                  date={periodStart}
+                  setDate={setPeriodStart}
+                  max={periodEnd}
+                  className="min-w-0"
+                />
+                <DateSelector
+                  date={periodEnd}
+                  setDate={setPeriodEnd}
+                  min={periodStart}
+                  className="min-w-0"
+                />
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPeriodFormOpen(false)}
+                className="rounded-lg border border-border px-3 py-2 text-sm"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={() => void savePeriodAndClose()}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+              >
+                {editingPeriodId ? <Check size={15} /> : <Plus size={15} />}
+                {editingPeriodId ? "บันทึก" : "สร้าง"}
+              </button>
+            </div>
           </div>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <input
-              value={periodName}
-              onChange={(event) => setPeriodName(event.target.value)}
-              className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
-              placeholder="ชื่อรอบ"
-            />
-            <select
-              value={periodType}
-              onChange={(event) => setPeriodType(event.target.value)}
-              className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
-            >
-              <option value="DAILY">รายวัน</option>
-              <option value="WEEKLY">รายสัปดาห์</option>
-              <option value="SEMI_MONTHLY">ครึ่งเดือน</option>
-              <option value="MONTHLY">รายเดือน</option>
-              <option value="CUSTOM">กำหนดเอง</option>
-            </select>
-            <DateSelector
-              date={periodStart}
-              setDate={setPeriodStart}
-              max={periodEnd}
-              className="min-w-[11rem]"
-            />
-            <DateSelector
-              date={periodEnd}
-              setDate={setPeriodEnd}
-              min={periodStart}
-              className="min-w-[11rem]"
-            />
-          </div>
-          <button
-            type="button"
-            onClick={() => void savePeriod()}
-            className="mt-3 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground"
-          >
-            {editingPeriodId ? (
-              <>
-                <Check size={16} />
-                บันทึกการแก้ไข
-              </>
-            ) : (
-              <>
-                <Plus size={16} />
-                สร้างรอบ
-              </>
-            )}
-          </button>
-        </section>
+        </div>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
-        <section className="rounded-3xl border border-border bg-surface p-3 shadow-sm">
-          <h2 className="px-2 py-1 text-sm font-semibold">รอบจ่าย</h2>
-          <ul className="mt-2 space-y-1">
-            {loading ? (
-              <li className="px-2 py-3 text-sm text-muted-foreground">กำลังโหลด...</li>
-            ) : periods.length === 0 ? (
-              <li className="px-2 py-3 text-sm text-muted-foreground">ยังไม่มีรอบ</li>
+      <section className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+        <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
+          {canCalculate ? (
+            <button
+              type="button"
+              onClick={openCreatePeriod}
+              className="inline-flex shrink-0 items-center justify-center rounded-lg border border-border p-2 hover:bg-muted"
+              title="สร้างรอบจ่าย"
+              aria-label="สร้างรอบจ่าย"
+            >
+              <Plus size={18} />
+            </button>
+          ) : null}
+          <select
+            value={selectedId ?? ""}
+            onChange={(event) =>
+              setSelectedId(event.target.value ? event.target.value : null)
+            }
+            disabled={loading || periods.length === 0}
+            className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2 py-1.5 text-sm"
+            aria-label="เลือกรอบจ่าย"
+          >
+            {periods.length === 0 ? (
+              <option value="">ยังไม่มีรอบจ่าย</option>
             ) : (
-              periods.map((item) => (
-                <li key={item.id}>
-                  <div
-                    className={`flex items-start gap-1 rounded-xl ${
-                      selectedId === item.id ? "bg-primary/10" : ""
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setSelectedId(item.id)}
-                      className={`min-w-0 flex-1 rounded-xl px-3 py-2 text-left text-sm ${
-                        selectedId === item.id
-                          ? "text-foreground"
-                          : "hover:bg-muted"
-                      }`}
-                    >
-                      <p className="font-medium">{item.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatThaiDate(item.periodStart)} →{" "}
-                        {formatThaiDate(item.periodEnd)} · {item.status}
-                      </p>
-                    </button>
-                    {canCalculate && !periodIsLocked(item.status) ? (
-                      <div className="flex shrink-0 gap-0.5 py-1 pr-1">
-                        <button
-                          type="button"
-                          onClick={() => startEditPeriod(item)}
-                          className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                          aria-label={`แก้ไข ${item.name}`}
-                        >
-                          <Pencil size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void deletePeriod(item)}
-                          className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                          aria-label={`ลบ ${item.name}`}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-                </li>
-              ))
+              <>
+                <option value="" disabled={selectedId !== null}>
+                  เลือกรอบจ่าย…
+                </option>
+                {periods.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name} · {formatThaiDate(item.periodStart)}–
+                    {formatThaiDate(item.periodEnd)} · {item.status}
+                  </option>
+                ))}
+              </>
             )}
-          </ul>
-        </section>
+          </select>
+        </div>
 
-        <section className="space-y-4">
-          {selected ? (
-            <>
-              <div className="flex flex-wrap gap-2 rounded-3xl border border-border bg-surface p-4 shadow-sm">
-                <div className="mr-auto">
-                  <p className="font-semibold">{selected.name}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {formatThaiDate(selected.periodStart)} →{" "}
-                    {formatThaiDate(selected.periodEnd)} ·{" "}
-                    {selected.status}
-                  </p>
-                </div>
+        {selected ? (
+          <>
+            <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
+              <span className="inline-flex rounded-md bg-muted px-2 py-0.5 text-xs font-medium">
+                {selected.status}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {formatThaiDate(selected.periodStart)} →{" "}
+                {formatThaiDate(selected.periodEnd)}
+              </span>
+              <div className="ml-auto flex flex-wrap items-center gap-1">
                 {canCalculate ? (
                   <button
                     type="button"
@@ -452,10 +498,11 @@ export function HrPayrollBoard() {
                         periodId: selected.id,
                       })
                     }
-                    className="inline-flex items-center gap-1 rounded-xl border border-border px-3 py-2 text-sm hover:bg-muted"
+                    className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground"
+                    title="คำนวณ"
                   >
-                    <Play size={14} />
-                    คำนวณ
+                    <Play size={15} />
+                    <span className="hidden sm:inline">คำนวณ</span>
                   </button>
                 ) : null}
                 {canCalculate ? (
@@ -464,10 +511,11 @@ export function HrPayrollBoard() {
                     onClick={() =>
                       void postMode({ mode: "review", periodId: selected.id })
                     }
-                    className="inline-flex items-center gap-1 rounded-xl border border-border px-3 py-2 text-sm hover:bg-muted"
+                    className="inline-flex items-center gap-1 rounded-lg border border-border p-1.5 hover:bg-muted"
+                    title="ตรวจทาน"
+                    aria-label="ตรวจทาน"
                   >
-                    <Check size={14} />
-                    Review
+                    <Check size={15} />
                   </button>
                 ) : null}
                 {canApprove ? (
@@ -476,10 +524,11 @@ export function HrPayrollBoard() {
                     onClick={() =>
                       void postMode({ mode: "approve", periodId: selected.id })
                     }
-                    className="inline-flex items-center gap-1 rounded-xl border border-border px-3 py-2 text-sm hover:bg-muted"
+                    className="inline-flex items-center gap-1 rounded-lg border border-border p-1.5 hover:bg-muted"
+                    title="อนุมัติ"
+                    aria-label="อนุมัติ"
                   >
-                    <Lock size={14} />
-                    อนุมัติ/ล็อก
+                    <Lock size={15} />
                   </button>
                 ) : null}
                 {canMarkPaid ? (
@@ -491,154 +540,333 @@ export function HrPayrollBoard() {
                         periodId: selected.id,
                       })
                     }
-                    className="inline-flex items-center gap-1 rounded-xl border border-border px-3 py-2 text-sm hover:bg-muted"
+                    className="inline-flex items-center gap-1 rounded-lg border border-border p-1.5 hover:bg-muted"
+                    title="จ่ายแล้ว"
+                    aria-label="จ่ายแล้ว"
                   >
-                    <Wallet size={14} />
-                    จ่ายแล้ว
+                    <Wallet size={15} />
                   </button>
                 ) : null}
-                {canApprove ? (
+                <div className="relative">
                   <button
                     type="button"
-                    onClick={() =>
-                      void postMode({ mode: "unlock", periodId: selected.id })
-                    }
-                    className="inline-flex items-center gap-1 rounded-xl border border-border px-3 py-2 text-sm hover:bg-muted"
+                    onClick={() => setMoreActionsOpen((open) => !open)}
+                    className="inline-flex items-center rounded-lg border border-border p-1.5 hover:bg-muted"
+                    title="เพิ่มเติม"
+                    aria-label="เมนูเพิ่มเติม"
+                    aria-expanded={moreActionsOpen}
                   >
-                    <Unlock size={14} />
-                    ปลดล็อก
+                    <MoreHorizontal size={15} />
                   </button>
-                ) : null}
-                {canCalculate && !periodIsLocked(selected.status) ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => startEditPeriod(selected)}
-                      className="inline-flex items-center gap-1 rounded-xl border border-border px-3 py-2 text-sm hover:bg-muted"
-                    >
-                      <Pencil size={14} />
-                      แก้ไข
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void deletePeriod(selected)}
-                      className="inline-flex items-center gap-1 rounded-xl border border-destructive/30 px-3 py-2 text-sm text-destructive hover:bg-destructive/10"
-                    >
-                      <Trash2 size={14} />
-                      ลบ
-                    </button>
-                  </>
-                ) : null}
-                <a
-                  href={`/api/hr/payroll/periods/${selected.id}/export?format=csv`}
-                  className="inline-flex items-center gap-1 rounded-xl border border-border px-3 py-2 text-sm hover:bg-muted"
-                >
-                  <Download size={14} />
-                  Export CSV
-                </a>
-                <a
-                  href={`/api/hr/payroll/periods/${selected.id}/export?format=json`}
-                  className="inline-flex items-center gap-1 rounded-xl border border-border px-3 py-2 text-sm hover:bg-muted"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  สลิป JSON/พิมพ์
-                </a>
+                  {moreActionsOpen ? (
+                    <>
+                      <button
+                        type="button"
+                        className="fixed inset-0 z-10 cursor-default"
+                        aria-label="ปิดเมนู"
+                        onClick={() => setMoreActionsOpen(false)}
+                      />
+                      <div className="absolute right-0 z-20 mt-1 min-w-[11rem] rounded-lg border border-border bg-surface py-1 shadow-lg">
+                        {canUnlock ? (
+                          <button
+                            type="button"
+                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
+                            onClick={() => {
+                              setMoreActionsOpen(false);
+                              const reason =
+                                window.prompt("เหตุผลการปลดล็อกรอบจ่าย", "") ??
+                                "";
+                              if (!reason.trim()) return;
+                              void postMode({
+                                mode: "unlock",
+                                periodId: selected.id,
+                                reason: reason.trim(),
+                              });
+                            }}
+                          >
+                            <Unlock size={14} />
+                            ปลดล็อก
+                          </button>
+                        ) : null}
+                        <a
+                          href={`/api/hr/payroll/periods/${selected.id}/export?format=csv`}
+                          className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted"
+                          onClick={() => setMoreActionsOpen(false)}
+                        >
+                          <Download size={14} />
+                          ส่งออก CSV
+                        </a>
+                        <a
+                          href={`/api/hr/payroll/periods/${selected.id}/export?format=json`}
+                          className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted"
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={() => setMoreActionsOpen(false)}
+                        >
+                          สลิป JSON
+                        </a>
+                        {canCalculate && !periodIsLocked(selected.status) ? (
+                          <>
+                            <button
+                              type="button"
+                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
+                              onClick={() => {
+                                setMoreActionsOpen(false);
+                                openEditPeriodForm(selected);
+                              }}
+                            >
+                              <Pencil size={14} />
+                              แก้ไขรอบ
+                            </button>
+                            <button
+                              type="button"
+                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-destructive hover:bg-destructive/10"
+                              onClick={() => {
+                                setMoreActionsOpen(false);
+                                void deletePeriod(selected);
+                              }}
+                            >
+                              <Trash2 size={14} />
+                              ลบรอบ
+                            </button>
+                          </>
+                        ) : null}
+                      </div>
+                    </>
+                  ) : null}
+                </div>
               </div>
+            </div>
 
               {canCalculate ? (
-                <div className="rounded-3xl border border-border bg-surface p-4 shadow-sm">
-                  <h3 className="text-sm font-semibold">เพิ่มโบนัส/หัก/เบิก</h3>
-                  <div className="mt-2 grid gap-2 sm:grid-cols-4">
-                    <select
-                      value={adjEmployeeId}
-                      onChange={(event) => setAdjEmployeeId(event.target.value)}
-                      className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
-                    >
-                      {employees.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.name}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      value={adjType}
-                      onChange={(event) => setAdjType(event.target.value)}
-                      className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
-                    >
-                      <option value="BONUS">โบนัส</option>
-                      <option value="OTHER_EARNING">รายได้เพิ่ม</option>
-                      <option value="DEDUCTION">รายการหัก</option>
-                      <option value="ADVANCE">เงินเบิก</option>
-                    </select>
-                    <input
-                      value={adjAmount}
-                      onChange={(event) => setAdjAmount(event.target.value)}
-                      className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
-                    />
-                    <input
-                      value={adjReason}
-                      onChange={(event) => setAdjReason(event.target.value)}
-                      placeholder="เหตุผล"
-                      className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
-                    />
-                  </div>
+                <div className="border-b border-border px-3 py-2">
                   <button
                     type="button"
-                    onClick={() =>
-                      void postMode({
-                        mode: "add-adjustment",
-                        periodId: selected.id,
-                        employeeId: adjEmployeeId,
-                        type: adjType,
-                        amount: Number(adjAmount),
-                        reason: adjReason,
-                      })
-                    }
-                    className="mt-2 rounded-xl border border-border px-3 py-2 text-sm hover:bg-muted"
+                    onClick={() => setAdjPanelOpen((open) => !open)}
+                    className="flex w-full items-center justify-between gap-2 text-left text-sm"
                   >
-                    เพิ่มรายการ (แล้วกดคำนวณใหม่)
+                    <span>เพิ่มโบนัส / หัก / เบิก</span>
+                    <span className="text-xs text-muted-foreground">
+                      {adjPanelOpen ? "ซ่อน" : "แสดง"}
+                    </span>
                   </button>
+                  {adjPanelOpen ? (
+                    <div className="mt-3 pb-1">
+                      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                        <select
+                          value={adjEmployeeId}
+                          onChange={(event) =>
+                            setAdjEmployeeId(event.target.value)
+                          }
+                          className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
+                        >
+                          {employees.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.name}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          value={adjType}
+                          onChange={(event) => setAdjType(event.target.value)}
+                          className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
+                        >
+                          <option value="BONUS">โบนัส</option>
+                          <option value="OTHER_EARNING">รายได้เพิ่ม</option>
+                          <option value="DEDUCTION">รายการหัก</option>
+                          <option value="ADVANCE">เงินเบิก</option>
+                        </select>
+                        <input
+                          value={adjAmount}
+                          onChange={(event) => setAdjAmount(event.target.value)}
+                          className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
+                          placeholder="จำนวนเงิน"
+                        />
+                        <input
+                          value={adjReason}
+                          onChange={(event) => setAdjReason(event.target.value)}
+                          placeholder="เหตุผล"
+                          className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void postMode({
+                            mode: "add-adjustment",
+                            periodId: selected.id,
+                            employeeId: adjEmployeeId,
+                            type: adjType,
+                            amount: Number(adjAmount),
+                            reason: adjReason,
+                          })
+                        }
+                        className="mt-3 rounded-xl border border-border px-4 py-2 text-sm hover:bg-muted"
+                      >
+                        เพิ่มรายการ (แล้วกดคำนวณใหม่)
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
 
-              <div className="overflow-hidden rounded-3xl border border-border bg-surface shadow-sm">
-                <div className="overflow-x-auto">
+              {adjustments.length > 0 ? (
+                <div className="border-b border-border px-3 py-2">
+                  <h3 className="text-xs font-semibold text-muted-foreground">
+                    ปรับยอด · {adjustments.length}
+                  </h3>
+                  <ul className="mt-1 max-h-24 space-y-0.5 overflow-y-auto text-xs text-muted-foreground">
+                    {adjustments.map((item) => {
+                      const employeeName =
+                        employees.find((entry) => entry.id === item.employeeId)
+                          ?.name ?? item.employeeId;
+                      return (
+                        <li key={item.id} className="rounded-lg bg-muted/40 px-2 py-1">
+                          {employeeName} · {item.type} · {money(item.amount)} —{" "}
+                          {item.reason}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ) : null}
+
+              <div className="overflow-x-auto">
                   <table className="min-w-full text-left text-sm">
-                    <thead className="bg-muted/40 text-muted-foreground">
+                    <thead className="sticky top-0 z-10 bg-muted/80 text-muted-foreground backdrop-blur-sm">
                       <tr>
-                        <th className="px-4 py-3">พนักงาน</th>
-                        <th className="px-4 py-3">ประเภท</th>
-                        <th className="px-4 py-3">พื้นฐาน</th>
-                        <th className="px-4 py-3">OT</th>
-                        <th className="px-4 py-3">รวม</th>
-                        <th className="px-4 py-3">สุทธิ</th>
+                        <th className="px-3 py-2.5" rowSpan={2}>
+                          พนักงาน
+                        </th>
+                        <th className="px-3 py-2.5" rowSpan={2}>
+                          ประเภท
+                        </th>
+                        <th className="px-3 py-2.5" rowSpan={2}>
+                          ขาด/ลา/สาย
+                        </th>
+                        <th
+                          className="border-b border-border bg-success/10 px-3 py-1.5 text-center text-xs font-semibold text-success"
+                          colSpan={6}
+                        >
+                          รายการรับ
+                        </th>
+                        <th
+                          className="border-b border-border bg-destructive/10 px-3 py-1.5 text-center text-xs font-semibold text-destructive"
+                          colSpan={6}
+                        >
+                          รายการหัก
+                        </th>
+                        <th className="bg-muted/80 px-3 py-2.5" rowSpan={2}>
+                          สุทธิ
+                        </th>
+                      </tr>
+                      <tr>
+                        <th className="px-3 py-2 whitespace-nowrap">พื้นฐาน</th>
+                        <th className="px-3 py-2 whitespace-nowrap">OT</th>
+                        <th className="px-3 py-2 whitespace-nowrap">วันหยุด</th>
+                        <th className="px-3 py-2 whitespace-nowrap">เบี้ย</th>
+                        <th className="px-3 py-2 whitespace-nowrap">โบนัส+</th>
+                        <th className="px-3 py-2 whitespace-nowrap">รวมรับ</th>
+                        <th className="px-3 py-2 whitespace-nowrap">ลาไม่รับ</th>
+                        <th className="px-3 py-2 whitespace-nowrap">ขาด</th>
+                        <th className="px-3 py-2 whitespace-nowrap">มาสาย</th>
+                        <th className="px-3 py-2 whitespace-nowrap">หักอื่น</th>
+                        <th className="px-3 py-2 whitespace-nowrap">เบิก</th>
+                        <th className="px-3 py-2 whitespace-nowrap">รวมหัก</th>
                       </tr>
                     </thead>
                     <tbody>
                       {entries.length === 0 ? (
                         <tr>
                           <td
-                            colSpan={6}
+                            colSpan={15}
                             className="px-4 py-8 text-center text-muted-foreground"
                           >
                             ยังไม่มีรายการ — กดคำนวณ
                           </td>
                         </tr>
                       ) : (
-                        entries.map((item) => (
-                          <tr key={item.id} className="border-t border-border">
-                            <td className="px-4 py-3">
+                        entries.map((item, rowIndex) => (
+                          <tr
+                            key={item.id}
+                            className={`border-t border-border ${
+                              rowIndex % 2 === 1 ? "bg-muted/20" : ""
+                            }`}
+                          >
+                            <td className="px-3 py-3">
                               <p className="font-medium">{item.employeeName}</p>
                               <p className="text-xs text-muted-foreground">
                                 {item.employeeCode ?? "-"}
                               </p>
+                              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                                {item.employmentType === "DAILY" &&
+                                item.dailyRateSnapshot != null
+                                  ? `รายวัน ${money(item.dailyRateSnapshot)}`
+                                  : null}
+                                {item.employmentType === "MONTHLY" &&
+                                item.monthlySalarySnapshot != null
+                                  ? `เดือน ${money(item.monthlySalarySnapshot)}`
+                                  : null}
+                              </p>
                             </td>
-                            <td className="px-4 py-3">{item.employmentType}</td>
-                            <td className="px-4 py-3">{money(item.basePay)}</td>
-                            <td className="px-4 py-3">{money(item.otPay)}</td>
-                            <td className="px-4 py-3">{money(item.grossPay)}</td>
-                            <td className="px-4 py-3 font-medium">
+                            <td className="px-3 py-3 whitespace-nowrap">
+                              {item.employmentType}
+                            </td>
+                            <td className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                              ขาด {item.absentDays} · ลาไม่รับ{" "}
+                              {item.unpaidLeaveDays}
+                              <br />
+                              สาย {item.lateMinutes} น. · OT อนุมัติ{" "}
+                              {item.otMinutes} น.
+                            </td>
+                            <td className="px-3 py-3 tabular-nums">
+                              {earningCell(item.basePay)}
+                            </td>
+                            <td className="px-3 py-3 tabular-nums">
+                              {earningCell(item.otPay)}
+                            </td>
+                            <td className="px-3 py-3 tabular-nums">
+                              {earningCell(item.holidayPay)}
+                            </td>
+                            <td className="px-3 py-3 tabular-nums">
+                              {earningCell(item.allowances)}
+                            </td>
+                            <td className="px-3 py-3 tabular-nums text-success">
+                              {earningCell(item.bonuses)}
+                            </td>
+                            <td className="px-3 py-3 tabular-nums font-medium">
+                              {money(totalEarnings(item))}
+                              {Math.abs(totalEarnings(item) - item.grossPay) >
+                              0.01 ? (
+                                <span
+                                  className="ml-1 text-[10px] text-amber-600"
+                                  title={`gross ในระบบ ${money(item.grossPay)}`}
+                                >
+                                  ≠
+                                </span>
+                              ) : null}
+                            </td>
+                            <td className="px-3 py-3 tabular-nums">
+                              {deductionCell(item.unpaidLeaveDeduction)}
+                            </td>
+                            <td className="px-3 py-3 tabular-nums">
+                              {deductionCell(item.absenceDeduction)}
+                            </td>
+                            <td className="px-3 py-3 tabular-nums">
+                              {deductionCell(item.lateDeduction)}
+                            </td>
+                            <td className="px-3 py-3 tabular-nums">
+                              {deductionCell(item.deductions)}
+                            </td>
+                            <td className="px-3 py-3 tabular-nums">
+                              {deductionCell(item.advances)}
+                            </td>
+                            <td className="px-3 py-3 tabular-nums font-medium text-destructive">
+                              {totalDeductions(item) <= 0
+                                ? "-"
+                                : money(totalDeductions(item))}
+                            </td>
+                            <td className="px-3 py-3 tabular-nums font-semibold">
                               {money(item.netPay)}
                             </td>
                           </tr>
@@ -647,146 +875,19 @@ export function HrPayrollBoard() {
                     </tbody>
                   </table>
                 </div>
-              </div>
-            </>
-          ) : (
-            <p className="rounded-3xl border border-border bg-surface p-6 text-sm text-muted-foreground shadow-sm">
-              เลือกรอบจ่ายด้านซ้าย
-            </p>
-          )}
-        </section>
-      </div>
-
-      {canCalculate ? (
-        <section className="rounded-3xl border border-border bg-surface p-4 shadow-sm">
-          <h2 className="font-semibold">ตั้งค่าค่าตอบแทนพนักงาน</h2>
-          <div className="mt-3 grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
-            <select
-              value={compEmployeeId}
-              onChange={(event) => setCompEmployeeId(event.target.value)}
-              className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
-            >
-              {employees.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-            <select
-              value={compType}
-              onChange={(event) => setCompType(event.target.value)}
-              className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
-            >
-              <option value="DAILY">รายวัน</option>
-              <option value="MONTHLY">รายเดือน</option>
-            </select>
-            <input
-              value={dailyRate}
-              onChange={(event) => setDailyRate(event.target.value)}
-              placeholder="ค่าแรง/วัน"
-              className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
-            />
-            <input
-              value={hourlyRate}
-              onChange={(event) => setHourlyRate(event.target.value)}
-              placeholder="ค่าแรง/ชม."
-              className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
-            />
-            <input
-              value={monthlySalary}
-              onChange={(event) => setMonthlySalary(event.target.value)}
-              placeholder="เงินเดือน"
-              className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
-            />
-            <button
-              type="button"
-              onClick={async () => {
-                setError("");
-                const response = await fetch("/api/hr/compensations", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    employeeId: compEmployeeId,
-                    employmentType: compType,
-                    dailyRate: Number(dailyRate),
-                    hourlyRate: Number(hourlyRate),
-                    monthlySalary: Number(monthlySalary),
-                    effectiveFrom: todayKey(),
-                  }),
-                });
-                const payload = (await response.json().catch(() => null)) as {
-                  message?: string;
-                } | null;
-                if (!response.ok) {
-                  setError(payload?.message ?? "บันทึกค่าตอบแทนไม่สำเร็จ");
-                  return;
-                }
-                setMessage("บันทึกค่าตอบแทนแล้ว");
-                await loadList();
-              }}
-              className="rounded-xl bg-primary px-3 py-2 text-sm font-medium text-primary-foreground"
-            >
-              บันทึกค่าตอบแทน
-            </button>
-          </div>
-          <ul className="mt-3 space-y-1 text-sm text-muted-foreground">
-            {compensations.slice(0, 8).map((item) => (
-              <li key={item.id}>
-                {item.employeeName} · {item.employmentType} · วัน {item.dailyRate}{" "}
-                / ชม. {item.hourlyRate} / เดือน {item.monthlySalary}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
-      {canSettings ? (
-        <section className="rounded-3xl border border-border bg-surface p-4 shadow-sm">
-          <h2 className="font-semibold">สูตรค่าจ้าง (ตั้งค่า)</h2>
-          <ul className="mt-3 space-y-2 text-sm">
-            {settings.map((item) => (
-              <li
-                key={item.key}
-                className="flex flex-wrap items-center gap-2 rounded-xl border border-border px-3 py-2"
-              >
-                <span className="min-w-48 text-muted-foreground">
-                  {item.labelTh ?? item.key}
-                </span>
-                <input
-                  defaultValue={item.value}
-                  id={`setting-${item.key}`}
-                  className="w-28 rounded-lg border border-border bg-background px-2 py-1"
-                />
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const input = document.getElementById(
-                      `setting-${item.key}`,
-                    ) as HTMLInputElement | null;
-                    const response = await fetch("/api/hr/payroll/settings", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        key: item.key,
-                        value: input?.value ?? item.value,
-                      }),
-                    });
-                    if (!response.ok) {
-                      setError("บันทึกตั้งค่าไม่สำเร็จ");
-                      return;
-                    }
-                    setMessage("อัปเดตสูตรแล้ว");
-                    await loadList();
-                  }}
-                  className="rounded-lg border border-border px-2 py-1 text-xs hover:bg-muted"
-                >
-                  บันทึก
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+                {entries.length > 0 ? (
+                  <p className="border-t border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                    สุทธิ = รวมรับ − รวมหัก · หักลา/ขาด/สายจาก attendance ·
+                    หักอื่น/เบิกจากรายการปรับยอด
+                  </p>
+                ) : null}
+          </>
+        ) : (
+          <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+            {loading ? "กำลังโหลด…" : "เลือกรอบจ่ายด้านบน"}
+          </p>
+        )}
+      </section>
     </div>
   );
 }

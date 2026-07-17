@@ -28,6 +28,21 @@ function minutesBetween(start: Date, end: Date) {
   return Math.max(0, Math.round((end.getTime() - start.getTime()) / 60_000));
 }
 
+function breakMinutesInWindow(
+  breakStart: Date | null,
+  breakEnd: Date | null,
+  windowStart: Date,
+  windowEnd: Date,
+): number {
+  if (!breakStart || !breakEnd || breakEnd <= breakStart) return 0;
+  const start =
+    breakStart.getTime() > windowStart.getTime() ? breakStart : windowStart;
+  const end =
+    breakEnd.getTime() < windowEnd.getTime() ? breakEnd : windowEnd;
+  if (end <= start) return 0;
+  return minutesBetween(start, end);
+}
+
 export function calculateAttendanceMetrics(
   input: AttendanceClockInput,
   options?: { lateGraceMinutes?: number },
@@ -75,13 +90,32 @@ export function calculateAttendanceMetrics(
     };
   }
 
+  let workedMinutes = 0;
   let breakMinutes = 0;
-  if (breakStart && breakEnd && breakEnd > breakStart) {
-    breakMinutes = minutesBetween(breakStart, breakEnd);
+  if (scheduledStart && scheduledEnd) {
+    const effectiveStart =
+      clockIn.getTime() < scheduledStart.getTime() ? scheduledStart : clockIn;
+    const regularEnd =
+      clockOut.getTime() > scheduledEnd.getTime() ? scheduledEnd : clockOut;
+    if (regularEnd > effectiveStart) {
+      breakMinutes = breakMinutesInWindow(
+        breakStart,
+        breakEnd,
+        effectiveStart,
+        regularEnd,
+      );
+      workedMinutes = Math.max(
+        0,
+        minutesBetween(effectiveStart, regularEnd) - breakMinutes,
+      );
+    }
+  } else {
+    if (breakStart && breakEnd && breakEnd > breakStart) {
+      breakMinutes = minutesBetween(breakStart, breakEnd);
+    }
+    const grossMinutes = minutesBetween(clockIn, clockOut);
+    workedMinutes = Math.max(0, grossMinutes - breakMinutes);
   }
-
-  const grossMinutes = minutesBetween(clockIn, clockOut);
-  const workedMinutes = Math.max(0, grossMinutes - breakMinutes);
 
   let lateMinutes = 0;
   if (scheduledStart) {
@@ -142,4 +176,25 @@ export function isDateInLockedPeriod(
       key >= period.periodStart.getTime() && key <= period.periodEnd.getTime()
     );
   });
+}
+
+export function resolveAttendanceShiftName(input: {
+  scheduledShiftId?: string | null;
+  status?: string;
+  scheduledShift?: { shiftTemplate: { name: string } | null } | null;
+  workSchedule?: { shiftTemplate: { name: string } | null } | null;
+}): string | null {
+  const fromTemplate =
+    input.scheduledShift?.shiftTemplate?.name ??
+    input.workSchedule?.shiftTemplate?.name ??
+    null;
+  if (fromTemplate) return fromTemplate;
+  if (
+    input.status === "PENDING_REVIEW" &&
+    !input.scheduledShiftId &&
+    !input.scheduledShift
+  ) {
+    return "นอกตาราง";
+  }
+  return null;
 }

@@ -14,9 +14,9 @@ import { useCallback, useEffect, useState } from "react";
 
 import DateSelector from "@/components/ui/DateSelector";
 import {
+  formatShiftWallClockTime,
   formatThaiDate,
   formatThaiDateRange,
-  formatThaiTime,
 } from "@/lib/format/date";
 import { describeGeolocationFailure } from "@/lib/hr/geo";
 
@@ -41,6 +41,12 @@ type TodayInfo = {
     otMinutes: number;
     otApprovedMinutes: number;
     status: string;
+  } | null;
+  pendingOtRequest: {
+    id: string;
+    proposedOtMinutes: number | null;
+    reason: string;
+    createdAt: string;
   } | null;
   allowClockWithoutSchedule: boolean;
 };
@@ -72,7 +78,7 @@ type LeaveType = { id: string; code: string; name: string; isActive: boolean };
 
 function formatTime(value: string | null) {
   if (!value) return "-";
-  return formatThaiTime(value);
+  return formatShiftWallClockTime(value);
 }
 
 function formatDate(value: string) {
@@ -140,6 +146,13 @@ export function MyWorkBoard() {
   const [leaveSubmitting, setLeaveSubmitting] = useState(false);
   const [leaveError, setLeaveError] = useState("");
   const [leaveMessage, setLeaveMessage] = useState("");
+
+  const [otOpen, setOtOpen] = useState(false);
+  const [otMinutes, setOtMinutes] = useState("");
+  const [otReason, setOtReason] = useState("");
+  const [otSubmitting, setOtSubmitting] = useState(false);
+  const [otError, setOtError] = useState("");
+  const [otMessage, setOtMessage] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -255,6 +268,52 @@ export function MyWorkBoard() {
       );
     } finally {
       setLeaveSubmitting(false);
+    }
+  }
+
+  function openOtRequest() {
+    const att = data?.today.attendance;
+    if (!att) return;
+    setOtMinutes(String(Math.max(att.otMinutes, 30)));
+    setOtReason(
+      att.otMinutes > 0
+        ? "ขออนุมัติ OT ตามเวลาที่ทำงานเกินกะ"
+        : "ขออนุมัติ OT",
+    );
+    setOtError("");
+    setOtOpen(true);
+  }
+
+  async function submitOtRequest() {
+    const att = data?.today.attendance;
+    if (!att) return;
+    setOtSubmitting(true);
+    setOtError("");
+    try {
+      const response = await fetch("/api/hr/my-work/ot-request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          attendanceId: att.id,
+          proposedOtMinutes: Number(otMinutes),
+          reason: otReason.trim(),
+        }),
+      });
+      const body = (await response.json().catch(() => null)) as {
+        message?: string;
+      } | null;
+      if (!response.ok) {
+        throw new Error(body?.message ?? "ส่งคำขอ OT ไม่สำเร็จ");
+      }
+      setOtOpen(false);
+      setOtMessage("ส่งคำขอ OT แล้ว รอผู้ดูแลอนุมัติ");
+      await load();
+    } catch (submitError) {
+      setOtError(
+        submitError instanceof Error ? submitError.message : "ส่งคำขอ OT ไม่สำเร็จ",
+      );
+    } finally {
+      setOtSubmitting(false);
     }
   }
 
@@ -379,6 +438,43 @@ export function MyWorkBoard() {
             <AlertTriangle size={16} className="shrink-0" /> {clockError}
           </p>
         ) : null}
+
+        {attendance && hasCheckedOut && attendance.status !== "LOCKED" ? (
+          <div className="mt-4 rounded-2xl border border-border bg-muted/30 p-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="text-sm">
+                <p className="font-medium text-foreground">โอที (OT)</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  คำนวณ {attendance.otMinutes} นาที
+                  {attendance.otApprovedMinutes > 0
+                    ? ` · อนุมัติแล้ว ${attendance.otApprovedMinutes} นาที`
+                    : ""}
+                </p>
+              </div>
+              {today.pendingOtRequest ? (
+                <span className="shrink-0 rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-medium text-amber-800 dark:text-amber-300">
+                  รออนุมัติ {today.pendingOtRequest.proposedOtMinutes ?? "-"} น.
+                </span>
+              ) : attendance.otApprovedMinutes > 0 ? (
+                <span className="shrink-0 rounded-full bg-primary/15 px-2.5 py-1 text-xs font-medium text-primary">
+                  อนุมัติแล้ว
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={openOtRequest}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted"
+                >
+                  <Clock3 size={14} />
+                  ขออนุมัติ OT
+                </button>
+              )}
+            </div>
+            {otMessage ? (
+              <p className="mt-2 text-xs text-primary">{otMessage}</p>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       {/* Leave */}
@@ -457,6 +553,12 @@ export function MyWorkBoard() {
                     <p className="font-medium text-foreground">{formatDate(record.workDate)}</p>
                     <p className="text-xs text-muted-foreground">
                       {formatTime(record.clockIn)} – {formatTime(record.clockOut)}
+                      {record.otMinutes > 0
+                        ? ` · OT ${record.otMinutes} น.`
+                        : ""}
+                      {record.otApprovedMinutes > 0
+                        ? ` (อนุมัติ ${record.otApprovedMinutes})`
+                        : ""}
                     </p>
                   </div>
                   <p className="text-xs text-muted-foreground">
@@ -468,6 +570,60 @@ export function MyWorkBoard() {
           )}
         </div>
       </div>
+
+      {otOpen ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/40 p-4 sm:items-center">
+          <div className="w-full max-w-md rounded-3xl border border-border bg-surface p-5 shadow-lg">
+            <h2 className="text-lg font-semibold">ขออนุมัติ OT</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {formatDate(data.today.workDate)}
+            </p>
+            <div className="mt-4 space-y-3">
+              <label className="block text-sm">
+                <span className="mb-1 block text-muted-foreground">นาที OT</span>
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={otMinutes}
+                  onChange={(event) => setOtMinutes(event.target.value)}
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2"
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="mb-1 block text-muted-foreground">เหตุผล</span>
+                <textarea
+                  value={otReason}
+                  onChange={(event) => setOtReason(event.target.value)}
+                  rows={3}
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2"
+                  placeholder="เช่น งานค้างหลังเลิกกะ / รองรับลูกค้า"
+                />
+              </label>
+            </div>
+            {otError ? (
+              <p className="mt-3 text-sm text-destructive">{otError}</p>
+            ) : null}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setOtOpen(false)}
+                className="rounded-xl border border-border px-4 py-2 text-sm"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                disabled={otSubmitting || !otMinutes.trim()}
+                onClick={() => void submitOtRequest()}
+                className="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+              >
+                {otSubmitting ? "กำลังส่ง..." : "ส่งคำขอ"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {leaveOpen ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/40 p-4 sm:items-center">

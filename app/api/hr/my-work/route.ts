@@ -6,6 +6,7 @@ import { haversineDistanceMeters, validateCoordinates } from "@/lib/hr/geo";
 import {
   getMyWorkHistory,
   getTodayScheduleForEmployee,
+  listPublishedScheduledShiftsForEmployee,
   serializeAttendanceRecordSummary,
   todayDateKeyInTimezone,
 } from "@/lib/hr/my-work";
@@ -29,14 +30,36 @@ export async function GET(request: NextRequest) {
     }
 
     const schedule = await getTodayScheduleForEmployee(employeeId, settings.timezone);
+    const scheduledShifts = await listPublishedScheduledShiftsForEmployee(
+      employeeId,
+      new Date(),
+    );
 
     const attendanceRecord = await prisma.attendanceRecord.findFirst({
       where: {
         employeeId,
         workDate,
-        workScheduleId: schedule?.id ?? null,
+        ...(schedule && "scheduledShiftId" in schedule && schedule.scheduledShiftId
+          ? { scheduledShiftId: schedule.scheduledShiftId }
+          : { workScheduleId: schedule?.id ?? null }),
       },
     });
+
+    const pendingOtRequest = attendanceRecord
+      ? await prisma.attendanceAdjustment.findFirst({
+          where: {
+            attendanceRecordId: attendanceRecord.id,
+            type: "OT_REQUEST",
+            status: "PENDING",
+          },
+          select: {
+            id: true,
+            proposedOtMinutes: true,
+            reason: true,
+            createdAt: true,
+          },
+        })
+      : null;
 
     const [history, leaveRequests] = await Promise.all([
       getMyWorkHistory(employeeId, 14),
@@ -77,10 +100,30 @@ export async function GET(request: NextRequest) {
               startsAt: schedule.startsAt.toISOString(),
               endsAt: schedule.endsAt.toISOString(),
               isDayOff: schedule.isDayOff,
+              source: "source" in schedule ? schedule.source : "work_schedule",
             }
           : null,
+        scheduledShifts: scheduledShifts.map((shift) => ({
+          id: shift.id,
+          shiftName: shift.shiftTemplate?.name ?? "กะตามตาราง",
+          plannedStart: shift.plannedStart.toISOString(),
+          plannedEnd: shift.plannedEnd.toISOString(),
+          assignmentType: shift.assignmentType,
+        })),
         attendance: attendanceRecord
-          ? serializeAttendanceRecordSummary({ ...attendanceRecord, workSchedule: null })
+          ? serializeAttendanceRecordSummary({
+              ...attendanceRecord,
+              workSchedule: null,
+              scheduledShift: null,
+            })
+          : null,
+        pendingOtRequest: pendingOtRequest
+          ? {
+              id: pendingOtRequest.id,
+              proposedOtMinutes: pendingOtRequest.proposedOtMinutes,
+              reason: pendingOtRequest.reason,
+              createdAt: pendingOtRequest.createdAt.toISOString(),
+            }
           : null,
         allowClockWithoutSchedule: settings.allowClockWithoutSchedule,
       },
@@ -111,3 +154,4 @@ export async function GET(request: NextRequest) {
     return apiErrorResponse("ไม่สามารถโหลดข้อมูลงานของฉันได้", 500, "INTERNAL_ERROR");
   }
 }
+

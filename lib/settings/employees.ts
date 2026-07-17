@@ -2,7 +2,7 @@ import type { Employee, Role } from "@/generated/prisma/client";
 
 import type { ValidationIssue } from "@/lib/api/validation";
 import {
-  isValidUsername,
+  describeUsernameIssue,
   normalizeThaiPhone,
   normalizeUsername,
 } from "@/lib/auth/login-identifier";
@@ -104,27 +104,21 @@ export function parseEmployeeInput(
     const usernameRaw = readTrimmedString(body, "username");
     if (mode === "create") {
       if (usernameRaw) {
-        const username = normalizeUsername(usernameRaw);
-        if (!isValidUsername(username)) {
-          issues.push({
-            path: "username",
-            message: "Username ต้องเป็น a-z 0-9 . _ - ความยาว 3–40 ตัว",
-          });
+        const usernameIssue = describeUsernameIssue(usernameRaw);
+        if (usernameIssue) {
+          issues.push({ path: "username", message: usernameIssue });
         } else {
-          data.username = username;
+          data.username = normalizeUsername(usernameRaw);
         }
       }
     } else if (usernameRaw === undefined || usernameRaw === "") {
       data.username = null;
     } else {
-      const username = normalizeUsername(usernameRaw);
-      if (!isValidUsername(username)) {
-        issues.push({
-          path: "username",
-          message: "Username ต้องเป็น a-z 0-9 . _ - ความยาว 3–40 ตัว",
-        });
+      const usernameIssue = describeUsernameIssue(usernameRaw);
+      if (usernameIssue) {
+        issues.push({ path: "username", message: usernameIssue });
       } else {
-        data.username = username;
+        data.username = normalizeUsername(usernameRaw);
       }
     }
   }

@@ -12,7 +12,7 @@ export default function HrOverviewPage() {
         icon={<UsersRound size={24} />}
         eyebrow="บริหารพนักงาน"
         title="ภาพรวมบุคลากร"
-        description="สรุปรายวัน/รายเดือน พร้อมทางลัดไปจัดตาราง ลงเวลา ลา และค่าจ้าง"
+        description="ดูสรุปรายวันและตารางงานรอบปัจจุบัน — เลือกสิ่งที่ต้องการแสดงจากด้านบน"
       />
       <HrDashboardBoard />
     </div>

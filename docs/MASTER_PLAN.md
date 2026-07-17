@@ -43,21 +43,35 @@ This project follows these rules.
 # Phase Overview
 
 | Phase | Name | Status |
-|--------|------|--------|
+|---|---|---|
 | 0 | Foundation | ✅ Completed |
 | 1 | Authentication | ✅ Completed |
 | 2 | Authorization / Relational RBAC | ✅ Completed |
-| 3 | Runtime Validation & Error Contract | ⏳ Pending |
-| 4 | Audit Log | ⏳ Pending |
-| 5 | Booking Integrity | ⏳ Pending |
-| 6 | Payment / Refund Integrity | ⏳ Pending |
-| 7 | Automated Testing & CI | ⏳ Pending |
-| 8 | Dashboard | ⏳ Pending |
-| 9 | Master Data / Settings | ⏳ Pending |
-| 10 | Kitchen Workflow | ⏳ Pending |
-| 11 | Employee / Schedule / Wage | ⏳ Pending |
-| 12 | Reports / Receipt / Export | ⏳ Pending |
-| 13 | Production Readiness | ⏳ Pending |
+| 3 | Runtime Validation & Error Contract | Superseded by completed implementation |
+| 4 | Audit Log Foundation | Superseded / partially implemented |
+| 5 | Booking Integrity | Superseded by later completed work |
+| 6 | Payment / Refund Integrity | Superseded by later completed work |
+| 7 | Automated Testing & CI | Superseded by completed test implementation |
+| 8 | Dashboard | Superseded by later completed work |
+| 9 | Master Data / Settings | Superseded by Phase 15 |
+| 10 | Kitchen Workflow | Superseded by later implementation |
+| 11 | Employee / Schedule / Wage | Superseded by Phases 18 and 21 |
+| 12 | Reports / Receipt / Export | Superseded by later implementation |
+| 13 | Production Readiness | Deferred until final deployment phase |
+| 14 | Previous Application Development | ✅ Completed |
+| 15 | Master Data Management | ✅ Completed |
+| 16 | User / Role / Permission Management | ✅ Completed |
+| 17 | Employee Auth Linking & Permission Localization | ✅ Completed |
+| 18 | Employee Management Redesign | ✅ Completed |
+| 19 | PromptPay QR Payment | ✅ Completed |
+| 20 | Supermarket / POS / Stock | ✅ Completed |
+| 21 | Flexible Schedule, Attendance & Payroll | 🚧 Current / Approved |
+
+หมายเหตุ:
+
+- Phase 3–13 เป็น Roadmap รุ่นเก่าที่ถูกแทนที่ด้วยงานที่ดำเนินการจริงใน Phase 14 เป็นต้นมา
+- ห้ามเลือก Phase 3–13 กลับมาเป็นงานถัดไปโดยอัตโนมัติ
+- หากยังมี requirement บางส่วนจาก Phase เก่าที่ยังไม่เสร็จ ให้สร้างเป็นงานใหม่ใน Phase ปัจจุบันหรือ Phase อนาคตหลังได้รับอนุมัติ ไม่ให้ย้อนกลับไปเปิด Phase เก่า
 
 ---
 
@@ -320,6 +334,127 @@ Production Readiness
 
 ---
 
+# Phase 18 — Employee Management Redesign
+
+## Goal
+
+ปรับระบบพนักงานให้ใช้งานจริง โดยรวมเฉพาะข้อมูลและงานที่เกี่ยวข้องกับพนักงาน
+
+## Includes
+
+- Employee profile
+- Supabase Auth UUID linking
+- Username and phone support
+- Backward-compatible email login for legacy users
+- Employment type
+- Wage
+- OT rate
+- Payment date
+- Default shift
+- Active/inactive status
+- Mobile attendance preparation
+
+## Status
+
+Completed
+
+---
+
+# Phase 19 — PromptPay QR Payment
+
+## Goal
+
+สร้าง QR Code รับชำระเงินจากข้อมูลพร้อมเพย์ที่ตั้งค่าในระบบ
+
+## Includes
+
+- PromptPay account settings
+- Dynamic amount QR
+- Payment screen integration
+- Backward compatibility with existing payment channels
+
+## Status
+
+Completed
+
+---
+
+# Phase 20 — Supermarket / POS / Stock
+
+## Goal
+
+เพิ่มระบบขายหน้าร้านและสต๊อกสินค้าที่ไม่เกี่ยวกับอาหาร
+
+## Includes
+
+- Product catalog
+- Barcode
+- POS
+- Opening cash
+- Change calculation
+- Stock movement
+- Stock deduction
+- Transfer charge to booking, room or group tour
+- Sales reports
+- Accounting and dashboard summary
+
+## Status
+
+Completed
+
+---
+
+# Phase 21 — Flexible Schedule, Attendance & Payroll
+
+## Goal
+
+พัฒนาระบบตารางงาน เวลาเข้า–ออก และสรุปค่าจ้างให้รองรับการทำงานจริงอย่างยืดหยุ่น
+
+## Includes
+
+- Shift templates
+- Half-month schedule periods
+- Daily scheduled shifts
+- Shift changes
+- Replacement shifts
+- Double shifts
+- Extra shifts
+- Attendance linked to actual scheduled shifts
+- Mobile geofence attendance
+- Absence
+- Leave
+- Late arrival
+- Early departure
+- Overtime suggestion and approval
+- Daily and monthly wage calculation
+- Payroll adjustment
+- Payroll approval
+- Mark as paid
+- Payroll locking
+- Audit history
+
+## Rules
+
+- ScheduledShift is the authoritative work schedule.
+- Default shift is only a template.
+- Payroll must use approved attendance and actual scheduled shifts.
+- System-calculated values must not be overwritten.
+- Authorized users may enter approved values or adjustments with a reason.
+- Approved and paid payroll periods must be locked.
+- Existing Employee, Auth, RBAC, Shift and Attendance behavior must remain backward-compatible.
+- Database changes must be additive.
+- No destructive migration without explicit approval.
+
+## Status
+
+Current / Approved
+
+## Reference
+
+`docs/plans/phase_21_flexible_schedule_attendance_payroll.md`
+
+---
+
 # Rules
 
 Never skip phases unless explicitly approved.
@@ -336,6 +471,23 @@ When CURRENT_TASK is completed:
 2. Select the next pending phase.
 3. Wait for approval.
 4. Create the next CURRENT_TASK.
+
+## Roadmap Version Rule
+
+Phase 3–13 เป็น Roadmap รุ่นเก่าและไม่ใช่รายการงาน Pending ที่ Cursor ต้องย้อนกลับไปทำ
+
+ตั้งแต่ Phase 14 เป็นต้นไป ให้ยึดลำดับ Phase ที่บันทึกใน `Current Progress` เป็น authoritative roadmap
+
+Phase ปัจจุบันคือ Phase 21 และได้รับอนุมัติแล้ว
+
+Cursor สามารถเริ่มหรือทำงานต่อใน Phase 21 ได้โดยไม่ต้องรออนุมัติเปิดเฟสซ้ำ
+
+ภายใน Phase 21:
+
+- ทำ Task ตามลำดับในเอกสาร Phase 21
+- ไม่ต้องขออนุมัติระหว่าง Task ย่อย
+- อัปเดต `docs/CURRENT_TASK.md` หลังจบแต่ละ Task
+- ขออนุมัติเฉพาะเมื่อมี destructive change หรือความเสี่ยงต่อข้อมูลจริง
 
 ---
 
@@ -358,22 +510,56 @@ It must never duplicate:
 
 # Current Progress
 
-Completed
+## Completed
 
-- Phase 15 — Master Data Management (Tasks 15.1–15.10)
-- Phase 16 — User / Role / Permission Management (Tasks 16.1–16.6)
-- Phase 17 — Employee Auth Linking & Permission Localization (Tasks 17.1–17.4)
+- Phase 0 — Foundation
+- Phase 1 — Authentication
+- Phase 2 — Authorization / Relational RBAC
+- Phase 14 — Previous Application Development
+- Phase 15 — Master Data Management
+- Phase 16 — User / Role / Permission Management
+- Phase 17 — Employee Auth Linking & Permission Localization
+- Phase 18 — Employee Management Redesign
+- Phase 19 — PromptPay QR Payment
+- Phase 20 — Supermarket / POS / Stock
 
-Current
+## Current
 
-- Phase 17 COMPLETED — awaiting approval to define/start next phase
+- Phase 21 — Flexible Schedule, Attendance & Payroll
+- Status: APPROVED / READY
+- Reference document: `docs/plans/phase_21_flexible_schedule_attendance_payroll.md`
 
-MASTER_PLAN determines only the next phase.
+## Phase 21 Goal
 
-It never authorizes implementation.
+พัฒนาระบบจัดตารางงานจริงให้รองรับ:
 
-Implementation always requires a new CURRENT_TASK
-and explicit approval.
+- ตารางงานรายครึ่งเดือน
+- เปลี่ยนกะ
+- เข้างานแทน
+- ทำงานควบกะ
+- กะพิเศษ
+- เชื่อมกับการลงเวลาเข้า–ออก
+- สรุปขาด ลา มาสาย กลับก่อน และ OT
+- คำนวณค่าจ้างรายวันและรายเดือน
+- ปรับยอดโดยผู้มีสิทธิ์พร้อมเหตุผล
+- อนุมัติ จ่าย และล็อกรอบค่าจ้าง
+- ทำแบบ backward-compatible โดยไม่กระทบระบบเดิม
+
+## Next Action
+
+1. อ่าน `AGENTS.md`
+2. อ่าน `docs/CURRENT_TASK.md`
+3. อ่าน `docs/plans/phase_21_flexible_schedule_attendance_payroll.md`
+4. ตรวจโค้ดเฉพาะส่วน Schedule, Attendance, Wage, Payroll และ Permission
+5. เริ่ม Task 21.1 ตามเอกสาร Phase 21
+6. ทำงานต่อเนื่องตาม Task ภายใน Phase โดยไม่ขออนุมัติทุกงานย่อย
+7. หยุดขออนุมัติเฉพาะเมื่อ:
+   - ต้องลบข้อมูลจริง
+   - ต้องทำ destructive migration
+   - ต้องเปลี่ยน architecture หลัก
+   - พบ requirement ที่ตัดสินใจแทนผู้ใช้ไม่ได้
+
+`MASTER_PLAN.md` อนุญาตให้เริ่ม Phase 21 แล้ว
 
 ---
 

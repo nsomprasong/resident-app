@@ -20,11 +20,42 @@ export function looksLikePhone(value: string): boolean {
 }
 
 export function normalizeUsername(value: string): string {
-  return value.trim().toLowerCase();
+  return value
+    .normalize("NFKC")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/\s/g, "")
+    .trim()
+    .toLowerCase();
 }
 
 export function isValidUsername(value: string): boolean {
   return USERNAME_PATTERN.test(normalizeUsername(value));
+}
+
+/** Human-readable reason when username fails validation (null = OK). */
+export function describeUsernameIssue(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "กรุณาระบุ Username";
+  }
+  if (trimmed.includes("@")) {
+    return "Username ห้ามเป็นอีเมล — ใส่เฉพาะชื่อ login (เช่น nonza) ไม่ใส่ @";
+  }
+  const normalized = normalizeUsername(trimmed);
+  if (normalized.length < 3) {
+    return `Username สั้นเกินไป (${normalized.length} ตัว — ต้องอย่างน้อย 3 ตัว)`;
+  }
+  if (normalized.length > 40) {
+    return "Username ยาวเกิน 40 ตัว";
+  }
+  if (!USERNAME_PATTERN.test(normalized)) {
+    const bad = [...normalized].filter((ch) => !/[a-z0-9._-]/.test(ch));
+    if (bad.length) {
+      return `Username มีอักขระที่ใช้ไม่ได้ (${[...new Set(bad)].join("")}) — ใช้ได้เฉพาะ a-z 0-9 . _ -`;
+    }
+    return "Username ต้องเป็น a-z 0-9 . _ - ความยาว 3–40 ตัว";
+  }
+  return null;
 }
 
 /** Normalize Thai mobile numbers to E.164 (+66…). Returns null if invalid. */

@@ -6,6 +6,7 @@ import {
 } from "@/lib/api/validation";
 import { recordAuditLog } from "@/lib/audit/audit-log";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { workforceEmployeeWhere } from "@/lib/auth/support-account";
 import { displayEmployeeName } from "@/lib/hr/employees";
 import {
   addDaysToDateKey,
@@ -116,7 +117,11 @@ export async function GET(request: NextRequest) {
       prisma.shiftTemplate.findMany({
         where: { isActive: true },
         orderBy: [{ startMinutes: "asc" }, { name: "asc" }],
-        include: { _count: { select: { memberships: true } } },
+        include: {
+          _count: {
+            select: { memberships: true, defaultForEmployees: true },
+          },
+        },
       }),
       prisma.holidayCalendar.findMany({
         where: { holidayDate: { gte: from, lte: to } },
@@ -140,7 +145,10 @@ export async function GET(request: NextRequest) {
         name: template.name,
         requiredHeadcount: template.requiredHeadcount,
         isActive: template.isActive,
-        memberCount: template._count.memberships,
+        memberCount: Math.max(
+          template._count.memberships,
+          template._count.defaultForEmployees,
+        ),
       })),
     });
 
@@ -201,7 +209,7 @@ async function createAssignment(input: AssignBody) {
   const employee = await prisma.employee.findFirst({
     where: {
       id: input.employeeId,
-      hrStatus: { in: ["ACTIVE", "PROBATION"] },
+      ...workforceEmployeeWhere(),
     },
     select: { id: true },
   });

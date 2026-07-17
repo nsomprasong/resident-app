@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   ShipWheel,
   UsersRound,
+  UtensilsCrossed,
   type LucideIcon,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -21,6 +22,7 @@ import { useMemo } from "react";
 
 import { useEmployeePermissions } from "@/components/auth/EmployeePermissionsProvider";
 import { EmployeesManager } from "@/components/settings/EmployeesManager";
+import { FoodSetsManager } from "@/components/settings/FoodSetsManager";
 import { InspectionCatalogManager } from "@/components/settings/InspectionCatalogManager";
 import { PaymentChannelsManager } from "@/components/settings/PaymentChannelsManager";
 import { ProductsManager } from "@/components/settings/ProductsManager";
@@ -41,6 +43,8 @@ export type SettingsSummary = {
   raftsAvailable: number;
   products: number;
   productsActive: number;
+  foodSets: number;
+  foodSetsActive: number;
   inspectionItems: number;
   inspectionActive: number;
   channels: number;
@@ -56,6 +60,7 @@ type SectionId =
   | "rooms"
   | "rafts"
   | "products"
+  | "food-sets"
   | "inspection-catalog"
   | "payment-channels"
   | "promptpay-accounts"
@@ -91,7 +96,7 @@ const groups: GroupDef[] = [
       {
         id: "room-types",
         title: "ประเภทห้อง",
-        description: "กำหนดประเภทห้อง ราคา และสถานะการใช้งาน",
+        description: "เพิ่ม/ลบเตียงเดี่ยว คู่ 3–4 เตียง บ้านรวมพัก และตั้งราคา",
         icon: Layers3,
         summary: (s) => `${s.roomTypes} ประเภท`,
       },
@@ -129,6 +134,13 @@ const groups: GroupDef[] = [
         description: "รายการสินค้า ราคา และการเปิดขาย",
         icon: PackageOpen,
         summary: (s) => `${s.productsActive}/${s.products} เปิดขาย`,
+      },
+      {
+        id: "food-sets",
+        title: "ชุดอาหาร",
+        description: "จัดชุดเมนูสำหรับกรุ๊ปทัวร์ สั่งแล้วขยายเข้าครัว",
+        icon: UtensilsCrossed,
+        summary: (s) => `${s.foodSetsActive}/${s.foodSets} เปิดใช้`,
       },
       {
         id: "inspection-catalog",
@@ -204,6 +216,8 @@ function renderManager(id: SectionId) {
       return <RaftsManager />;
     case "products":
       return <ProductsManager />;
+    case "food-sets":
+      return <FoodSetsManager />;
     case "inspection-catalog":
       return <InspectionCatalogManager />;
     case "payment-channels":

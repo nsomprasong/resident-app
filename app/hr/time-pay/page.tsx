@@ -12,7 +12,7 @@ export default function HrTimePayPage() {
         icon={<Clock3 size={24} />}
         eyebrow="บริหารพนักงาน"
         title="เวลาและค่าจ้าง"
-        description="ลงเวลา การลา คำขอ OT สรุปค่าแรง และตั้งค่าหมุดเข้างาน"
+        description="ลงเวลา การลา คำขอ OT และสรุปค่าแรง"
       />
       <HrTimePayBoard />
     </div>

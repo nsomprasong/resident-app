@@ -19,6 +19,7 @@ const CLOCK_ERROR_STATUS: Record<string, number> = {
   ALREADY_CHECKED_IN: 409,
   ALREADY_CHECKED_OUT: 409,
   NOT_CHECKED_IN: 409,
+  SHIFT_SELECTION_REQUIRED: 409,
   INTERNAL_ERROR: 500,
 };
 
@@ -64,6 +65,10 @@ export async function POST(request: NextRequest) {
       longitude,
       accuracyMeters,
       userAgent,
+      scheduledShiftId:
+        typeof parsed.body.scheduledShiftId === "string"
+          ? parsed.body.scheduledShiftId
+          : null,
     });
 
     await recordAuditLog({

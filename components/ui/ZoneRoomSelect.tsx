@@ -3,18 +3,21 @@
 import { BedDouble, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import { BED_LAYOUTS, resolveBedLayout } from "@/lib/settings/bed-types";
+
 import RoomIconSelect from "./RoomIconSlect";
 
 interface Room {
   id: string | number;
   number?: string;
-  roomNo?: number;
+  roomNo?: string | number;
   booked?: boolean;
   zone?: { id: string; name: string };
   roomType?: {
     id?: string;
     name: string;
     bedType?: string | null;
+    capacity?: number;
     basePrice?: number;
   };
 }
@@ -41,6 +44,7 @@ export default function ZoneRoomSelect({
   const [rooms, setRooms] = useState<Room[]>(fallbackRooms);
   const [zone, setZone] = useState("all");
   const [roomType, setRoomType] = useState("all");
+  const [bedLayout, setBedLayout] = useState("all");
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -100,11 +104,18 @@ export default function ZoneRoomSelect({
     return rooms.filter((room) => {
       const matchZone = zone === "all" || room.zone?.id === zone;
       const matchType = roomType === "all" || room.roomType?.name === roomType;
-      const roomLabel = String(room.number ?? room.roomNo ?? room.id).toLowerCase();
+      const layout = resolveBedLayout(
+        room.roomType?.bedType,
+        room.roomType?.capacity,
+      );
+      const matchBed = bedLayout === "all" || layout?.code === bedLayout;
+      const roomLabel = String(
+        room.number ?? room.roomNo ?? room.id,
+      ).toLowerCase();
       const matchQuery = !normalized || roomLabel.includes(normalized);
-      return matchZone && matchType && matchQuery;
+      return matchZone && matchType && matchBed && matchQuery;
     });
-  }, [query, roomType, rooms, zone]);
+  }, [bedLayout, query, roomType, rooms, zone]);
 
   const selectedRooms = rooms.filter((room) =>
     selectedRoomIds.includes(String(room.id)),
@@ -137,12 +148,14 @@ export default function ZoneRoomSelect({
         </span>
         <div>
           <h3 className="text-sm font-semibold text-foreground">ห้องพัก</h3>
-          <p className="text-xs text-muted-foreground">เลือกห้องว่างตามโซนและประเภท</p>
+          <p className="text-xs text-muted-foreground">
+            เลือกห้องว่างตามโซน ประเภท และจำนวนเตียง
+          </p>
         </div>
       </div>
 
       <div className="space-y-3 p-4">
-        <div className="grid gap-2 sm:grid-cols-3">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <label className="text-xs text-muted-foreground">
             โซน
             <select
@@ -173,6 +186,21 @@ export default function ZoneRoomSelect({
               ))}
             </select>
           </label>
+          <label className="text-xs text-muted-foreground">
+            จำนวนเตียง
+            <select
+              value={bedLayout}
+              onChange={(event) => setBedLayout(event.target.value)}
+              className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm"
+            >
+              <option value="all">ทุกแบบ</option>
+              {BED_LAYOUTS.map((layout) => (
+                <option key={layout.code} value={layout.code}>
+                  {layout.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="relative text-xs text-muted-foreground">
             ค้นหาเลขห้อง
             <Search
@@ -182,7 +210,7 @@ export default function ZoneRoomSelect({
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="เช่น 101"
+              placeholder="เช่น B01 หรือ 101"
               className="mt-1 w-full rounded-xl border border-border bg-surface py-2 pl-8 pr-3 text-sm"
             />
           </label>
@@ -203,12 +231,15 @@ export default function ZoneRoomSelect({
                   return (
                     <RoomIconSelect
                       key={id}
-                      roomNo={Number(room.number ?? room.roomNo ?? room.id)}
-                      booked={Boolean(room.booked) && !selectedRoomIds.includes(id)}
+                      roomNo={String(room.number ?? room.roomNo ?? room.id)}
+                      booked={
+                        Boolean(room.booked) && !selectedRoomIds.includes(id)
+                      }
                       selected={selectedRoomIds.includes(id)}
                       onToggle={() => toggle(id)}
                       roomType={room.roomType?.name}
                       bedType={room.roomType?.bedType}
+                      capacity={room.roomType?.capacity}
                       price={
                         typeof room.roomType?.basePrice === "number"
                           ? room.roomType.basePrice
@@ -227,11 +258,11 @@ export default function ZoneRoomSelect({
             <p className="text-muted-foreground">
               เลือกแล้ว{" "}
               <span className="font-medium text-foreground">
-                {selectedRoomIds.length}
-              </span>{" "}
-              ห้อง
+                {selectedRooms.length} ห้อง
+              </span>
               {selectedRooms.length > 0 ? (
-                <span className="ml-2 text-xs">
+                <span>
+                  {" "}
                   (
                   {selectedRooms
                     .map((room) => room.number ?? room.roomNo)
@@ -240,11 +271,9 @@ export default function ZoneRoomSelect({
                 </span>
               ) : null}
             </p>
-            <p className="font-medium text-foreground">
-              รวมห้อง ฿{(roomTotal * nights).toLocaleString()}
-              <span className="ml-1 text-xs font-normal text-muted-foreground">
-                ({nights} คืน)
-              </span>
+            <p className="font-semibold text-primary">
+              รวม ฿{(roomTotal * nights).toLocaleString("th-TH")}
+              {nights > 1 ? ` / ${nights} คืน` : ""}
             </p>
           </div>
         </div>

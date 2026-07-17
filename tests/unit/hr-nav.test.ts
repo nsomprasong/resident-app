@@ -9,11 +9,19 @@ import {
 } from "@/lib/hr/nav";
 
 describe("hr nav", () => {
-  it("lists four admin HR destinations", () => {
-    assert.equal(hrNavItems.length, 4);
+  it("lists admin HR destinations", () => {
+    assert.equal(hrNavItems.length, 7);
     assert.deepEqual(
       hrNavItems.map((item) => item.path),
-      ["/hr", "/hr/employees", "/hr/schedules", "/hr/time-pay"],
+      [
+        "/hr",
+        "/hr/employees",
+        "/hr/schedules",
+        "/hr/time-pay",
+        "/hr/attendance-review",
+        "/hr/payroll",
+        "/hr/settings",
+      ],
     );
   });
 
@@ -24,7 +32,7 @@ describe("hr nav", () => {
     ]);
     assert.deepEqual(
       visible.map((item) => item.path),
-      ["/hr", "/hr/employees", "/hr/schedules"],
+      ["/hr", "/hr/employees", "/hr/schedules", "/hr/settings"],
     );
   });
 

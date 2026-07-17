@@ -12,6 +12,7 @@ import {
   applyApprovedOt,
   calculateAttendanceMetrics,
   isDateInLockedPeriod,
+  resolveAttendanceShiftName,
 } from "@/lib/hr/attendance";
 import { displayEmployeeName } from "@/lib/hr/employees";
 import { dateKeyUtc, parseDateKey } from "@/lib/hr/schedules";
@@ -29,6 +30,12 @@ const recordInclude = {
     },
   },
   workSchedule: {
+    select: {
+      id: true,
+      shiftTemplate: { select: { id: true, name: true } },
+    },
+  },
+  scheduledShift: {
     select: {
       id: true,
       shiftTemplate: { select: { id: true, name: true } },
@@ -60,6 +67,10 @@ function serializeRecord(
       id: string;
       shiftTemplate: { id: string; name: string } | null;
     } | null;
+    scheduledShift: {
+      id: string;
+      shiftTemplate: { id: string; name: string } | null;
+    } | null;
     adjustments: Array<{
       id: string;
       type: string;
@@ -75,7 +86,8 @@ function serializeRecord(
     employeeName: displayEmployeeName(record.employee),
     employeeCode: record.employee.employeeCode,
     workScheduleId: record.workScheduleId,
-    shiftName: record.workSchedule?.shiftTemplate?.name ?? null,
+    scheduledShiftId: record.scheduledShiftId,
+    shiftName: resolveAttendanceShiftName(record),
     workDate: dateKeyUtc(record.workDate),
     clockIn: record.clockIn?.toISOString() ?? null,
     clockOut: record.clockOut?.toISOString() ?? null,
@@ -142,35 +154,69 @@ export async function GET(request: NextRequest) {
   try {
     const fromKey = request.nextUrl.searchParams.get("from");
     const toKey = request.nextUrl.searchParams.get("to");
-    if (!fromKey || !toKey) {
-      return apiErrorResponse("ต้องระบุ from และ to", 400, "VALIDATION_ERROR");
+    const employeeIdParam = request.nextUrl.searchParams.get("employeeId");
+
+    const hasFrom = Boolean(fromKey?.trim());
+    const hasTo = Boolean(toKey?.trim());
+    if (hasFrom !== hasTo) {
+      return apiErrorResponse(
+        "ต้องระบุ from และ to คู่กัน หรือไม่ระบุทั้งคู่",
+        400,
+        "VALIDATION_ERROR",
+      );
     }
-    const from = parseDateKey(fromKey);
-    const to = parseDateKey(toKey);
-    if (!from || !to || from > to) {
-      return apiErrorResponse("ช่วงวันที่ไม่ถูกต้อง", 400, "VALIDATION_ERROR");
+
+    let from: Date | null = null;
+    let to: Date | null = null;
+    if (hasFrom && hasTo) {
+      from = parseDateKey(fromKey!.trim());
+      to = parseDateKey(toKey!.trim());
+      if (!from || !to || from > to) {
+        return apiErrorResponse("ช่วงวันที่ไม่ถูกต้อง", 400, "VALIDATION_ERROR");
+      }
     }
+
+    const employeeId =
+      employeeIdParam && isUuid(employeeIdParam.trim())
+        ? employeeIdParam.trim()
+        : null;
+
+    const recordWhere: Prisma.AttendanceRecordWhereInput = {
+      ...(from && to ? { workDate: { gte: from, lte: to } } : {}),
+      ...(employeeId ? { employeeId } : {}),
+    };
 
     const [records, periods, pending] = await Promise.all([
       prisma.attendanceRecord.findMany({
-        where: { workDate: { gte: from, lte: to } },
+        where: recordWhere,
         include: recordInclude,
-        orderBy: [{ workDate: "asc" }, { clockIn: "asc" }],
+        orderBy: [{ workDate: "desc" }, { clockIn: "desc" }],
+        ...(from && to ? {} : { take: 5000 }),
       }),
       prisma.attendancePeriod.findMany({
-        where: {
-          periodStart: { lte: to },
-          periodEnd: { gte: from },
-        },
-        orderBy: { periodStart: "asc" },
+        where:
+          from && to
+            ? {
+                periodStart: { lte: to },
+                periodEnd: { gte: from },
+              }
+            : {},
+        orderBy: { periodStart: "desc" },
+        take: from && to ? undefined : 100,
       }),
       prisma.attendanceAdjustment.findMany({
-        where: { status: "PENDING" },
+        where: {
+          status: "PENDING",
+          ...(employeeId
+            ? { attendanceRecord: { employeeId } }
+            : {}),
+        },
         include: {
           attendanceRecord: {
             select: {
               id: true,
               workDate: true,
+              employeeId: true,
               employee: {
                 select: { id: true, name: true, firstName: true, lastName: true },
               },
@@ -199,6 +245,7 @@ export async function GET(request: NextRequest) {
         reason: item.reason,
         proposedOtMinutes: item.proposedOtMinutes,
         attendanceRecordId: item.attendanceRecordId,
+        employeeId: item.attendanceRecord.employeeId,
         workDate: dateKeyUtc(item.attendanceRecord.workDate),
         employeeName: displayEmployeeName(item.attendanceRecord.employee),
       })),
@@ -344,6 +391,33 @@ export async function POST(request: NextRequest) {
         },
         include: recordInclude,
       });
+
+      if (
+        action === "clock-out" &&
+        metrics.otMinutes > 0 &&
+        actorEmployeeId
+      ) {
+        const pendingOt = await prisma.attendanceAdjustment.findFirst({
+          where: {
+            attendanceRecordId: updated.id,
+            type: "OT_REQUEST",
+            status: "PENDING",
+          },
+          select: { id: true },
+        });
+        if (!pendingOt) {
+          await prisma.attendanceAdjustment.create({
+            data: {
+              attendanceRecordId: updated.id,
+              type: "OT_REQUEST",
+              status: "PENDING",
+              reason: "ระบบเสนอ OT จากเวลาออกงานเกินตาราง",
+              proposedOtMinutes: metrics.otMinutes,
+              requestedById: actorEmployeeId,
+            },
+          });
+        }
+      }
 
       await recordAuditLog({
         actor: {
@@ -571,6 +645,254 @@ export async function POST(request: NextRequest) {
         id: result.id,
         status: result.status,
       });
+    }
+
+    if (mode === "correct-time") {
+      if (
+        !permissions.includes("hr.attendance.approve") &&
+        !permissions.includes("hr.attendance.manage")
+      ) {
+        return apiErrorResponse("ไม่มีสิทธิ์แก้ไขเวลา", 403, "FORBIDDEN");
+      }
+
+      const issues: ValidationIssue[] = [];
+      const attendanceId =
+        typeof parsed.body.attendanceId === "string"
+          ? parsed.body.attendanceId.trim()
+          : "";
+      const reason =
+        typeof parsed.body.reason === "string" ? parsed.body.reason.trim() : "";
+      if (!isUuid(attendanceId)) {
+        issues.push({ path: "attendanceId", message: "รหัสรายการไม่ถูกต้อง" });
+      }
+      if (!reason || reason.length < 3) {
+        issues.push({ path: "reason", message: "ต้องระบุเหตุผลอย่างน้อย 3 ตัวอักษร" });
+      }
+
+      const hasClockIn = "clockIn" in parsed.body;
+      const hasClockOut = "clockOut" in parsed.body;
+      if (!hasClockIn && !hasClockOut) {
+        issues.push({
+          path: "clockIn",
+          message: "ต้องระบุเวลาเข้าหรือเวลาออกอย่างน้อยหนึ่งค่า",
+        });
+      }
+
+      let nextClockIn: Date | null | undefined;
+      let nextClockOut: Date | null | undefined;
+
+      if (hasClockIn) {
+        const raw = parsed.body.clockIn;
+        if (raw === null || raw === "") {
+          nextClockIn = null;
+        } else if (typeof raw === "string") {
+          const parsedIn = new Date(raw);
+          if (Number.isNaN(parsedIn.getTime())) {
+            issues.push({ path: "clockIn", message: "เวลาเข้าไม่ถูกต้อง" });
+          } else {
+            nextClockIn = parsedIn;
+          }
+        } else {
+          issues.push({ path: "clockIn", message: "รูปแบบเวลาเข้าไม่ถูกต้อง" });
+        }
+      }
+
+      if (hasClockOut) {
+        const raw = parsed.body.clockOut;
+        if (raw === null || raw === "") {
+          nextClockOut = null;
+        } else if (typeof raw === "string") {
+          const parsedOut = new Date(raw);
+          if (Number.isNaN(parsedOut.getTime())) {
+            issues.push({ path: "clockOut", message: "เวลาออกไม่ถูกต้อง" });
+          } else {
+            nextClockOut = parsedOut;
+          }
+        } else {
+          issues.push({ path: "clockOut", message: "รูปแบบเวลาออกไม่ถูกต้อง" });
+        }
+      }
+
+      if (issues.length) {
+        return validationErrorResponse("กรุณาตรวจสอบการแก้ไขเวลา", issues);
+      }
+
+      const existing = await prisma.attendanceRecord.findUnique({
+        where: { id: attendanceId },
+      });
+      if (!existing) {
+        return apiErrorResponse("ไม่พบรายการลงเวลา", 404, "NOT_FOUND");
+      }
+      if (existing.status === "LOCKED") {
+        return apiErrorResponse("รายการถูกล็อกแล้ว", 409, "LOCKED");
+      }
+      await assertNotLocked(existing.workDate);
+
+      const clockIn =
+        nextClockIn !== undefined ? nextClockIn : existing.clockIn;
+      const clockOut =
+        nextClockOut !== undefined ? nextClockOut : existing.clockOut;
+
+      if (clockIn && clockOut && clockOut.getTime() < clockIn.getTime()) {
+        return validationErrorResponse("กรุณาตรวจสอบการแก้ไขเวลา", [
+          { path: "clockOut", message: "เวลาออกต้องไม่ก่อนเวลาเข้า" },
+        ]);
+      }
+
+      const next = {
+        clockIn,
+        clockOut,
+        breakStart: existing.breakStart,
+        breakEnd: existing.breakEnd,
+        scheduledStart: existing.scheduledStart,
+        scheduledEnd: existing.scheduledEnd,
+        isHolidayWork: existing.isHolidayWork,
+        otApprovedMinutes: existing.otApprovedMinutes,
+        status: existing.status,
+      };
+      const metrics = recompute(next);
+
+      const updated = await prisma.attendanceRecord.update({
+        where: { id: attendanceId },
+        data: {
+          clockIn: next.clockIn,
+          clockOut: next.clockOut,
+          workedMinutes: metrics.workedMinutes,
+          breakMinutes: metrics.breakMinutes,
+          lateMinutes: metrics.lateMinutes,
+          earlyLeaveMinutes: metrics.earlyLeaveMinutes,
+          otMinutes: metrics.otMinutes,
+          status: metrics.status,
+          notes: existing.notes
+            ? `${existing.notes}\n[แก้ไข] ${reason}`
+            : `[แก้ไข] ${reason}`,
+        },
+        include: recordInclude,
+      });
+
+      await recordAuditLog({
+        actor: {
+          employeeId: actorEmployeeId,
+          authUserId: currentUser.user.id,
+        },
+        action: "HR_ATTENDANCE_TIME_CORRECTED",
+        entityType: "ATTENDANCE",
+        entityId: updated.id,
+        metadata: {
+          reason,
+          clockIn: clockIn?.toISOString() ?? null,
+          clockOut: clockOut?.toISOString() ?? null,
+        },
+      });
+
+      return NextResponse.json(serializeRecord(updated));
+    }
+
+    if (mode === "set-ot-approved") {
+      if (
+        !permissions.includes("hr.attendance.approve") &&
+        !permissions.includes("hr.attendance.manage")
+      ) {
+        return apiErrorResponse("ไม่มีสิทธิ์อนุมัติ OT", 403, "FORBIDDEN");
+      }
+      const attendanceId =
+        typeof parsed.body.attendanceId === "string"
+          ? parsed.body.attendanceId.trim()
+          : "";
+      const reason =
+        typeof parsed.body.reason === "string" ? parsed.body.reason.trim() : "";
+      const rawMinutes = parsed.body.otApprovedMinutes;
+      const otApprovedMinutes =
+        rawMinutes === undefined || rawMinutes === null || rawMinutes === ""
+          ? NaN
+          : Number(rawMinutes);
+      if (!isUuid(attendanceId)) {
+        return validationErrorResponse("รหัสรายการไม่ถูกต้อง", [
+          { path: "attendanceId", message: "UUID ไม่ถูกต้อง" },
+        ]);
+      }
+      if (!Number.isFinite(otApprovedMinutes) || otApprovedMinutes < 0) {
+        return validationErrorResponse("นาที OT ไม่ถูกต้อง", [
+          { path: "otApprovedMinutes", message: "ต้องเป็นจำนวนเต็ม ≥ 0" },
+        ]);
+      }
+      if (!reason || reason.length < 3) {
+        return validationErrorResponse("ต้องระบุเหตุผล", [
+          { path: "reason", message: "อย่างน้อย 3 ตัวอักษร" },
+        ]);
+      }
+
+      const existing = await prisma.attendanceRecord.findUnique({
+        where: { id: attendanceId },
+      });
+      if (!existing) {
+        return apiErrorResponse("ไม่พบรายการลงเวลา", 404, "NOT_FOUND");
+      }
+      if (existing.status === "LOCKED") {
+        return apiErrorResponse("รายการถูกล็อกแล้ว", 409, "LOCKED");
+      }
+      await assertNotLocked(existing.workDate);
+
+      const updated = await prisma.$transaction(async (tx) => {
+        await tx.attendanceAdjustment.updateMany({
+          where: {
+            attendanceRecordId: attendanceId,
+            type: "OT_REQUEST",
+            status: "PENDING",
+          },
+          data: {
+            status: "REJECTED",
+            reviewedById: actorEmployeeId,
+            reviewedAt: new Date(),
+            reviewNote:
+              otApprovedMinutes > 0
+                ? "ปิดคำขอ — ผู้ดูแลอนุมัติ OT โดยตรง"
+                : "ปิดคำขอ — ยกเลิกการอนุมัติ OT",
+          },
+        });
+
+        const next = {
+          clockIn: existing.clockIn,
+          clockOut: existing.clockOut,
+          breakStart: existing.breakStart,
+          breakEnd: existing.breakEnd,
+          scheduledStart: existing.scheduledStart,
+          scheduledEnd: existing.scheduledEnd,
+          isHolidayWork: existing.isHolidayWork,
+          otApprovedMinutes: Math.round(otApprovedMinutes),
+          status: existing.status,
+        };
+        const metrics = recompute(next);
+        return tx.attendanceRecord.update({
+          where: { id: attendanceId },
+          data: {
+            otApprovedMinutes: next.otApprovedMinutes,
+            workedMinutes: metrics.workedMinutes,
+            breakMinutes: metrics.breakMinutes,
+            lateMinutes: metrics.lateMinutes,
+            earlyLeaveMinutes: metrics.earlyLeaveMinutes,
+            otMinutes: metrics.otMinutes,
+            status: metrics.status,
+          },
+          include: recordInclude,
+        });
+      });
+
+      await recordAuditLog({
+        actor: {
+          employeeId: actorEmployeeId,
+          authUserId: currentUser.user.id,
+        },
+        action: "HR_ATTENDANCE_OT_APPROVAL_SET",
+        entityType: "ATTENDANCE",
+        entityId: updated.id,
+        metadata: {
+          reason,
+          otApprovedMinutes: updated.otApprovedMinutes,
+        },
+      });
+
+      return NextResponse.json(serializeRecord(updated));
     }
 
     if (mode === "lock-period") {

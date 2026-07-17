@@ -1,6 +1,7 @@
 import {
   apiErrorResponse,
 } from "@/lib/api/validation";
+import { excludeSystemAdminEmployeeWhere } from "@/lib/auth/support-account";
 import {
   buildHrDashboardMetrics,
   buildHrMonthSummary,
@@ -40,6 +41,7 @@ export async function GET(request: NextRequest) {
       departments,
     ] = await Promise.all([
       prisma.employee.findMany({
+        where: excludeSystemAdminEmployeeWhere(),
         select: {
           id: true,
           employmentType: true,
@@ -137,7 +139,9 @@ export async function GET(request: NextRequest) {
           name: true,
           requiredHeadcount: true,
           isActive: true,
-          _count: { select: { memberships: true } },
+          _count: {
+            select: { memberships: true, defaultForEmployees: true },
+          },
         },
       }),
       prisma.employeeCompensation.findMany({
@@ -161,7 +165,10 @@ export async function GET(request: NextRequest) {
         name: template.name,
         requiredHeadcount: template.requiredHeadcount,
         isActive: template.isActive,
-        memberCount: template._count.memberships,
+        memberCount: Math.max(
+          template._count.memberships,
+          template._count.defaultForEmployees,
+        ),
       })),
     });
 
@@ -205,13 +212,6 @@ export async function GET(request: NextRequest) {
         id: item.id,
         name: item.name,
       })),
-      quickActions: [
-        { label: "เพิ่มพนักงาน", href: "/hr/employees" },
-        { label: "จัดตารางงาน", href: "/hr/schedules" },
-        { label: "ลงเวลา", href: "/hr/attendance" },
-        { label: "อนุมัติวันลา", href: "/hr/leave" },
-        { label: "ประมวลผลค่าจ้าง", href: "/hr/payroll" },
-      ],
     });
   } catch (error) {
     console.error("GET /api/hr/dashboard failed", error);

@@ -44,6 +44,7 @@ interface Detail {
   statusLabel: string;
   status: string;
   mode: "group" | "solo";
+  tourGroupId?: string | null;
   jobClosed: boolean;
   customerName: string;
   contactName?: string;
@@ -717,6 +718,7 @@ export default function BookingDetailPage() {
         setOpen={setOpenManageFood}
         bookingId={bookingId}
         mode={data.mode}
+        tourGroupId={data.tourGroupId ?? null}
         rooms={data.rooms.map((room) => ({
           id: room.id,
           number: room.number,

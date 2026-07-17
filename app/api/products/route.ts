@@ -14,7 +14,16 @@ const productInclude = {
     select: { id: true, name: true, requiresFoodCategory: true },
   },
   category: { select: { id: true, name: true } },
-} as const;
+  optionGroups: {
+    include: {
+      options: {
+        where: { isActive: true },
+        orderBy: [{ sortOrder: "asc" as const }, { label: "asc" as const }],
+      },
+    },
+    orderBy: [{ sortOrder: "asc" as const }, { name: "asc" as const }],
+  },
+};
 
 export async function GET(request: NextRequest) {
   try {
@@ -49,6 +58,17 @@ export async function GET(request: NextRequest) {
         isMinibar: product.isMinibar,
         image: product.imageUrl ?? "/images/food/frychicken.jpg",
         alt: product.name,
+        optionGroups: product.optionGroups.map((group) => ({
+          id: group.id,
+          name: group.name,
+          isRequired: group.isRequired,
+          sortOrder: group.sortOrder,
+          options: group.options.map((option) => ({
+            id: option.id,
+            label: option.label,
+            sortOrder: option.sortOrder,
+          })),
+        })),
       })),
     );
   } catch (error) {

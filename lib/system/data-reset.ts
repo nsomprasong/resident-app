@@ -1,5 +1,5 @@
 /**
- * Destructive data wipe for operational / master / supermarket datasets.
+ * Destructive data wipe for operational / HR / master / supermarket / system datasets.
  * Roles / permissions are never wiped.
  * Employees may be wiped when explicitly selected, but protected support
  * accounts and the acting employee (when provided) always survive.
@@ -15,10 +15,21 @@ export const serviceResetTargets = [
   "bookings",
   "guests",
   "tourGroups",
-  "workShifts",
-  "hrWorkData",
+] as const;
+
+export const hrResetTargets = [
+  "hrAttendance",
+  "hrLeave",
+  "hrSchedules",
+  "hrPayroll",
+  "hrDocuments",
+  "hrShiftTemplates",
+  "hrLeaveTypes",
+  "hrHolidays",
+  "hrPinSettings",
+  "hrPayrollSettings",
   "employees",
-  "auditLogs",
+  "hrOrg",
 ] as const;
 
 export const masterResetTargets = [
@@ -27,6 +38,7 @@ export const masterResetTargets = [
   "productTypes",
   "inspectionCatalog",
   "paymentChannels",
+  "promptPayAccounts",
   "rooms",
   "roomTypes",
   "zones",
@@ -37,27 +49,49 @@ export const supermarketResetTargets = [
   "posSales",
   "posProducts",
   "posCategories",
+  "posSettings",
 ] as const;
 
+export const systemResetTargets = ["auditLogs"] as const;
+
 export type ServiceResetTarget = (typeof serviceResetTargets)[number];
+export type HrResetTarget = (typeof hrResetTargets)[number];
 export type MasterResetTarget = (typeof masterResetTargets)[number];
 export type SupermarketResetTarget = (typeof supermarketResetTargets)[number];
-export type DataResetCategory = "service" | "master" | "supermarket";
+export type SystemResetTarget = (typeof systemResetTargets)[number];
+export type DataResetCategory =
+  | "service"
+  | "hr"
+  | "master"
+  | "supermarket"
+  | "system";
 export type DataResetTarget =
   | ServiceResetTarget
+  | HrResetTarget
   | MasterResetTarget
-  | SupermarketResetTarget;
+  | SupermarketResetTarget
+  | SystemResetTarget;
 
 export const serviceResetTargetLabels: Record<ServiceResetTarget, string> = {
   bookings: "การจอง / การรับบริการ (รวมชำระเงิน ออเดอร์ ตรวจห้อง)",
   guests: "ลูกค้า",
   tourGroups: "กรุ๊ปทัวร์",
-  workShifts: "ตารางเวรพนักงาน (ระบบเดิม)",
-  hrWorkData:
-    "ข้อมูลการทำงาน HR (ลงเวลา ขาด ลา มาสาย OT กะที่มอบหมาย — ไม่ลบพนักงาน/หมุด/ประเภทลา)",
+};
+
+export const hrResetTargetLabels: Record<HrResetTarget, string> = {
+  hrAttendance: "ลงเวลา / OT / มาสาย (รายการ เหตุการณ์ คำขอแก้ไข รอบล็อก)",
+  hrLeave: "คำขอลาและยอดคงเหลือ",
+  hrSchedules: "ตารางงาน (รอบกะ กะที่มอบหมาย ตารางเดิม เวรเดิม)",
+  hrPayroll: "รอบจ่าย / สลิป / รายการปรับยอด",
+  hrDocuments: "เอกสารพนักงาน",
+  hrShiftTemplates: "แม่แบบกะและการจัดสมาชิกกะ",
+  hrLeaveTypes: "ประเภทการลา",
+  hrHolidays: "ปฏิทินวันหยุด",
+  hrPinSettings: "หมุด GPS / รัศมีลงเวลา",
+  hrPayrollSettings: "สูตรค่าจ้าง (ตั้งค่า payroll)",
   employees:
-    "พนักงาน HR (โปรไฟล์และบัญชี — คงบัญชี support และผู้ทำรายการ)",
-  auditLogs: "บันทึกตรวจสอบระบบ (ลบได้เฉพาะจากหน้านี้)",
+    "พนักงาน (โปรไฟล์และบัญชี — คง support/ผู้ทำรายการ; จะล้างกะ/บิล POS ที่อ้างอิงด้วย)",
+  hrOrg: "แผนกและตำแหน่ง",
 };
 
 export const masterResetTargetLabels: Record<MasterResetTarget, string> = {
@@ -66,6 +100,7 @@ export const masterResetTargetLabels: Record<MasterResetTarget, string> = {
   productTypes: "ประเภทสินค้า",
   inspectionCatalog: "ราคากลางตรวจห้อง",
   paymentChannels: "ช่องทางรับชำระ",
+  promptPayAccounts: "บัญชี PromptPay",
   rooms: "ห้องพัก",
   roomTypes: "ประเภทห้อง",
   zones: "โซน",
@@ -79,16 +114,35 @@ export const supermarketResetTargetLabels: Record<
   posSales: "ข้อมูลขาย (บิลขาย กะ พักบิล บัญชี POS)",
   posProducts: "ข้อมูลสินค้า (รวมสต๊อก)",
   posCategories: "หมวดหมู่สินค้า",
+  posSettings: "ตั้งค่า POS",
+};
+
+export const systemResetTargetLabels: Record<SystemResetTarget, string> = {
+  auditLogs: "บันทึกตรวจสอบระบบ (ลบได้เฉพาะจากหน้านี้)",
 };
 
 export type DataResetCounts = Record<DataResetTarget, number>;
+
+export type DataResetFailure = {
+  target: DataResetTarget;
+  message: string;
+};
 
 export type DataResetResult = {
   category: DataResetCategory;
   targets: DataResetTarget[];
   deleted: Partial<Record<DataResetTarget, number>>;
+  /** Targets that failed after earlier targets already committed (independent mode). */
+  failed: DataResetFailure[];
   /** Auth user ids left after employee rows are removed — cleaned outside the DB transaction. */
   orphanAuthUserIds: string[];
+};
+
+type DataResetDb = {
+  $transaction: <T>(
+    fn: (tx: Prisma.TransactionClient) => Promise<T>,
+    options?: { timeout?: number; maxWait?: number },
+  ) => Promise<T>;
 };
 
 export type DataResetExecuteOptions = {
@@ -118,6 +172,10 @@ function isServiceTarget(value: string): value is ServiceResetTarget {
   return (serviceResetTargets as readonly string[]).includes(value);
 }
 
+function isHrTarget(value: string): value is HrResetTarget {
+  return (hrResetTargets as readonly string[]).includes(value);
+}
+
 function isMasterTarget(value: string): value is MasterResetTarget {
   return (masterResetTargets as readonly string[]).includes(value);
 }
@@ -126,10 +184,75 @@ function isSupermarketTarget(value: string): value is SupermarketResetTarget {
   return (supermarketResetTargets as readonly string[]).includes(value);
 }
 
+function isSystemTarget(value: string): value is SystemResetTarget {
+  return (systemResetTargets as readonly string[]).includes(value);
+}
+
 function allowedTargetsForCategory(category: DataResetCategory) {
   if (category === "service") return serviceResetTargets;
+  if (category === "hr") return hrResetTargets;
   if (category === "master") return masterResetTargets;
-  return supermarketResetTargets;
+  if (category === "supermarket") return supermarketResetTargets;
+  return systemResetTargets;
+}
+
+/**
+ * Within a category, selecting a target may require wiping dependencies first.
+ * This expands the selection so FK order can succeed.
+ */
+export function expandDataResetTargets(
+  category: DataResetCategory,
+  targets: DataResetTarget[],
+): DataResetTarget[] {
+  const selected = new Set(targets);
+
+  if (category === "service") {
+    if (selected.has("guests") || selected.has("tourGroups")) {
+      selected.add("bookings");
+    }
+  }
+
+  if (category === "hr") {
+    if (selected.has("hrLeaveTypes")) selected.add("hrLeave");
+    if (selected.has("hrShiftTemplates")) {
+      selected.add("hrAttendance");
+      selected.add("hrSchedules");
+    }
+    if (selected.has("employees")) {
+      selected.add("hrAttendance");
+      selected.add("hrLeave");
+      selected.add("hrPayroll");
+      selected.add("hrDocuments");
+      selected.add("hrSchedules");
+    }
+    if (selected.has("hrOrg")) {
+      // Org can SetNull on employees, but wipe employee-linked HR first if also wiping employees.
+    }
+  }
+
+  if (category === "master") {
+    if (selected.has("foodCategories") || selected.has("productTypes")) {
+      selected.add("products");
+    }
+    if (
+      selected.has("roomTypes") ||
+      selected.has("zones") ||
+      selected.has("rafts")
+    ) {
+      selected.add("rooms");
+    }
+  }
+
+  if (category === "supermarket") {
+    if (selected.has("posProducts") || selected.has("posCategories")) {
+      selected.add("posSales");
+    }
+    if (selected.has("posCategories")) {
+      selected.add("posProducts");
+    }
+  }
+
+  return orderDataResetTargets(category, [...selected]);
 }
 
 export function resolveDataResetTargets(
@@ -151,15 +274,24 @@ export function resolveDataResetTargets(
     if (category === "service" && !isServiceTarget(target)) {
       return { ok: false, message: `รายการไม่ถูกต้อง: ${target}` };
     }
+    if (category === "hr" && !isHrTarget(target)) {
+      return { ok: false, message: `รายการไม่ถูกต้อง: ${target}` };
+    }
     if (category === "master" && !isMasterTarget(target)) {
       return { ok: false, message: `รายการไม่ถูกต้อง: ${target}` };
     }
     if (category === "supermarket" && !isSupermarketTarget(target)) {
       return { ok: false, message: `รายการไม่ถูกต้อง: ${target}` };
     }
+    if (category === "system" && !isSystemTarget(target)) {
+      return { ok: false, message: `รายการไม่ถูกต้อง: ${target}` };
+    }
   }
 
-  return { ok: true, targets: unique as DataResetTarget[] };
+  return {
+    ok: true,
+    targets: expandDataResetTargets(category, unique as DataResetTarget[]),
+  };
 }
 
 async function resolvePreservedEmployeeIds(
@@ -199,39 +331,8 @@ async function countWipeableEmployees(
   return tx.employee.count({ where: { id: { notIn: keepIds } } });
 }
 
-async function countHrWorkData(
-  tx: Prisma.TransactionClient | typeof import("@/lib/prisma").prisma,
-): Promise<number> {
-  const [
-    attendanceAdjustments,
-    attendanceEvents,
-    attendanceRecords,
-    attendancePeriods,
-    leaveRequests,
-    leaveBalances,
-    workSchedules,
-    workShifts,
-  ] = await Promise.all([
-    tx.attendanceAdjustment.count(),
-    tx.attendanceEvent.count(),
-    tx.attendanceRecord.count(),
-    tx.attendancePeriod.count(),
-    tx.leaveRequest.count(),
-    tx.leaveBalance.count(),
-    tx.workSchedule.count(),
-    tx.workShift.count(),
-  ]);
-
-  return (
-    attendanceAdjustments +
-    attendanceEvents +
-    attendanceRecords +
-    attendancePeriods +
-    leaveRequests +
-    leaveBalances +
-    workSchedules +
-    workShifts
-  );
+async function sumCounts(values: number[]) {
+  return values.reduce((sum, value) => sum + value, 0);
 }
 
 export async function countDataResetTargets(
@@ -241,15 +342,24 @@ export async function countDataResetTargets(
     bookings,
     guests,
     tourGroups,
-    workShifts,
-    hrWorkData,
+    hrAttendance,
+    hrLeave,
+    hrSchedules,
+    hrPayroll,
+    hrDocuments,
+    hrShiftTemplates,
+    hrLeaveTypes,
+    hrHolidays,
+    hrPinSettings,
+    hrPayrollSettings,
     employees,
-    auditLogs,
+    hrOrg,
     products,
     foodCategories,
     productTypes,
     inspectionCatalog,
     paymentChannels,
+    promptPayAccounts,
     rooms,
     roomTypes,
     zones,
@@ -257,19 +367,56 @@ export async function countDataResetTargets(
     posSales,
     posProducts,
     posCategories,
+    posSettings,
+    auditLogs,
   ] = await Promise.all([
     tx.booking.count(),
     tx.guest.count(),
     tx.tourGroup.count(),
-    tx.workShift.count(),
-    countHrWorkData(tx),
+    sumCounts(
+      await Promise.all([
+        tx.attendanceAdjustment.count(),
+        tx.attendanceEvent.count(),
+        tx.attendanceRecord.count(),
+        tx.attendancePeriod.count(),
+      ]),
+    ),
+    sumCounts(
+      await Promise.all([tx.leaveRequest.count(), tx.leaveBalance.count()]),
+    ),
+    sumCounts(
+      await Promise.all([
+        tx.scheduleChangeLog.count(),
+        tx.scheduledShift.count(),
+        tx.schedulePeriod.count(),
+        tx.workSchedule.count(),
+        tx.workShift.count(),
+      ]),
+    ),
+    sumCounts(
+      await Promise.all([
+        tx.payrollPayslip.count(),
+        tx.payrollAdjustment.count(),
+        tx.payrollEntry.count(),
+        tx.payrollPeriod.count(),
+      ]),
+    ),
+    tx.employeeDocument.count(),
+    tx.shiftTemplate.count(),
+    tx.leaveType.count(),
+    tx.holidayCalendar.count(),
+    tx.hrAttendanceSetting.count(),
+    tx.payrollSetting.count(),
     countWipeableEmployees(tx),
-    tx.auditLog.count(),
+    sumCounts(
+      await Promise.all([tx.position.count(), tx.department.count()]),
+    ),
     tx.product.count(),
     tx.foodCategory.count(),
     tx.productType.count(),
     tx.inspectionCatalog.count(),
     tx.paymentChannel.count(),
+    tx.promptPayAccount.count(),
     tx.room.count(),
     tx.roomType.count(),
     tx.zone.count(),
@@ -277,21 +424,32 @@ export async function countDataResetTargets(
     tx.posSale.count(),
     tx.posProduct.count(),
     tx.posCategory.count(),
+    tx.posSetting.count(),
+    tx.auditLog.count(),
   ]);
 
   return {
     bookings,
     guests,
     tourGroups,
-    workShifts,
-    hrWorkData,
+    hrAttendance,
+    hrLeave,
+    hrSchedules,
+    hrPayroll,
+    hrDocuments,
+    hrShiftTemplates,
+    hrLeaveTypes,
+    hrHolidays,
+    hrPinSettings,
+    hrPayrollSettings,
     employees,
-    auditLogs,
+    hrOrg,
     products,
     foodCategories,
     productTypes,
     inspectionCatalog,
     paymentChannels,
+    promptPayAccounts,
     rooms,
     roomTypes,
     zones,
@@ -299,32 +457,13 @@ export async function countDataResetTargets(
     posSales,
     posProducts,
     posCategories,
+    posSettings,
+    auditLogs,
   };
 }
 
-async function deleteHrWorkDataTarget(
-  tx: Prisma.TransactionClient,
-): Promise<number> {
-  // Dependency-safe order: adjustments/events → records → leave → schedules/legacy shifts
-  const adjustments = await tx.attendanceAdjustment.deleteMany({});
-  const events = await tx.attendanceEvent.deleteMany({});
-  const records = await tx.attendanceRecord.deleteMany({});
-  const leaveRequests = await tx.leaveRequest.deleteMany({});
-  const leaveBalances = await tx.leaveBalance.deleteMany({});
-  const periods = await tx.attendancePeriod.deleteMany({});
-  const schedules = await tx.workSchedule.deleteMany({});
-  const legacyShifts = await tx.workShift.deleteMany({});
-
-  return (
-    adjustments.count +
-    events.count +
-    records.count +
-    leaveRequests.count +
-    leaveBalances.count +
-    periods.count +
-    schedules.count +
-    legacyShifts.count
-  );
+async function enableAuditPurge(tx: Prisma.TransactionClient): Promise<void> {
+  await tx.$executeRaw`SELECT set_config('app.allow_audit_purge', 'on', true)`;
 }
 
 async function assertEmployeesAreDeletable(
@@ -383,7 +522,7 @@ async function assertEmployeesAreDeletable(
 
   if (blockers.length > 0) {
     throw new DataResetDependencyError(
-      `ลบพนักงานไม่ได้เพราะยังมีข้อมูลที่อ้างอิง: ${blockers.join(", ")} — ล้างข้อมูลขายซูเปอร์มาร์เก็ตก่อน`,
+      `ลบพนักงานไม่ได้เพราะยังมีข้อมูลที่อ้างอิง: ${blockers.join(", ")} — ไปหมวดซูเปอร์มาร์เก็ต ลบข้อมูลขายก่อน แล้วค่อยลบพนักงาน`,
     );
   }
 }
@@ -408,15 +547,20 @@ async function deleteEmployeesTarget(
   }
 
   const victimIds = victims.map((row) => row.id);
+
+  // POS employee FKs are Restrict — clear sales/shift graph as part of wipe
+  await purgePosSalesGraph(tx);
+  await purgePosProductDependents(tx);
   await assertEmployeesAreDeletable(tx, victimIds);
 
-  // Break self-manager links among victims / into victims.
+  // Audit logs block employee delete via ON DELETE SET NULL → UPDATE trigger
+  await enableAuditPurge(tx);
+
   await tx.employee.updateMany({
     where: { managerEmployeeId: { in: victimIds } },
     data: { managerEmployeeId: null },
   });
 
-  // Clear SetNull actor references in operational tables still holding those ids.
   await tx.roomInspection.updateMany({
     where: { completedById: { in: victimIds } },
     data: { completedById: null },
@@ -477,6 +621,14 @@ async function deleteEmployeesTarget(
     where: { paidById: { in: victimIds } },
     data: { paidById: null },
   });
+  await tx.schedulePeriod.updateMany({
+    where: { createdById: { in: victimIds } },
+    data: { createdById: null },
+  });
+  await tx.schedulePeriod.updateMany({
+    where: { updatedById: { in: victimIds } },
+    data: { updatedById: null },
+  });
 
   const deleted = await tx.employee.deleteMany({
     where: { id: { in: victimIds } },
@@ -493,47 +645,207 @@ async function deleteEmployeesTarget(
   return { deleted: deleted.count, orphanAuthUserIds };
 }
 
+async function purgeBookingGraph(tx: Prisma.TransactionClient): Promise<number> {
+  // PaymentRefund Restrict → Payment; Payment Restrict → Booking
+  await tx.paymentRefund.deleteMany({});
+  await tx.payment.deleteMany({});
+  await tx.orderItem.deleteMany({});
+  await tx.order.deleteMany({});
+  // BookingRoom / Raft / Charge / Inspection cascade from Booking
+  const bookingCount = await tx.booking.deleteMany({});
+  await tx.room.updateMany({ data: { status: "AVAILABLE" } });
+  await tx.raft.updateMany({ data: { status: "AVAILABLE" } });
+  return bookingCount.count;
+}
+
+/** POS sale/shift graph that Restrict-locks pos products. */
+async function purgePosSalesGraph(tx: Prisma.TransactionClient): Promise<number> {
+  await tx.charge.deleteMany({ where: { sourceType: "POS_SALE" } });
+  await tx.posRefundItem.deleteMany({});
+  await tx.posRefund.deleteMany({});
+  await tx.posAccountingEntry.deleteMany({});
+  await tx.posPayment.deleteMany({});
+  await tx.posSaleItem.deleteMany({});
+  const sales = await tx.posSale.deleteMany({});
+  await tx.posHoldItem.deleteMany({});
+  await tx.posHold.deleteMany({});
+  await tx.posCashMovement.deleteMany({});
+  await tx.posShift.deleteMany({});
+  await tx.posReceiptSequence.deleteMany({
+    where: { prefix: { not: POS_SKU_PREFIX } },
+  });
+  return sales.count;
+}
+
+/** Stock/count rows that Restrict-lock pos products (sales already wiped). */
+async function purgePosProductDependents(
+  tx: Prisma.TransactionClient,
+): Promise<void> {
+  await tx.posStockCountItem.deleteMany({});
+  await tx.posStockCount.deleteMany({});
+  await tx.posStockMovement.deleteMany({});
+}
+
 async function deleteServiceTarget(
   tx: Prisma.TransactionClient,
   target: ServiceResetTarget,
+): Promise<number> {
+  switch (target) {
+    case "bookings":
+      return purgeBookingGraph(tx);
+    case "guests": {
+      await tx.booking.updateMany({
+        where: { guestId: { not: null } },
+        data: { guestId: null },
+      });
+      return (await tx.guest.deleteMany({})).count;
+    }
+    case "tourGroups": {
+      await tx.booking.updateMany({
+        where: { tourGroupId: { not: null } },
+        data: { tourGroupId: null },
+      });
+      return (await tx.tourGroup.deleteMany({})).count;
+    }
+  }
+}
+
+async function deleteHrTarget(
+  tx: Prisma.TransactionClient,
+  target: HrResetTarget,
   options: DataResetExecuteOptions,
 ): Promise<{ deleted: number; orphanAuthUserIds: string[] }> {
   switch (target) {
-    case "bookings": {
-      await tx.payment.deleteMany({});
-      await tx.orderItem.deleteMany({});
-      await tx.order.deleteMany({});
-      const bookingCount = await tx.booking.deleteMany({});
-      await tx.room.updateMany({ data: { status: "AVAILABLE" } });
-      await tx.raft.updateMany({ data: { status: "AVAILABLE" } });
-      return { deleted: bookingCount.count, orphanAuthUserIds: [] };
+    case "hrAttendance": {
+      const adjustments = await tx.attendanceAdjustment.deleteMany({});
+      const events = await tx.attendanceEvent.deleteMany({});
+      const records = await tx.attendanceRecord.deleteMany({});
+      const periods = await tx.attendancePeriod.deleteMany({});
+      return {
+        deleted:
+          adjustments.count + events.count + records.count + periods.count,
+        orphanAuthUserIds: [],
+      };
     }
-    case "guests":
+    case "hrLeave": {
+      const requests = await tx.leaveRequest.deleteMany({});
+      const balances = await tx.leaveBalance.deleteMany({});
       return {
-        deleted: (await tx.guest.deleteMany({})).count,
+        deleted: requests.count + balances.count,
         orphanAuthUserIds: [],
       };
-    case "tourGroups":
+    }
+    case "hrSchedules": {
+      // Break self-FK on scheduled shifts before bulk delete
+      await tx.scheduledShift.updateMany({
+        data: {
+          sourceScheduledShiftId: null,
+          replacedEmployeeId: null,
+        },
+      });
+      const logs = await tx.scheduleChangeLog.deleteMany({});
+      const shifts = await tx.scheduledShift.deleteMany({});
+      const periods = await tx.schedulePeriod.deleteMany({});
+      // Clear attendance links that still point at schedules (if attendance not wiped)
+      await tx.attendanceRecord.updateMany({
+        where: {
+          OR: [
+            { workScheduleId: { not: null } },
+            { scheduledShiftId: { not: null } },
+          ],
+        },
+        data: { workScheduleId: null, scheduledShiftId: null },
+      });
+      const schedules = await tx.workSchedule.deleteMany({});
+      const legacy = await tx.workShift.deleteMany({});
       return {
-        deleted: (await tx.tourGroup.deleteMany({})).count,
+        deleted:
+          logs.count +
+          shifts.count +
+          periods.count +
+          schedules.count +
+          legacy.count,
         orphanAuthUserIds: [],
       };
-    case "workShifts":
+    }
+    case "hrPayroll": {
+      const payslips = await tx.payrollPayslip.deleteMany({});
+      const adjustments = await tx.payrollAdjustment.deleteMany({});
+      const entries = await tx.payrollEntry.deleteMany({});
+      const periods = await tx.payrollPeriod.deleteMany({});
       return {
-        deleted: (await tx.workShift.deleteMany({})).count,
+        deleted:
+          payslips.count +
+          adjustments.count +
+          entries.count +
+          periods.count,
         orphanAuthUserIds: [],
       };
-    case "hrWorkData":
+    }
+    case "hrDocuments":
       return {
-        deleted: await deleteHrWorkDataTarget(tx),
+        deleted: (await tx.employeeDocument.deleteMany({})).count,
+        orphanAuthUserIds: [],
+      };
+    case "hrShiftTemplates": {
+      await tx.employee.updateMany({
+        where: { defaultShiftTemplateId: { not: null } },
+        data: { defaultShiftTemplateId: null },
+      });
+      await tx.workSchedule.updateMany({
+        where: { shiftTemplateId: { not: null } },
+        data: { shiftTemplateId: null },
+      });
+      await tx.scheduledShift.updateMany({
+        where: { shiftTemplateId: { not: null } },
+        data: { shiftTemplateId: null },
+      });
+      // memberships + time periods cascade with template
+      return {
+        deleted: (await tx.shiftTemplate.deleteMany({})).count,
+        orphanAuthUserIds: [],
+      };
+    }
+    case "hrLeaveTypes": {
+      // LeaveRequest Restrict on leaveType — wipe leave data first if still present
+      await tx.leaveRequest.deleteMany({});
+      await tx.leaveBalance.deleteMany({});
+      return {
+        deleted: (await tx.leaveType.deleteMany({})).count,
+        orphanAuthUserIds: [],
+      };
+    }
+    case "hrHolidays":
+      return {
+        deleted: (await tx.holidayCalendar.deleteMany({})).count,
+        orphanAuthUserIds: [],
+      };
+    case "hrPinSettings":
+      return {
+        deleted: (await tx.hrAttendanceSetting.deleteMany({})).count,
+        orphanAuthUserIds: [],
+      };
+    case "hrPayrollSettings":
+      return {
+        deleted: (await tx.payrollSetting.deleteMany({})).count,
         orphanAuthUserIds: [],
       };
     case "employees":
       return deleteEmployeesTarget(tx, options.preserveEmployeeIds ?? []);
-    case "auditLogs": {
-      await tx.$executeRaw`SELECT set_config('app.allow_audit_purge', 'on', true)`;
+    case "hrOrg": {
+      await tx.employee.updateMany({
+        where: {
+          OR: [
+            { departmentId: { not: null } },
+            { positionId: { not: null } },
+          ],
+        },
+        data: { departmentId: null, positionId: null },
+      });
+      const positions = await tx.position.deleteMany({});
+      const departments = await tx.department.deleteMany({});
       return {
-        deleted: (await tx.auditLog.deleteMany({})).count,
+        deleted: positions.count + departments.count,
         orphanAuthUserIds: [],
       };
     }
@@ -545,24 +857,84 @@ async function deleteMasterTarget(
   target: MasterResetTarget,
 ): Promise<number> {
   switch (target) {
-    case "products":
+    case "products": {
+      // OrderItem Restrict → Product (orders themselves may remain empty)
+      // Food set lines also Restrict → Product
+      await tx.orderItem.deleteMany({});
+      await tx.tourGroupFoodSetItem.deleteMany({});
+      await tx.tourGroupFoodSet.deleteMany({});
+      await tx.foodSetItem.deleteMany({});
+      await tx.foodSet.deleteMany({});
+      await tx.productOption.deleteMany({});
+      await tx.productOptionGroup.deleteMany({});
       return (await tx.product.deleteMany({})).count;
-    case "foodCategories":
+    }
+    case "foodCategories": {
+      await tx.product.updateMany({
+        where: { categoryId: { not: null } },
+        data: { categoryId: null },
+      });
       return (await tx.foodCategory.deleteMany({})).count;
-    case "productTypes":
+    }
+    case "productTypes": {
+      // Product.typeId required — products target usually ran first via expand
+      await tx.orderItem.deleteMany({});
+      await tx.tourGroupFoodSetItem.deleteMany({});
+      await tx.tourGroupFoodSet.deleteMany({});
+      await tx.foodSetItem.deleteMany({});
+      await tx.foodSet.deleteMany({});
+      await tx.productOption.deleteMany({});
+      await tx.productOptionGroup.deleteMany({});
+      await tx.product.deleteMany({});
       return (await tx.productType.deleteMany({})).count;
+    }
     case "inspectionCatalog":
       return (await tx.inspectionCatalog.deleteMany({})).count;
-    case "paymentChannels":
+    case "paymentChannels": {
+      await tx.payment.updateMany({
+        where: { channelId: { not: null } },
+        data: { channelId: null },
+      });
       return (await tx.paymentChannel.deleteMany({})).count;
-    case "rooms":
+    }
+    case "promptPayAccounts": {
+      // Payment.promptpayAccount Restrict
+      await tx.payment.updateMany({
+        where: { promptpayAccountId: { not: null } },
+        data: { promptpayAccountId: null },
+      });
+      return (await tx.promptPayAccount.deleteMany({})).count;
+    }
+    case "rooms": {
+      // BookingRoom.roomId required — clear bookings that lock rooms
+      await purgeBookingGraph(tx);
+      await tx.order.updateMany({
+        where: { roomId: { not: null } },
+        data: { roomId: null },
+      });
       return (await tx.room.deleteMany({})).count;
-    case "roomTypes":
+    }
+    case "roomTypes": {
+      // rooms target (via expand) already purged bookings; avoid re-purging the graph
+      await tx.order.updateMany({
+        where: { roomId: { not: null } },
+        data: { roomId: null },
+      });
+      await tx.room.deleteMany({});
       return (await tx.roomType.deleteMany({})).count;
-    case "zones":
+    }
+    case "zones": {
+      await tx.order.updateMany({
+        where: { roomId: { not: null } },
+        data: { roomId: null },
+      });
+      await tx.room.deleteMany({});
       return (await tx.zone.deleteMany({})).count;
-    case "rafts":
+    }
+    case "rafts": {
+      // BookingRaft cascades from booking; rooms expand already cleared bookings
       return (await tx.raft.deleteMany({})).count;
+    }
   }
 }
 
@@ -571,35 +943,37 @@ async function deleteSupermarketTarget(
   target: SupermarketResetTarget,
 ): Promise<number> {
   switch (target) {
-    case "posSales": {
-      await tx.charge.deleteMany({ where: { sourceType: "POS_SALE" } });
-      await tx.posRefundItem.deleteMany({});
-      await tx.posRefund.deleteMany({});
-      await tx.posAccountingEntry.deleteMany({});
-      await tx.posPayment.deleteMany({});
-      await tx.posSaleItem.deleteMany({});
-      const sales = await tx.posSale.deleteMany({});
-      await tx.posHoldItem.deleteMany({});
-      await tx.posHold.deleteMany({});
-      await tx.posCashMovement.deleteMany({});
-      await tx.posShift.deleteMany({});
-      await tx.posReceiptSequence.deleteMany({
-        where: { prefix: { not: POS_SKU_PREFIX } },
-      });
-      return sales.count;
-    }
+    case "posSales":
+      return purgePosSalesGraph(tx);
     case "posProducts": {
-      await tx.posStockCountItem.deleteMany({});
-      await tx.posStockCount.deleteMany({});
-      await tx.posStockMovement.deleteMany({});
+      // posSales is expanded first — only clear stock/product rows here
+      await purgePosProductDependents(tx);
       const products = await tx.posProduct.deleteMany({});
       await tx.posReceiptSequence.deleteMany({
         where: { prefix: POS_SKU_PREFIX },
       });
       return products.count;
     }
-    case "posCategories":
+    case "posCategories": {
+      // posSales + posProducts expanded first — do not re-wipe the sales graph
+      await purgePosProductDependents(tx);
+      await tx.posProduct.deleteMany({});
       return (await tx.posCategory.deleteMany({})).count;
+    }
+    case "posSettings":
+      return (await tx.posSetting.deleteMany({})).count;
+  }
+}
+
+async function deleteSystemTarget(
+  tx: Prisma.TransactionClient,
+  target: SystemResetTarget,
+): Promise<number> {
+  switch (target) {
+    case "auditLogs": {
+      await enableAuditPurge(tx);
+      return (await tx.auditLog.deleteMany({})).count;
+    }
   }
 }
 
@@ -608,10 +982,21 @@ const serviceDeleteOrder: ServiceResetTarget[] = [
   "bookings",
   "guests",
   "tourGroups",
-  "workShifts",
-  "hrWorkData",
+];
+
+const hrDeleteOrder: HrResetTarget[] = [
+  "hrAttendance",
+  "hrLeave",
+  "hrPayroll",
+  "hrDocuments",
+  "hrSchedules",
+  "hrShiftTemplates",
+  "hrLeaveTypes",
+  "hrHolidays",
+  "hrPinSettings",
+  "hrPayrollSettings",
   "employees",
-  "auditLogs",
+  "hrOrg",
 ];
 
 const masterDeleteOrder: MasterResetTarget[] = [
@@ -620,6 +1005,7 @@ const masterDeleteOrder: MasterResetTarget[] = [
   "productTypes",
   "inspectionCatalog",
   "paymentChannels",
+  "promptPayAccounts",
   "rooms",
   "roomTypes",
   "zones",
@@ -630,7 +1016,10 @@ const supermarketDeleteOrder: SupermarketResetTarget[] = [
   "posSales",
   "posProducts",
   "posCategories",
+  "posSettings",
 ];
+
+const systemDeleteOrder: SystemResetTarget[] = ["auditLogs"];
 
 export function orderDataResetTargets(
   category: DataResetCategory,
@@ -639,42 +1028,155 @@ export function orderDataResetTargets(
   const order =
     category === "service"
       ? serviceDeleteOrder
-      : category === "master"
-        ? masterDeleteOrder
-        : supermarketDeleteOrder;
+      : category === "hr"
+        ? hrDeleteOrder
+        : category === "master"
+          ? masterDeleteOrder
+          : category === "supermarket"
+            ? supermarketDeleteOrder
+            : systemDeleteOrder;
   const selected = new Set(targets);
   return order.filter((target) => selected.has(target));
 }
 
+async function deleteCategoryTarget(
+  tx: Prisma.TransactionClient,
+  category: DataResetCategory,
+  target: DataResetTarget,
+  options: DataResetExecuteOptions,
+): Promise<{ deleted: number; orphanAuthUserIds: string[] }> {
+  if (category === "service") {
+    return {
+      deleted: await deleteServiceTarget(tx, target as ServiceResetTarget),
+      orphanAuthUserIds: [],
+    };
+  }
+  if (category === "hr") {
+    return deleteHrTarget(tx, target as HrResetTarget, options);
+  }
+  if (category === "master") {
+    return {
+      deleted: await deleteMasterTarget(tx, target as MasterResetTarget),
+      orphanAuthUserIds: [],
+    };
+  }
+  if (category === "supermarket") {
+    return {
+      deleted: await deleteSupermarketTarget(
+        tx,
+        target as SupermarketResetTarget,
+      ),
+      orphanAuthUserIds: [],
+    };
+  }
+  return {
+    deleted: await deleteSystemTarget(tx, target as SystemResetTarget),
+    orphanAuthUserIds: [],
+  };
+}
+
+function dataResetFailureMessage(error: unknown): string {
+  if (
+    error instanceof DataResetDependencyError ||
+    error instanceof DataResetSafetyError
+  ) {
+    return error.message;
+  }
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "P2003"
+  ) {
+    return "ไม่สามารถลบได้ เพราะยังมีข้อมูลที่อ้างอิงอยู่ — ลบข้อมูลที่ขึ้นกับรายการนั้นก่อน";
+  }
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+  return "ลบไม่สำเร็จ";
+}
+
+/**
+ * Single DB transaction for all selected targets (all-or-nothing).
+ * Prefer {@link executeDataResetIndependently} for UI wipes so one blocked
+ * target (e.g. employees ↔ POS) does not roll back attendance/schedules.
+ */
 export async function executeDataReset(
   tx: Prisma.TransactionClient,
   category: DataResetCategory,
   targets: DataResetTarget[],
   options: DataResetExecuteOptions = {},
 ): Promise<DataResetResult> {
-  const ordered = orderDataResetTargets(category, targets);
+  const ordered = expandDataResetTargets(category, targets);
   const deleted: Partial<Record<DataResetTarget, number>> = {};
   const orphanAuthUserIds: string[] = [];
 
   for (const target of ordered) {
-    if (category === "service") {
-      const result = await deleteServiceTarget(
-        tx,
-        target as ServiceResetTarget,
-        options,
+    const result = await deleteCategoryTarget(tx, category, target, options);
+    deleted[target] = result.deleted;
+    orphanAuthUserIds.push(...result.orphanAuthUserIds);
+  }
+
+  return {
+    category,
+    targets: ordered,
+    deleted,
+    failed: [],
+    orphanAuthUserIds: [...new Set(orphanAuthUserIds)],
+  };
+}
+
+/** Commit each target in its own transaction; collect per-target failures. */
+export async function executeDataResetIndependently(
+  db: DataResetDb,
+  category: DataResetCategory,
+  targets: DataResetTarget[],
+  options: DataResetExecuteOptions = {},
+): Promise<DataResetResult> {
+  const txOptions = { timeout: 120_000, maxWait: 30_000 };
+
+  // Non-HR categories are safe as one transaction and much faster over remote DB
+  // (avoids N connection round-trips). HR stays per-target so POS-blocked
+  // employees do not roll back attendance/schedules.
+  if (category !== "hr") {
+    try {
+      return await db.$transaction(
+        async (tx) => executeDataReset(tx, category, targets, options),
+        txOptions,
+      );
+    } catch (error) {
+      const ordered = expandDataResetTargets(category, targets);
+      return {
+        category,
+        targets: ordered,
+        deleted: {},
+        failed: ordered.map((target) => ({
+          target,
+          message: dataResetFailureMessage(error),
+        })),
+        orphanAuthUserIds: [],
+      };
+    }
+  }
+
+  const ordered = expandDataResetTargets(category, targets);
+  const deleted: Partial<Record<DataResetTarget, number>> = {};
+  const orphanAuthUserIds: string[] = [];
+  const failed: DataResetFailure[] = [];
+
+  for (const target of ordered) {
+    try {
+      const result = await db.$transaction(
+        async (tx) => deleteCategoryTarget(tx, category, target, options),
+        txOptions,
       );
       deleted[target] = result.deleted;
       orphanAuthUserIds.push(...result.orphanAuthUserIds);
-    } else if (category === "master") {
-      deleted[target] = await deleteMasterTarget(
-        tx,
-        target as MasterResetTarget,
-      );
-    } else {
-      deleted[target] = await deleteSupermarketTarget(
-        tx,
-        target as SupermarketResetTarget,
-      );
+    } catch (error) {
+      failed.push({
+        target,
+        message: dataResetFailureMessage(error),
+      });
     }
   }
 
@@ -682,12 +1184,15 @@ export async function executeDataReset(
     category,
     targets: ordered,
     deleted,
+    failed,
     orphanAuthUserIds: [...new Set(orphanAuthUserIds)],
   };
 }
 
 export function dataResetCategoryLabel(category: DataResetCategory): string {
   if (category === "service") return "การเข้ารับบริการ";
+  if (category === "hr") return "พนักงาน";
   if (category === "master") return "ข้อมูลหลัก";
-  return "ซูเปอร์มาร์เก็ต";
+  if (category === "supermarket") return "ซูเปอร์มาร์เก็ต";
+  return "ระบบ";
 }

@@ -1,4 +1,5 @@
 import { apiErrorResponse } from "@/lib/api/validation";
+import { excludeSystemAdminEmployeeWhere } from "@/lib/auth/support-account";
 import { displayEmployeeName } from "@/lib/hr/employees";
 import { availableLeaveDays, decimalDays } from "@/lib/hr/leave";
 import {
@@ -30,6 +31,7 @@ async function loadReportPayload(input: {
     compensations,
   ] = await Promise.all([
     prisma.employee.findMany({
+      where: excludeSystemAdminEmployeeWhere(),
       include: {
         department: { select: { id: true, name: true } },
       },

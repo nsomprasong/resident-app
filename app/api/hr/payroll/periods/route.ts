@@ -11,6 +11,8 @@ import {
 } from "@/lib/api/validation";
 import { recordAuditLog } from "@/lib/audit/audit-log";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { workforceEmployeeWhere } from "@/lib/auth/support-account";
+import { resolvePayrollCompensation } from "@/lib/hr/employee-compensation";
 import { displayEmployeeName } from "@/lib/hr/employees";
 import { eachDateKeyInclusive } from "@/lib/hr/leave";
 import {
@@ -104,6 +106,28 @@ function serializeEntry(
     absentDays: moneyNum(entry.absentDays),
     unpaidLeaveDays: moneyNum(entry.unpaidLeaveDays),
     lateMinutes: entry.lateMinutes,
+    hourlyRateSnapshot:
+      entry.hourlyRateSnapshot == null
+        ? null
+        : moneyNum(entry.hourlyRateSnapshot),
+    otHourlyRateSnapshot:
+      entry.otHourlyRateSnapshot == null
+        ? null
+        : moneyNum(entry.otHourlyRateSnapshot),
+    otMultiplierSnapshot:
+      entry.otMultiplierSnapshot == null
+        ? null
+        : moneyNum(entry.otMultiplierSnapshot),
+    dailyRateSnapshot:
+      entry.dailyRateSnapshot == null
+        ? null
+        : moneyNum(entry.dailyRateSnapshot),
+    monthlySalarySnapshot:
+      entry.monthlySalarySnapshot == null
+        ? null
+        : moneyNum(entry.monthlySalarySnapshot),
+    replacementShiftCount: entry.replacementShiftCount,
+    doubleShiftCount: entry.doubleShiftCount,
     hasPayslip: Boolean(entry.payslip),
     payslipId: entry.payslip?.id ?? null,
   };
@@ -286,8 +310,7 @@ export async function POST(request: NextRequest) {
 
       const employees = await prisma.employee.findMany({
         where: {
-          hrStatus: { in: ["ACTIVE", "PROBATION"] },
-          isActive: true,
+          ...workforceEmployeeWhere(),
         },
         include: {
           compensations: {
@@ -298,27 +321,56 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      const [attendances, leaves, adjustments] = await Promise.all([
-        prisma.attendanceRecord.findMany({
-          where: {
-            workDate: {
-              gte: period.periodStart,
-              lte: period.periodEnd,
+      const [attendances, leaves, adjustments, scheduledShifts] =
+        await Promise.all([
+          prisma.attendanceRecord.findMany({
+            where: {
+              workDate: {
+                gte: period.periodStart,
+                lte: period.periodEnd,
+              },
             },
-          },
-        }),
-        prisma.leaveRequest.findMany({
-          where: {
-            status: "APPROVED",
-            startDate: { lte: period.periodEnd },
-            endDate: { gte: period.periodStart },
-          },
-          include: { leaveType: true },
-        }),
-        prisma.payrollAdjustment.findMany({
-          where: { periodId },
-        }),
-      ]);
+          }),
+          prisma.leaveRequest.findMany({
+            where: {
+              status: "APPROVED",
+              startDate: { lte: period.periodEnd },
+              endDate: { gte: period.periodStart },
+            },
+            include: { leaveType: true },
+          }),
+          prisma.payrollAdjustment.findMany({
+            where: { periodId },
+          }),
+          prisma.scheduledShift.findMany({
+            where: {
+              workDate: {
+                gte: period.periodStart,
+                lte: period.periodEnd,
+              },
+              status: { in: ["SCHEDULED", "COMPLETED", "ABSENT", "LEAVE"] },
+              assignmentType: { in: ["REPLACEMENT", "DOUBLE_SHIFT"] },
+            },
+            select: {
+              employeeId: true,
+              assignmentType: true,
+            },
+          }),
+        ]);
+
+      const shiftCountsByEmployee = new Map<
+        string,
+        { replacement: number; double: number }
+      >();
+      for (const shift of scheduledShifts) {
+        const current = shiftCountsByEmployee.get(shift.employeeId) ?? {
+          replacement: 0,
+          double: 0,
+        };
+        if (shift.assignmentType === "REPLACEMENT") current.replacement += 1;
+        if (shift.assignmentType === "DOUBLE_SHIFT") current.double += 1;
+        shiftCountsByEmployee.set(shift.employeeId, current);
+      }
 
       const entryCount = await prisma.$transaction(async (tx) => {
         await tx.payrollPayslip.deleteMany({ where: { periodId } });
@@ -326,7 +378,11 @@ export async function POST(request: NextRequest) {
 
         let created = 0;
         for (const employee of employees) {
-          const compensation = employee.compensations[0];
+          const compensationRow = employee.compensations[0] ?? null;
+          const compensation = resolvePayrollCompensation(
+            employee,
+            compensationRow,
+          );
           if (!compensation) continue;
 
           const empAttendance = attendances.filter(
@@ -339,7 +395,7 @@ export async function POST(request: NextRequest) {
           let absentDays = 0;
           for (const row of empAttendance) {
             workedMinutes += row.workedMinutes;
-            otMinutes += row.otApprovedMinutes || row.otMinutes;
+            otMinutes += row.otApprovedMinutes;
             lateMinutes += row.lateMinutes;
             if (row.isHolidayWork) {
               holidayWorkedMinutes += row.workedMinutes;
@@ -391,16 +447,7 @@ export async function POST(request: NextRequest) {
           }
 
           const calc = calculatePayrollEntry({
-            compensation: {
-              employmentType: compensation.employmentType,
-              dailyRate: moneyNum(compensation.dailyRate),
-              hourlyRate: moneyNum(compensation.hourlyRate),
-              monthlySalary: moneyNum(compensation.monthlySalary),
-              positionAllowance: moneyNum(compensation.positionAllowance),
-              mealAllowance: moneyNum(compensation.mealAllowance),
-              housingAllowance: moneyNum(compensation.housingAllowance),
-              travelAllowance: moneyNum(compensation.travelAllowance),
-            },
+            compensation,
             attendance: {
               workedMinutes,
               otMinutes,
@@ -415,6 +462,11 @@ export async function POST(request: NextRequest) {
             monthDays,
           });
 
+          const shiftCounts = shiftCountsByEmployee.get(employee.id) ?? {
+            replacement: 0,
+            double: 0,
+          };
+
           const entry = await tx.payrollEntry.create({
             data: {
               periodId,
@@ -423,6 +475,8 @@ export async function POST(request: NextRequest) {
               ...calc,
               absentDays,
               unpaidLeaveDays,
+              replacementShiftCount: shiftCounts.replacement,
+              doubleShiftCount: shiftCounts.double,
             },
             include: {
               employee: {
@@ -541,16 +595,23 @@ export async function POST(request: NextRequest) {
     }
 
     if (mode === "unlock") {
-      if (!permissions.includes("hr.payroll.approve")) {
+      if (!permissions.includes("hr.payroll.unlock")) {
         return apiErrorResponse("ไม่มีสิทธิ์ปลดล็อกรอบจ่าย", 403, "FORBIDDEN");
       }
       const periodId =
         typeof parsed.body.periodId === "string"
           ? parsed.body.periodId.trim()
           : "";
+      const unlockReason =
+        typeof parsed.body.reason === "string" ? parsed.body.reason.trim() : "";
       if (!isUuid(periodId)) {
         return validationErrorResponse("รหัสรอบไม่ถูกต้อง", [
           { path: "periodId", message: "UUID ไม่ถูกต้อง" },
+        ]);
+      }
+      if (!unlockReason) {
+        return validationErrorResponse("ต้องระบุเหตุผลการปลดล็อก", [
+          { path: "reason", message: "ระบุเหตุผล" },
         ]);
       }
       const period = await prisma.payrollPeriod.findUnique({
@@ -578,13 +639,16 @@ export async function POST(request: NextRequest) {
         action: "HR_PAYROLL_UNLOCKED",
         entityType: "PAYROLL_PERIOD",
         entityId: periodId,
-        metadata: { from: period.status },
+        metadata: { from: period.status, reason: unlockReason },
       });
       return NextResponse.json(serializePeriod(updated));
     }
 
     if (mode === "add-adjustment") {
-      if (!permissions.includes("hr.payroll.calculate")) {
+      if (
+        !permissions.includes("hr.payroll.adjust") &&
+        !permissions.includes("hr.payroll.calculate")
+      ) {
         return apiErrorResponse("ไม่มีสิทธิ์เพิ่มรายการปรับ", 403, "FORBIDDEN");
       }
       const issues: ValidationIssue[] = [];
