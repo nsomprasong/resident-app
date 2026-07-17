@@ -1,16 +1,31 @@
 import { ShieldAlert } from "lucide-react";
 
-export default function AccessDeniedPage() {
+import {
+  accessDenialMessage,
+  isAccessDenialCode,
+} from "@/lib/auth/access-denial";
+
+type AccessDeniedPageProps = {
+  searchParams: Promise<{ reason?: string }>;
+};
+
+export default async function AccessDeniedPage({
+  searchParams,
+}: AccessDeniedPageProps) {
+  const params = await searchParams;
+  const reason = isAccessDenialCode(params.reason) ? params.reason : null;
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-muted px-4 py-10">
       <section className="w-full max-w-md rounded-3xl border border-border bg-surface p-7 text-center shadow-xl shadow-border/60 sm:p-9">
         <div className="mx-auto mb-5 flex size-14 items-center justify-center rounded-2xl bg-warning/15 text-warning">
           <ShieldAlert size={28} />
         </div>
-        <h1 className="text-2xl font-semibold text-foreground">ยังไม่ได้กำหนดสิทธิ์พนักงาน</h1>
+        <h1 className="text-2xl font-semibold text-foreground">
+          ยังไม่ได้กำหนดสิทธิ์พนักงาน
+        </h1>
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
-          บัญชีนี้เข้าสู่ระบบสำเร็จ แต่ยังไม่ได้เชื่อมกับข้อมูลพนักงาน หรือยังไม่ได้กำหนดบทบาท/สิทธิ์
-          กรุณาติดต่อผู้ดูแลระบบ
+          {accessDenialMessage(reason)}
         </p>
         <form action="/api/auth/logout" method="post" className="mt-7">
           <button

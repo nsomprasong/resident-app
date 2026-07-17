@@ -20,9 +20,11 @@ import {
 } from "../../lib/auth/authorization";
 
 test("approved roles and legacy aliases resolve explicitly", () => {
-  expect(roles).toHaveLength(6);
+  expect(roles).toHaveLength(8);
   expect(resolveRole("ผู้ดูแลระบบ")).toBe("ADMIN");
   expect(resolveRole("แม่บ้าน")).toBe("HOUSEKEEPING");
+  expect(resolveRole("OWNER")).toBe("OWNER");
+  expect(resolveRole("SUPERMARKET")).toBe("SUPERMARKET");
   expect(resolveRole("UNKNOWN")).toBeNull();
 });
 
@@ -214,7 +216,13 @@ test("permission policy follows approved financial and administration rules", ()
   expect(hasPermission("ADMIN", "data.reset")).toBe(true);
   expect(hasPermission("ADMIN", "audit.read")).toBe(true);
   expect(hasPermission("ADMIN", "hr.settings.manage")).toBe(true);
+  expect(hasPermission("OWNER", "settings.manage")).toBe(true);
+  expect(hasPermission("OWNER", "authorization.manage")).toBe(false);
+  expect(hasPermission("OWNER", "data.reset")).toBe(false);
+  expect(hasPermission("SUPERMARKET", "pos.view")).toBe(true);
+  expect(hasPermission("SUPERMARKET", "booking.read")).toBe(false);
   expect(canAccessPage("ADMIN", "/system/data-reset")).toBe(true);
+  expect(canAccessPage("OWNER", "/system/data-reset")).toBe(false);
   expect(canAccessPage("MANAGER", "/system/data-reset")).toBe(false);
   expect(canAccessPage("ADMIN", "/system/audit-logs")).toBe(true);
   expect(canAccessPage("MANAGER", "/system/audit-logs")).toBe(false);

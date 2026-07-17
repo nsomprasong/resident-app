@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { logAccessDenial } from "@/lib/auth/access-denial";
 import { getCurrentUser } from "@/lib/auth/current-user";
 
 export async function GET() {
@@ -14,16 +15,22 @@ export async function GET() {
     }
 
     if (!currentUser.employee) {
+      logAccessDenial("EMPLOYEE_NOT_FOUND", {
+        authUserId: currentUser.user.id,
+      });
       return NextResponse.json(
         {
           message: "Employee access is not configured",
-          code: "EMPLOYEE_NOT_LINKED",
+          code: "EMPLOYEE_NOT_FOUND",
         },
         { status: 403 },
       );
     }
 
     if (!currentUser.employee.isActive) {
+      logAccessDenial("EMPLOYEE_DISABLED", {
+        employeeId: currentUser.employee.id,
+      });
       return NextResponse.json(
         {
           message: "Employee account is disabled",
@@ -34,30 +41,66 @@ export async function GET() {
     }
 
     if (!currentUser.employee.authUserId) {
+      logAccessDenial("EMPLOYEE_NOT_FOUND", {
+        employeeId: currentUser.employee.id,
+        reason: "AUTH_USER_NOT_LINKED",
+      });
       return NextResponse.json(
         {
           message: "Employee auth link is incomplete",
-          code: "AUTH_USER_NOT_LINKED",
+          code: "EMPLOYEE_NOT_FOUND",
         },
         { status: 403 },
       );
     }
 
-    if (!currentUser.employee.role || !currentUser.employee.role.isActive) {
+    const role = currentUser.employee.role ?? null;
+    if (!role) {
+      logAccessDenial("ROLE_NOT_ASSIGNED", {
+        employeeId: currentUser.employee.id,
+      });
       return NextResponse.json(
         {
-          message: "Employee role is not configured",
-          code: "ROLE_NOT_CONFIGURED",
+          message: "Employee role is not assigned",
+          code: "ROLE_NOT_ASSIGNED",
         },
         { status: 403 },
       );
     }
 
-    const permissions = Array.isArray(currentUser.employee.role.permissions)
-      ? currentUser.employee.role.permissions.filter(
+    if (!role.isActive) {
+      logAccessDenial("ROLE_INACTIVE", {
+        employeeId: currentUser.employee.id,
+        role: role.code ?? null,
+      });
+      return NextResponse.json(
+        {
+          message: "Employee role is inactive",
+          code: "ROLE_INACTIVE",
+        },
+        { status: 403 },
+      );
+    }
+
+    const permissions = Array.isArray(role.permissions)
+      ? role.permissions.filter(
           (code): code is string => typeof code === "string" && code.length > 0,
         )
       : [];
+
+    if (permissions.length === 0) {
+      logAccessDenial("PERMISSIONS_EMPTY", {
+        employeeId: currentUser.employee.id,
+        role: role.code ?? null,
+      });
+      return NextResponse.json(
+        {
+          message: "Employee has no permissions",
+          code: "PERMISSIONS_EMPTY",
+        },
+        { status: 403 },
+      );
+    }
 
     return NextResponse.json({
       employee: {
@@ -69,8 +112,8 @@ export async function GET() {
         firstName: currentUser.employee.firstName ?? null,
         lastName: currentUser.employee.lastName ?? null,
         name: currentUser.employee.name ?? "",
-        role: currentUser.employee.role.code ?? "",
-        roleDisplayName: currentUser.employee.role.displayName ?? "",
+        role: role.code ?? null,
+        roleDisplayName: role.displayName ?? "",
         permissions,
         isActive: currentUser.employee.isActive,
         mustResetPassword: Boolean(currentUser.employee.mustResetPassword),

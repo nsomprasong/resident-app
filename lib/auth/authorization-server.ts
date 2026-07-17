@@ -24,10 +24,11 @@ export async function authorizeCurrentUser(
   if (!currentUser.employee) return { status: "unmapped" };
   if (!currentUser.employee.isActive) return { status: "disabled" };
 
-  const role = currentUser.employee.role;
+  const role = currentUser.employee.role ?? null;
   if (!role || !role.isActive) return { status: "unknown_role" };
 
-  if (!role.permissions.includes(permission)) {
+  const permissions = role.permissions ?? [];
+  if (!permissions.includes(permission)) {
     return { status: "forbidden", role: role.code };
   }
 

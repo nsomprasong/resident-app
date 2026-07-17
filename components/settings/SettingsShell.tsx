@@ -265,10 +265,12 @@ export function SettingsShell({ summary }: { summary: SettingsSummary }) {
   const activeId = searchParams.get("section");
   const activeSection = useMemo(() => {
     if (!isSectionId(activeId)) return undefined;
-    if (permissionsReady && !canViewSection(
-      allSections.find((s) => s.id === activeId)!,
-      permissionsReady,
-    )) {
+    const candidate = allSections.find((s) => s.id === activeId);
+    if (
+      permissionsReady &&
+      candidate &&
+      !canViewSection(candidate, permissionsReady)
+    ) {
       return undefined;
     }
     return visibleSections.find((s) => s.id === activeId)

@@ -12,6 +12,10 @@ import {
 import { useRouter } from "next/navigation";
 
 import {
+  isAccessDenialCode,
+  type AccessDenialCode,
+} from "@/lib/auth/access-denial";
+import {
   canAccessPageWithPermissions,
   employeeHasApiPermission,
   type ApiPermissionRequirement,
@@ -20,7 +24,7 @@ import {
 
 export type EmployeeIdentity = {
   name: string;
-  role: string;
+  role: string | null;
   roleDisplayName: string;
   permissions: string[];
 };
@@ -35,13 +39,6 @@ type EmployeePermissionsContextValue = {
   canAccessPath: (pathname: string) => boolean;
 };
 
-const ACCESS_DENIED_CODES = new Set([
-  "EMPLOYEE_NOT_LINKED",
-  "AUTH_USER_NOT_LINKED",
-  "ROLE_NOT_CONFIGURED",
-  "EMPLOYEE_DISABLED",
-]);
-
 const EmployeePermissionsContext =
   createContext<EmployeePermissionsContextValue | null>(null);
 
@@ -55,9 +52,14 @@ function normalizeEmployee(raw: unknown): EmployeeIdentity | null {
       )
     : [];
 
+  const role =
+    typeof record.role === "string" && record.role.length > 0
+      ? record.role
+      : null;
+
   return {
     name: typeof record.name === "string" ? record.name : "",
-    role: typeof record.role === "string" ? record.role : "",
+    role,
     roleDisplayName:
       typeof record.roleDisplayName === "string" ? record.roleDisplayName : "",
     permissions,
@@ -92,19 +94,45 @@ export function EmployeePermissionsProvider({
             const currentPath =
               typeof window !== "undefined" ? window.location.pathname : "";
             if (
-              code &&
-              ACCESS_DENIED_CODES.has(code) &&
+              isAccessDenialCode(code) &&
               currentPath !== "/access-denied" &&
               currentPath !== "/login" &&
               currentPath !== "/set-password"
             ) {
-              router.replace("/access-denied");
+              router.replace(
+                `/access-denied?reason=${encodeURIComponent(code as AccessDenialCode)}`,
+              );
             }
           }
           return;
         }
         const data = (await response.json()) as { employee?: unknown };
-        setEmployee(normalizeEmployee(data.employee));
+        const normalized = normalizeEmployee(data.employee);
+        const permissions = normalized?.permissions ?? [];
+        const role = normalized?.role ?? null;
+
+        if (!normalized || !role || permissions.length === 0) {
+          setEmployee(null);
+          const currentPath =
+            typeof window !== "undefined" ? window.location.pathname : "";
+          if (
+            currentPath !== "/access-denied" &&
+            currentPath !== "/login" &&
+            currentPath !== "/set-password"
+          ) {
+            const reason: AccessDenialCode = !normalized
+              ? "EMPLOYEE_NOT_FOUND"
+              : !role
+                ? "ROLE_NOT_ASSIGNED"
+                : "PERMISSIONS_EMPTY";
+            router.replace(
+              `/access-denied?reason=${encodeURIComponent(reason)}`,
+            );
+          }
+          return;
+        }
+
+        setEmployee(normalized);
       } catch {
         if (!controller.signal.aborted) {
           setEmployee(null);

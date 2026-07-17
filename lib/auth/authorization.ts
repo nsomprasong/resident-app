@@ -5,6 +5,8 @@ export const roles = [
   "KITCHEN",
   "ACCOUNTING",
   "MANAGER",
+  "OWNER",
+  "SUPERMARKET",
 ] as const;
 
 export type Role = (typeof roles)[number];
@@ -97,12 +99,16 @@ const roleAliases: Readonly<Record<string, Role>> = {
   KITCHEN: "KITCHEN",
   ACCOUNTING: "ACCOUNTING",
   MANAGER: "MANAGER",
+  OWNER: "OWNER",
+  SUPERMARKET: "SUPERMARKET",
   ผู้ดูแลระบบ: "ADMIN",
   พนักงานต้อนรับ: "RECEPTION",
   แม่บ้าน: "HOUSEKEEPING",
   ครัว: "KITCHEN",
   "บัญชี/แคชเชียร์": "ACCOUNTING",
   ผู้จัดการ: "MANAGER",
+  เจ้าของ: "OWNER",
+  ซูเปอร์มาร์เก็ต: "SUPERMARKET",
 };
 
 const allPermissions = new Set<Permission>(permissions);
@@ -253,6 +259,78 @@ const rolePermissions: Readonly<Record<Role, ReadonlySet<Permission>>> = {
     "pos.accounting.post",
     "pos.settings.manage",
   ]),
+  // Mirrors production RolePermission rows for DB-defined roles not in the original matrix.
+  OWNER: new Set([
+    "booking.lifecycle",
+    "booking.read",
+    "booking.write",
+    "catalog.manage",
+    "catalog.read",
+    "employee.manage",
+    "employee.read",
+    "hr.attendance.approve",
+    "hr.attendance.manage",
+    "hr.compensation.view",
+    "hr.document.manage",
+    "hr.employee.archive",
+    "hr.employee.create",
+    "hr.employee.update",
+    "hr.employee.view",
+    "hr.leave.approve",
+    "hr.leave.request",
+    "hr.overtime.manage",
+    "hr.payroll_summary.view",
+    "hr.payroll.adjust",
+    "hr.payroll.approve",
+    "hr.payroll.calculate",
+    "hr.payroll.mark_paid",
+    "hr.payroll.unlock",
+    "hr.report.view",
+    "hr.schedule.manage",
+    "hr.sensitive.view",
+    "hr.settings.manage",
+    "inspection.complete",
+    "inspection.read",
+    "inspection.write",
+    "ops.read",
+    "order.kitchen",
+    "order.read",
+    "order.write",
+    "payment_channel.manage",
+    "payment.cancel",
+    "payment.collect",
+    "payment.create",
+    "payment.promptpay_settings.manage",
+    "payment.promptpay_settings.view",
+    "payment.read",
+    "payment.receipt.print",
+    "payment.refund",
+    "payment.report.view",
+    "payment.submit",
+    "payment.verify",
+    "payment.view",
+    "report.read",
+    "resource.manage",
+    "resource.read",
+    "settings.manage",
+    "wage.read",
+  ]),
+  SUPERMARKET: new Set([
+    "hr.attendance.self",
+    "hr.leave.self",
+    "pos.accounting.post",
+    "pos.cancel",
+    "pos.hold",
+    "pos.product.manage",
+    "pos.product.view",
+    "pos.refund",
+    "pos.sell",
+    "pos.shift.close",
+    "pos.shift.open",
+    "pos.stock.receive",
+    "pos.stock.view",
+    "pos.view",
+  ]),
 };
 
 export function resolveRole(value: string): Role | null {
@@ -260,7 +338,8 @@ export function resolveRole(value: string): Role | null {
 }
 
 export function hasPermission(role: Role, permission: Permission): boolean {
-  return rolePermissions[role].has(permission);
+  const granted = rolePermissions[role];
+  return granted?.has(permission) ?? false;
 }
 
 type PagePermissionRule = {

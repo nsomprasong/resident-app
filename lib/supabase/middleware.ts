@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { getSupabasePublicEnvironment } from "@/lib/supabase/config";
+import { logAccessDenial } from "@/lib/auth/access-denial";
 import {
   canAccessPageWithPermissions,
   employeeHasApiPermission,
@@ -162,11 +163,12 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (!employee) {
+    logAccessDenial("EMPLOYEE_NOT_FOUND", { authUserId, pathname });
     if (pathname.startsWith("/api/")) {
       return NextResponse.json(
         {
           message: "Employee access is not configured",
-          code: "EMPLOYEE_NOT_LINKED",
+          code: "EMPLOYEE_NOT_FOUND",
         },
         { status: 403 },
       );
@@ -174,7 +176,7 @@ export async function updateSession(request: NextRequest) {
 
     const accessDeniedUrl = request.nextUrl.clone();
     accessDeniedUrl.pathname = "/access-denied";
-    accessDeniedUrl.search = "";
+    accessDeniedUrl.search = "reason=EMPLOYEE_NOT_FOUND";
 
     return copyResponseCookies(
       response,
@@ -183,6 +185,10 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (!employee.isActive) {
+    logAccessDenial("EMPLOYEE_DISABLED", {
+      employeeId: employee.id,
+      pathname,
+    });
     if (pathname.startsWith("/api/")) {
       return NextResponse.json(
         {
@@ -195,7 +201,7 @@ export async function updateSession(request: NextRequest) {
 
     const accessDeniedUrl = request.nextUrl.clone();
     accessDeniedUrl.pathname = "/access-denied";
-    accessDeniedUrl.search = "";
+    accessDeniedUrl.search = "reason=EMPLOYEE_DISABLED";
 
     return copyResponseCookies(
       response,
@@ -210,12 +216,17 @@ export async function updateSession(request: NextRequest) {
     return copyResponseCookies(response, NextResponse.redirect(homeUrl));
   }
 
-  if (!employee.role || !employee.role.isActive) {
+  const role = employee.role ?? null;
+  if (!role) {
+    logAccessDenial("ROLE_NOT_ASSIGNED", {
+      employeeId: employee.id,
+      pathname,
+    });
     if (pathname.startsWith("/api/")) {
       return NextResponse.json(
         {
-          message: "Employee role is not configured",
-          code: "ROLE_NOT_CONFIGURED",
+          message: "Employee role is not assigned",
+          code: "ROLE_NOT_ASSIGNED",
         },
         { status: 403 },
       );
@@ -223,14 +234,64 @@ export async function updateSession(request: NextRequest) {
 
     const accessDeniedUrl = request.nextUrl.clone();
     accessDeniedUrl.pathname = "/access-denied";
-    accessDeniedUrl.search = "";
+    accessDeniedUrl.search = "reason=ROLE_NOT_ASSIGNED";
     return copyResponseCookies(
       response,
       NextResponse.redirect(accessDeniedUrl),
     );
   }
 
-  const permissionCodes = employee.role.permissions ?? [];
+  if (!role.isActive) {
+    logAccessDenial("ROLE_INACTIVE", {
+      employeeId: employee.id,
+      role: role.code,
+      pathname,
+    });
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json(
+        {
+          message: "Employee role is inactive",
+          code: "ROLE_INACTIVE",
+        },
+        { status: 403 },
+      );
+    }
+
+    const accessDeniedUrl = request.nextUrl.clone();
+    accessDeniedUrl.pathname = "/access-denied";
+    accessDeniedUrl.search = "reason=ROLE_INACTIVE";
+    return copyResponseCookies(
+      response,
+      NextResponse.redirect(accessDeniedUrl),
+    );
+  }
+
+  const permissionCodes = role.permissions ?? [];
+
+  if (permissionCodes.length === 0) {
+    logAccessDenial("PERMISSIONS_EMPTY", {
+      employeeId: employee.id,
+      role: role.code,
+      pathname,
+    });
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json(
+        {
+          message: "Employee has no permissions",
+          code: "PERMISSIONS_EMPTY",
+        },
+        { status: 403 },
+      );
+    }
+
+    const accessDeniedUrl = request.nextUrl.clone();
+    accessDeniedUrl.pathname = "/access-denied";
+    accessDeniedUrl.search = "reason=PERMISSIONS_EMPTY";
+    return copyResponseCookies(
+      response,
+      NextResponse.redirect(accessDeniedUrl),
+    );
+  }
 
   if (pathname.startsWith("/api/")) {
     const requiredPermission = resolveApiPermission(request.method, pathname);
