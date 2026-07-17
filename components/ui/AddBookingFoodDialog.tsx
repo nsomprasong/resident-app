@@ -11,6 +11,7 @@ import {
 import { useCallback, useEffect, useState } from "react";
 
 import BookingFoodSelect, { type BookingFoodItem } from "./BookingFoodSelect";
+import BookingFoodSetPanel from "./BookingFoodSetPanel";
 import Modal from "./Modal";
 import type {
   FoodSetRecord,
@@ -298,9 +299,19 @@ export default function AddBookingFoodDialog({
           {isGroup
             ? step === "pick"
               ? "เลือกชุดอาหารมาตรฐาน หรือใช้ชุดที่ปรับไว้ของกรุ๊ปนี้เท่านั้น"
-              : "ปรับรายการได้เฉพาะกรุ๊ปนี้ — ชุดหลักไม่เปลี่ยน จากนั้นส่งเข้าครัว"
-            : "เลือกอาหารที่ต้องการเพิ่ม โดยคิดตามราคาจริง"}
+              : "ปรับรายการได้เฉพาะกรุ๊ปนี้ (เปลี่ยน/เพิ่ม/ลดเมนูได้) — ชุดหลักไม่เปลี่ยน จากนั้นส่งเข้าครัว"
+            : "เลือกชุดอาหาร แล้วปรับรายการได้ก่อนเพิ่มในจอง — หรือสั่งทีละรายการ"}
         </p>
+
+        {!isGroup ? (
+          <BookingFoodSetPanel
+            items={items}
+            onChange={setItems}
+            included={false}
+            defaultIsExtra
+            resetToken={open}
+          />
+        ) : null}
 
         {isGroup && step === "pick" ? (
           <div className="space-y-3">
@@ -385,72 +396,70 @@ export default function AddBookingFoodDialog({
           </div>
         ) : null}
 
-        {(!isGroup || step === "edit") && (
+        {isGroup && step === "edit" ? (
           <>
-            {isGroup && selectedSetName ? (
+            {selectedSetName ? (
               <p className="rounded-xl bg-surface-muted px-3 py-2 text-sm text-foreground">
                 กำลังสั่ง: <span className="font-medium">{selectedSetName}</span>
               </p>
             ) : null}
 
-            {isGroup ? (
-              <div className="space-y-2">
-                <p className="text-sm font-medium text-foreground">
-                  สั่งให้ใคร / ลงบิลไหน
-                </p>
-                <div className="grid gap-2 sm:grid-cols-2">
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-foreground">
+                สั่งให้ใคร / ลงบิลไหน
+              </p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setChargeRoomId(null)}
+                  className={`flex items-center gap-3 rounded-xl border px-3 py-3 text-left transition ${
+                    chargeRoomId === null
+                      ? "border-success/40 bg-success/10 text-success"
+                      : "border-border bg-background text-foreground hover:border-primary/40"
+                  }`}
+                >
+                  <UsersRound size={18} className="shrink-0" />
+                  <span>
+                    <span className="block text-sm font-medium">ลงบิลกรุ๊ป</span>
+                    <span className="block text-xs opacity-80">
+                      รวมในบิลกลุ่มทัวร์
+                    </span>
+                  </span>
+                </button>
+                {rooms.map((room) => (
                   <button
                     type="button"
-                    onClick={() => setChargeRoomId(null)}
+                    key={room.id}
+                    onClick={() => setChargeRoomId(room.id)}
                     className={`flex items-center gap-3 rounded-xl border px-3 py-3 text-left transition ${
-                      chargeRoomId === null
+                      chargeRoomId === room.id
                         ? "border-success/40 bg-success/10 text-success"
                         : "border-border bg-background text-foreground hover:border-primary/40"
                     }`}
                   >
-                    <UsersRound size={18} className="shrink-0" />
+                    <DoorOpen size={18} className="shrink-0" />
                     <span>
-                      <span className="block text-sm font-medium">ลงบิลกรุ๊ป</span>
+                      <span className="block text-sm font-medium">
+                        ห้อง {room.number}
+                      </span>
                       <span className="block text-xs opacity-80">
-                        รวมในบิลกลุ่มทัวร์
+                        สั่งแยกห้องนี้
                       </span>
                     </span>
                   </button>
-                  {rooms.map((room) => (
-                    <button
-                      type="button"
-                      key={room.id}
-                      onClick={() => setChargeRoomId(room.id)}
-                      className={`flex items-center gap-3 rounded-xl border px-3 py-3 text-left transition ${
-                        chargeRoomId === room.id
-                          ? "border-success/40 bg-success/10 text-success"
-                          : "border-border bg-background text-foreground hover:border-primary/40"
-                      }`}
-                    >
-                      <DoorOpen size={18} className="shrink-0" />
-                      <span>
-                        <span className="block text-sm font-medium">
-                          ห้อง {room.number}
-                        </span>
-                        <span className="block text-xs opacity-80">
-                          สั่งแยกห้องนี้
-                        </span>
-                      </span>
-                    </button>
-                  ))}
-                </div>
+                ))}
               </div>
-            ) : null}
+            </div>
 
             <BookingFoodSelect
               items={items}
               onChange={setItems}
               included={false}
-              allowPackagePricing={isGroup}
+              allowPackagePricing
               defaultIsExtra
             />
           </>
-        )}
+        ) : null}
 
         {error ? (
           <p className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">

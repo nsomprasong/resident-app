@@ -137,6 +137,23 @@ export async function POST(request: NextRequest) {
     const roomIdsValue = parsed.body.roomIds;
     const raftIdsValue = parsed.body.raftIds;
     const foodItemsValue = parsed.body.foodItems;
+    const foodSetMetaRaw =
+      typeof parsed.body.foodSet === "object" &&
+      parsed.body.foodSet !== null &&
+      !Array.isArray(parsed.body.foodSet)
+        ? (parsed.body.foodSet as Record<string, unknown>)
+        : null;
+    const foodSetName =
+      typeof foodSetMetaRaw?.name === "string"
+        ? foodSetMetaRaw.name.trim()
+        : "";
+    const foodSetSourceIdRaw = foodSetMetaRaw?.sourceFoodSetId;
+    const foodSetSourceId =
+      foodSetSourceIdRaw === null
+        ? null
+        : typeof foodSetSourceIdRaw === "string" && foodSetSourceIdRaw.trim()
+          ? foodSetSourceIdRaw.trim()
+          : null;
     const roomIds: string[] | null =
       roomIdsValue === undefined
         ? []
@@ -153,6 +170,7 @@ export async function POST(request: NextRequest) {
       productId: string;
       quantity: number;
       isExtra: boolean;
+      note: string | null;
     }> = [];
 
     if (!name) issues.push({ path: "name", message: "Customer name is required" });
@@ -187,6 +205,13 @@ export async function POST(request: NextRequest) {
             : typeof isExtraValue === "boolean"
               ? isExtraValue
               : null;
+        const noteValue = itemRecord.note;
+        const note =
+          noteValue === undefined || noteValue === null
+            ? null
+            : typeof noteValue === "string"
+              ? noteValue.trim() || null
+              : undefined;
         if (!productId) {
           issues.push({ path: `foodItems.${index}.productId`, message: "Product id is required" });
         }
@@ -199,11 +224,18 @@ export async function POST(request: NextRequest) {
             message: "isExtra must be boolean",
           });
         }
+        if (note === undefined) {
+          issues.push({
+            path: `foodItems.${index}.note`,
+            message: "note must be a string",
+          });
+        }
         if (
           productId &&
           Number.isFinite(quantity) &&
           quantity > 0 &&
-          isExtra !== null
+          isExtra !== null &&
+          note !== undefined
         ) {
           foodItems.push({
             productId,
@@ -214,6 +246,7 @@ export async function POST(request: NextRequest) {
                   ? false
                   : isExtra
                 : true,
+            note,
           });
         }
       });
@@ -445,12 +478,45 @@ export async function POST(request: NextRequest) {
                 quantity: item.quantity,
                 unitPrice: productMap.get(item.productId)!.price,
                 isExtra: item.isExtra,
+                ...(item.note ? { note: item.note } : {}),
               })),
             },
           },
         });
       }
-      return booking;
+
+      // Persist group-only food set customization (does not mutate master FoodSet).
+      if (mode === "group" && tourGroupId && foodItems.length) {
+        let sourceFoodSetId: string | null = foodSetSourceId;
+        if (sourceFoodSetId) {
+          const source = await tx.foodSet.findUnique({
+            where: { id: sourceFoodSetId },
+            select: { id: true },
+          });
+          if (!source) sourceFoodSetId = null;
+        }
+        await tx.tourGroupFoodSet.create({
+          data: {
+            tourGroupId,
+            name: foodSetName || "ชุดของกรุ๊ป",
+            sourceFoodSetId,
+            items: {
+              create: foodItems.map((item) => ({
+                productId: item.productId,
+                quantity: item.quantity,
+                isExtra: item.isExtra,
+                ...(item.note ? { optionNote: item.note } : {}),
+              })),
+            },
+          },
+        });
+      }
+
+      return {
+        id: booking.id,
+        reference: booking.reference,
+        tourGroupId: tourGroupId ?? null,
+      };
     });
     await recordAuditLog({
       actor: {
@@ -465,6 +531,7 @@ export async function POST(request: NextRequest) {
         roomCount: selectedRoomIds.length,
         raftCount: selectedRaftIds.length,
         foodItemCount: foodItems.length,
+        tourGroupId: result.tourGroupId,
         nights: Math.max(
           1,
           Math.ceil((checkOut.getTime() - checkIn.getTime()) / 86_400_000),

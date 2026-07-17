@@ -3,7 +3,8 @@
 import { Calculator, Save, UsersRound, X } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
-import BookingFoodSelect, { type BookingFoodItem } from "./BookingFoodSelect";
+import BookingFoodSetPanel from "./BookingFoodSetPanel";
+import type { BookingFoodItem } from "./BookingFoodSelect";
 import DateSelector from "./DateSelector";
 import Modal from "./Modal";
 import RaftSelect from "./RaftSelect";
@@ -65,6 +66,10 @@ export default function AddGroupBookingDialog({
   const [roomIds, setRoomIds] = useState<string[]>([]);
   const [raftIds, setRaftIds] = useState<string[]>([]);
   const [foodItems, setFoodItems] = useState<BookingFoodItem[]>([]);
+  const [foodSetMeta, setFoodSetMeta] = useState<{
+    name: string;
+    sourceFoodSetId: string | null;
+  }>({ name: "", sourceFoodSetId: null });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [roomsCatalog, setRoomsCatalog] = useState<RoomPriceInfo[]>([]);
@@ -161,6 +166,7 @@ export default function AddGroupBookingDialog({
     setRoomIds([]);
     setRaftIds([]);
     setFoodItems([]);
+    setFoodSetMeta({ name: "", sourceFoodSetId: null });
     setError("");
   };
 
@@ -188,6 +194,12 @@ export default function AddGroupBookingDialog({
             quantity: item.quantity,
             isExtra: item.isExtra ?? false,
           })),
+          foodSet: foodItems.length
+            ? {
+                name: foodSetMeta.name || "ชุดของกรุ๊ป",
+                sourceFoodSetId: foodSetMeta.sourceFoodSetId,
+              }
+            : undefined,
         }),
       });
       const data = (await response.json()) as { message?: string };
@@ -354,12 +366,15 @@ export default function AddGroupBookingDialog({
           checkOut={checkOut}
         />
 
-        <BookingFoodSelect
+        <BookingFoodSetPanel
           items={foodItems}
           onChange={setFoodItems}
           included
           allowPackagePricing
           defaultIsExtra={false}
+          resetToken={open}
+          groupScoped
+          onMetaChange={setFoodSetMeta}
         />
 
         <section className="rounded-2xl border border-border bg-surface">

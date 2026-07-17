@@ -3,7 +3,8 @@
 import { useState, type FormEvent } from "react";
 import { Save } from "lucide-react";
 
-import BookingFoodSelect, { type BookingFoodItem } from "./BookingFoodSelect";
+import BookingFoodSetPanel from "./BookingFoodSetPanel";
+import type { BookingFoodItem } from "./BookingFoodSelect";
 import DateSelector from "./DateSelector";
 import Modal from "./Modal";
 import RaftSelect from "./RaftSelect";
@@ -141,10 +142,12 @@ export default function AddSoloBookingDialog({
           checkIn={checkIn}
           checkOut={checkOut}
         />
-        <BookingFoodSelect
+        <BookingFoodSetPanel
           items={foodItems}
           onChange={setFoodItems}
           included={false}
+          defaultIsExtra
+          resetToken={open}
         />
         {error ? (
           <p className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">

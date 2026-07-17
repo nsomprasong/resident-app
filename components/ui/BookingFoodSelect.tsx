@@ -1,6 +1,16 @@
 "use client";
 
-import { Check, ChevronLeft, ChevronRight, Minus, Plus, Search, Trash2, Utensils } from "lucide-react";
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Minus,
+  Plus,
+  RefreshCw,
+  Search,
+  Trash2,
+  Utensils,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import Modal from "./Modal";
@@ -41,16 +51,20 @@ export default function BookingFoodSelect({
   included,
   allowPackagePricing = false,
   defaultIsExtra = true,
+  allowReplace = true,
 }: {
   items: BookingFoodItem[];
   onChange: (items: BookingFoodItem[]) => void;
   included: boolean;
   allowPackagePricing?: boolean;
   defaultIsExtra?: boolean;
+  /** Show per-line "เปลี่ยนเมนู" to swap a dish without changing the master set */
+  allowReplace?: boolean;
 }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [replaceTargetId, setReplaceTargetId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("ALL");
   const [page, setPage] = useState(0);
@@ -85,20 +99,38 @@ export default function BookingFoodSelect({
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return products.filter((product) => {
+      if (replaceTargetId && product.id === replaceTargetId) return false;
       const matchCategory =
         category === "ALL" || product.typeName === category;
       const matchQuery =
         !normalized || product.title.toLowerCase().includes(normalized);
       return matchCategory && matchQuery;
     });
-  }, [category, products, query]);
+  }, [category, products, query, replaceTargetId]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageItems = filtered.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
 
   useEffect(() => {
     setPage(0);
-  }, [query, category]);
+  }, [query, category, replaceTargetId]);
+
+  const closePicker = () => {
+    setPickerOpen(false);
+    setReplaceTargetId(null);
+  };
+
+  const openAddPicker = () => {
+    setReplaceTargetId(null);
+    setPickerOpen(true);
+  };
+
+  const openReplacePicker = (productId: string) => {
+    setReplaceTargetId(productId);
+    setQuery("");
+    setCategory("ALL");
+    setPickerOpen(true);
+  };
 
   const setQuantity = (id: string, value: number) => {
     const product = productMap.get(id);
@@ -121,6 +153,48 @@ export default function BookingFoodSelect({
               },
             ],
     );
+  };
+
+  const replaceProduct = (newProductId: string) => {
+    if (!replaceTargetId) return;
+    const oldItem = items.find((item) => item.productId === replaceTargetId);
+    if (!oldItem) {
+      closePicker();
+      return;
+    }
+    const product = productMap.get(newProductId);
+    const needsOption =
+      product?.optionGroups?.some((group) => group.isRequired) ?? false;
+    const withoutOld = items.filter(
+      (item) => item.productId !== replaceTargetId,
+    );
+    const existing = withoutOld.find((item) => item.productId === newProductId);
+    if (existing) {
+      onChange(
+        withoutOld.map((item) =>
+          item.productId === newProductId
+            ? {
+                ...item,
+                quantity: item.quantity + oldItem.quantity,
+              }
+            : item,
+        ),
+      );
+    } else {
+      onChange([
+        ...withoutOld,
+        {
+          productId: newProductId,
+          quantity: oldItem.quantity,
+          isExtra: oldItem.isExtra,
+          note: undefined,
+          ...(needsOption
+            ? { requireOptions: true }
+            : { requireOptions: false }),
+        },
+      ]);
+    }
+    closePicker();
   };
 
   const setItemExtra = (id: string, isExtra: boolean) => {
@@ -170,6 +244,10 @@ export default function BookingFoodSelect({
     return sum + row.product.price * row.quantity;
   }, 0);
   const foodCount = selectedRows.reduce((sum, row) => sum + row.quantity, 0);
+  const replaceTargetTitle =
+    replaceTargetId != null
+      ? (productMap.get(replaceTargetId)?.title ?? "เมนูเดิม")
+      : null;
 
   return (
     <>
@@ -180,19 +258,21 @@ export default function BookingFoodSelect({
               <Utensils size={18} />
             </span>
             <div>
-              <h3 className="text-sm font-semibold text-foreground">รายการอาหาร</h3>
+              <h3 className="text-sm font-semibold text-foreground">
+                รายการอาหาร
+              </h3>
               <p className="text-xs text-muted-foreground">
                 {allowPackagePricing
-                  ? "กำหนดได้ว่ารายการรวมในราคาเหมาหรือคิดเพิ่ม"
+                  ? "กำหนดได้ว่ารายการรวมในราคาเหมาหรือคิดเพิ่ม — กดเปลี่ยนเพื่อสลับเมนูในชุด"
                   : included
                     ? "อาหารที่เลือกตอนนี้รวมในราคาเหมา (เพิ่มทีหลังจากหน้ารายละเอียดการจองได้)"
-                    : "อาหารคิดตามราคาจริงและรวมในบิล"}
+                    : "อาหารคิดตามราคาจริงและรวมในบิล — กดเปลี่ยนเพื่อสลับเมนู"}
               </p>
             </div>
           </div>
           <button
             type="button"
-            onClick={() => setPickerOpen(true)}
+            onClick={openAddPicker}
             className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
           >
             <Plus size={16} />
@@ -206,7 +286,9 @@ export default function BookingFoodSelect({
           ) : selectedRows.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-background px-4 py-8 text-center">
               <Utensils size={22} className="text-muted-foreground" />
-              <p className="mt-2 text-sm font-medium text-foreground">ยังไม่มีรายการอาหาร</p>
+              <p className="mt-2 text-sm font-medium text-foreground">
+                ยังไม่มีรายการอาหาร
+              </p>
               <p className="mt-1 text-xs text-muted-foreground">
                 กดปุ่มเพิ่มรายการอาหารเพื่อเลือกจากเมนู
               </p>
@@ -224,7 +306,7 @@ export default function BookingFoodSelect({
                     key={row.productId}
                     className="space-y-2 rounded-xl border border-border bg-background px-3 py-2"
                   >
-                    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:grid-cols-[minmax(0,1.4fr)_auto_auto_auto_auto]">
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:grid-cols-[minmax(0,1.4fr)_auto_auto_auto_auto_auto]">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-foreground">
                           {row.product.title}
@@ -268,6 +350,17 @@ export default function BookingFoodSelect({
                       <p className="hidden text-sm font-medium text-foreground sm:block">
                         ฿{lineTotal.toLocaleString()}
                       </p>
+                      {allowReplace ? (
+                        <button
+                          type="button"
+                          aria-label={`เปลี่ยน ${row.product.title}`}
+                          onClick={() => openReplacePicker(row.productId)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1.5 text-xs font-medium text-foreground hover:border-primary/40 hover:bg-primary/5"
+                        >
+                          <RefreshCw size={13} />
+                          เปลี่ยน
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         aria-label={`ลบ ${row.product.title}`}
@@ -351,19 +444,25 @@ export default function BookingFoodSelect({
 
       <Modal
         open={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        title="เลือกเมนูอาหาร"
+        onClose={closePicker}
+        title={
+          replaceTargetId
+            ? `เปลี่ยนเมนู: ${replaceTargetTitle ?? ""}`
+            : "เลือกเมนูอาหาร"
+        }
         size="lg"
         nested
         fullScreenOnMobile
         footer={
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm text-muted-foreground">
-              เลือกแล้ว {foodCount} รายการ
+              {replaceTargetId
+                ? "เลือกเมนูใหม่แทนรายการนี้ — ใช้เฉพาะการจอง/กรุ๊ปนี้"
+                : `เลือกแล้ว ${foodCount} รายการ`}
             </p>
             <button
               type="button"
-              onClick={() => setPickerOpen(false)}
+              onClick={closePicker}
               className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
             >
               <Check size={17} />
@@ -373,6 +472,13 @@ export default function BookingFoodSelect({
         }
       >
         <div className="space-y-3">
+          {replaceTargetId ? (
+            <p className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-foreground">
+              กำลังเปลี่ยน{" "}
+              <span className="font-medium">{replaceTargetTitle}</span> เป็นเมนูอื่น
+              — ชุดมาตรฐานใน Settings ไม่ถูกแก้
+            </p>
+          ) : null}
           <div className="flex flex-col gap-2 sm:flex-row">
             <label className="relative min-w-0 flex-1">
               <span className="sr-only">ค้นหาเมนู</span>
@@ -395,7 +501,11 @@ export default function BookingFoodSelect({
               <option value="ALL">ทุกหมวด</option>
               {categories.map((item) => (
                 <option key={item} value={item}>
-                  {item === "FOOD" ? "อาหาร" : item === "MINIBAR" ? "มินิบาร์" : item}
+                  {item === "FOOD"
+                    ? "อาหาร"
+                    : item === "MINIBAR"
+                      ? "มินิบาร์"
+                      : item}
                 </option>
               ))}
             </select>
@@ -409,7 +519,8 @@ export default function BookingFoodSelect({
             ) : (
               pageItems.map((product) => {
                 const selectedQty =
-                  items.find((item) => item.productId === product.id)?.quantity ?? 0;
+                  items.find((item) => item.productId === product.id)
+                    ?.quantity ?? 0;
                 const qty = draftQty[product.id] ?? 1;
                 return (
                   <div
@@ -424,30 +535,48 @@ export default function BookingFoodSelect({
                         {product.typeName ?? "สินค้า"}
                         {product.isMinibar ? " · มินิบาร์" : ""} · ฿
                         {product.price.toLocaleString()}
-                        {selectedQty > 0 ? ` · ในรายการ x${selectedQty}` : ""}
+                        {!replaceTargetId && selectedQty > 0
+                          ? ` · ในรายการ x${selectedQty}`
+                          : ""}
                       </p>
                     </div>
-                    <input
-                      type="number"
-                      min={1}
-                      value={qty}
-                      onChange={(event) =>
-                        setDraftQty((prev) => ({
-                          ...prev,
-                          [product.id]: Math.max(1, Number(event.target.value) || 1),
-                        }))
-                      }
-                      className="w-16 rounded-lg border border-border px-2 py-1.5 text-center text-sm"
-                      aria-label={`จำนวน ${product.title}`}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => addFromPicker(product.id)}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-                    >
-                      <Plus size={14} />
-                      เพิ่ม
-                    </button>
+                    {replaceTargetId ? (
+                      <button
+                        type="button"
+                        onClick={() => replaceProduct(product.id)}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                      >
+                        <RefreshCw size={14} />
+                        ใช้เมนูนี้แทน
+                      </button>
+                    ) : (
+                      <>
+                        <input
+                          type="number"
+                          min={1}
+                          value={qty}
+                          onChange={(event) =>
+                            setDraftQty((prev) => ({
+                              ...prev,
+                              [product.id]: Math.max(
+                                1,
+                                Number(event.target.value) || 1,
+                              ),
+                            }))
+                          }
+                          className="w-16 rounded-lg border border-border px-2 py-1.5 text-center text-sm"
+                          aria-label={`จำนวน ${product.title}`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => addFromPicker(product.id)}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                        >
+                          <Plus size={14} />
+                          เพิ่ม
+                        </button>
+                      </>
+                    )}
                   </div>
                 );
               })

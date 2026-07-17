@@ -2,26 +2,19 @@
 
 ## Task
 
-Fix beebee-only login APP_ERROR (unexpected server response)
+Food set: replace individual menus for group-only customization
 
 ## Status
 
-IN_PROGRESS — Auth repaired; deploy code still required
+COMPLETED
 
 ## Evidence
 
-- beebee Auth login succeeded server-side (`lastSignInAt`, `sessionEpoch`→10) but client got unexpected response
-- Diff vs working `test`: beebee had **email+phone** Auth identities; test is **email-only**
-- `updateUserById({ phone: "" })` does not remove phone identity
-
-## Fix
-
-- Recreated beebee Auth as email-only (`providers: [email]`, phone empty)
-- `mustResetPassword=true` — login with username only to set password
-- Login: clear Auth phone before sign-in; no `signOut(others)`; single refresh
-- Stop attaching phone on new username Auth creates
+- `BookingFoodSelect`: ปุ่ม「เปลี่ยน」ต่อเมนู → เลือกเมนูใหม่แทน (ไม่แก้ชุดมาตรฐาน)
+- `BookingFoodSetPanel`: ข้อความใช้เฉพาะกรุ๊ป + ส่ง `foodSet` meta
+- `POST /api/bookings` (group): บันทึก `TourGroupFoodSet` จากรายการที่ปรับแล้ว
+- `tsc` + eslint changed files pass
 
 ## Next Action
 
-1. Deploy code
-2. บนมือถือ: เคลียร์ cookie ไซต์ → login `beebee` **ไม่ใส่รหัสผ่าน** → ตั้งรหัสใหม่ → เข้าใช้งาน
+ลองจองกรุ๊ป: เลือกชุด → กดเปลี่ยนทอดมันเป็นต้มยำ → บันทึก แล้วเช็กว่า Settings ชุดเดิมไม่เปลี่ยน
