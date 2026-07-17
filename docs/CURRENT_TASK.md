@@ -2,7 +2,7 @@
 
 ## Task
 
-Fix production Application error after login (beebee)
+Fix production APP_ERROR after login (beebee)
 
 ## Status
 
@@ -10,25 +10,16 @@ IN_PROGRESS
 
 ## Evidence
 
-- `test` vs `beebee`: role/permissions/auth gates identical (OWNER, 53 perms, canLoginGate true)
-- Diff: beebee has Auth phone identity; `sessionEpoch` 4 vs 2; Thai display name
-- User sees Next.js default "Application error: a client-side exception…" (not Thai boundary)
-- Production serves `/images/person.svg` ~900KB via `next/image` on Header/UserNav after login
-- Middleware employee-lookup failure returned plain-text 503 → App Router client can fatal
+- User confirms `APP_ERROR` / โหลดหน้าไม่สำเร็จ (error.tsx catching)
+- test vs beebee auth gates identical; crash is post-login render
+- Suspected: Server Component home + next/image on huge logo.png
 
-## Fix
+## Fix (this round)
 
-- Replace `person.svg` with Lucide avatar in Header/UserNav
-- Add `app/error.tsx` + `app/global-error.tsx`
-- Wrap public routes in ClientErrorBoundary
-- Middleware: redirect to `/access-denied` instead of plain-text 503
-- ListMenu: skip invalid icon components
-
-## Verify
-
-- `npx tsc --noEmit` pass
-- eslint on changed files pass
+- Home → client `HomeBoard` using `/api/auth/me` permissions (same as Sidebar)
+- Show error.message on APP_ERROR page + beacon to client-error
+- Avoid next/image optimizer on critical logos (`img` / `unoptimized`)
 
 ## Next Action
 
-Deploy แล้วลอง login `beebee` บนมือถือ — ถ้ายังพัง ส่งข้อความจาก browser console หรือรหัส APP_ERROR / CLIENT_RENDER_ERROR / GLOBAL_ERROR
+Deploy แล้วลอง `beebee` อีกครั้ง — ถ้ายัง APP_ERROR ให้แคปข้อความรายละเอียดใต้หัวข้อ (กล่องสีเทา)

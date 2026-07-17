@@ -20,6 +20,7 @@ export async function POST(request: Request) {
       role?: unknown;
       userAgent?: unknown;
       source?: unknown;
+      digest?: unknown;
     } | null;
 
     console.error("[client-error-report]", {
@@ -32,6 +33,7 @@ export async function POST(request: Request) {
       role: typeof body?.role === "string" ? body.role : null,
       userAgent: typeof body?.userAgent === "string" ? body.userAgent : null,
       source: typeof body?.source === "string" ? body.source : null,
+      digest: typeof body?.digest === "string" ? body.digest : null,
     });
 
     return NextResponse.json({ ok: true });

@@ -173,6 +173,7 @@ export default function Sidebar({
                 height={44}
                 className="size-11 shrink-0 rounded-2xl shadow-sm ring-1 ring-border/70"
                 priority
+                unoptimized
               />
               <div className="min-w-0">
                 <p className="truncate text-lg font-semibold tracking-tight text-foreground">

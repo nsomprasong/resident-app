@@ -10,13 +10,33 @@ export default function AppError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const detail =
+    (typeof error.message === "string" && error.message.trim()) ||
+    "ไม่ระบุรายละเอียด";
+
   useEffect(() => {
-    console.error("[app-error]", {
-      message: error.message,
-      digest: error.digest ?? null,
+    const payload = {
+      message: detail,
       stack: error.stack ?? null,
-    });
-  }, [error]);
+      digest: error.digest ?? null,
+      route: typeof window !== "undefined" ? window.location.pathname : "",
+      role: null,
+      userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
+      source: "app-error",
+    };
+    console.error("[app-error]", payload);
+    try {
+      const body = JSON.stringify(payload);
+      if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
+        navigator.sendBeacon(
+          "/api/system/client-error",
+          new Blob([body], { type: "application/json" }),
+        );
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [detail, error.digest, error.stack]);
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-muted px-4 py-10">
@@ -28,8 +48,11 @@ export default function AppError({
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
           เกิดข้อผิดพลาดระหว่างแสดงผล กรุณาลองใหม่ หรือออกจากระบบแล้วเข้าอีกครั้ง
         </p>
+        <p className="mt-3 break-words rounded-xl bg-muted px-3 py-2 text-left text-xs text-muted-foreground">
+          {detail}
+        </p>
         {error.digest ? (
-          <p className="mt-3 break-all rounded-xl bg-muted px-3 py-2 text-xs text-muted-foreground">
+          <p className="mt-2 break-all text-xs text-muted-foreground">
             รหัส: {error.digest}
           </p>
         ) : null}
@@ -47,6 +70,14 @@ export default function AppError({
           >
             ไปหน้าเข้าสู่ระบบ
           </Link>
+          <form action="/api/auth/logout" method="post">
+            <button
+              type="submit"
+              className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm font-medium text-foreground transition hover:bg-muted"
+            >
+              ออกจากระบบ
+            </button>
+          </form>
         </div>
       </section>
     </main>

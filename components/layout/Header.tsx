@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { Menu, UserRound } from "lucide-react";
 
 export default function Header({ onMenuClick }: { onMenuClick: () => void }) {
@@ -16,13 +15,13 @@ export default function Header({ onMenuClick }: { onMenuClick: () => void }) {
         >
           <Menu size={22} />
         </button>
-        <Image
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
           src="/logo.png"
           alt="Resident"
           width={32}
           height={32}
           className="size-8 rounded-lg"
-          priority
         />
         <span className="font-semibold">Resident</span>
       </div>

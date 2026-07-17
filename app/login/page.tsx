@@ -46,6 +46,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             height={72}
             className="mx-auto mb-4 size-[72px] rounded-2xl shadow-sm"
             priority
+            unoptimized
           />
           <p className="text-sm font-medium text-primary">Resident</p>
           <h1 className="mt-1 text-2xl font-semibold text-foreground">
