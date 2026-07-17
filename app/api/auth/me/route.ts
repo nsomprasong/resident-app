@@ -105,7 +105,7 @@ export async function GET() {
     return NextResponse.json({
       employee: {
         id: currentUser.employee.id,
-        authUserId: currentUser.employee.authUserId,
+        authUserId: currentUser.employee.authUserId ?? null,
         username: currentUser.employee.username ?? null,
         phone: currentUser.employee.phone ?? null,
         email: currentUser.employee.email ?? null,
@@ -115,8 +115,14 @@ export async function GET() {
         role: role.code ?? null,
         roleDisplayName: role.displayName ?? "",
         permissions,
-        isActive: currentUser.employee.isActive,
+        isActive: Boolean(currentUser.employee.isActive),
         mustResetPassword: Boolean(currentUser.employee.mustResetPassword),
+        profile: {
+          name: currentUser.employee.name ?? "",
+          email: currentUser.employee.email ?? null,
+          phone: currentUser.employee.phone ?? null,
+          username: currentUser.employee.username ?? null,
+        },
       },
     });
   } catch (error) {

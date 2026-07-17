@@ -67,11 +67,30 @@ export async function updateSession(request: NextRequest) {
     },
   });
 
-  const { data } = await supabase.auth.getClaims();
-  const claims = data?.claims;
-
   const pathname = request.nextUrl.pathname;
   const isPublicRoute = PUBLIC_ROUTES.has(pathname);
+
+  let claims: { sub?: unknown; app_metadata?: unknown } | null = null;
+  try {
+    const { data } = await supabase.auth.getClaims();
+    claims =
+      (data?.claims as { sub?: unknown; app_metadata?: unknown } | null) ?? null;
+  } catch (error) {
+    console.error("supabase.auth.getClaims failed", error);
+    if (pathname.startsWith("/api/") && !isPublicRoute) {
+      return NextResponse.json(
+        { message: "Authentication required" },
+        { status: 401 },
+      );
+    }
+    if (!isPublicRoute) {
+      const loginUrl = request.nextUrl.clone();
+      loginUrl.pathname = "/login";
+      loginUrl.search = "";
+      return copyResponseCookies(response, NextResponse.redirect(loginUrl));
+    }
+    return response;
+  }
 
   if (!claims && pathname.startsWith("/api/") && !isPublicRoute) {
     return NextResponse.json(

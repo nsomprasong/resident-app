@@ -63,4 +63,11 @@ describe("login-identifier helpers", () => {
       "nipa@employee-auth.local",
     );
   });
+
+  it("sanitizes trailing-dot usernames in Auth login email", () => {
+    assert.equal(authLoginEmailForUsername("bb."), "bb@employee-auth.local");
+    assert.equal(isValidUsername("bb."), false);
+    assert.equal(isValidUsername("bb"), false); // too short
+    assert.equal(isValidUsername("bb.user"), true);
+  });
 });

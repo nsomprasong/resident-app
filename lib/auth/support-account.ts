@@ -11,14 +11,14 @@ function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
-/** Fallback when env is unset — product support account. Override via SUPPORT_ACCOUNT_EMAILS. */
-const FALLBACK_SUPPORT_EMAILS = ["nsomprasong@gmail.com"] as const;
-
+/**
+ * Support mailboxes come only from SUPPORT_ACCOUNT_EMAILS.
+ * No hard-coded personal email and no ADMIN fallback from email.
+ */
 export function getProtectedSupportEmails(): readonly string[] {
   const raw = process.env.SUPPORT_ACCOUNT_EMAILS?.trim();
-  const source = raw
-    ? raw.split(",").map((part) => part.trim()).filter(Boolean)
-    : [...FALLBACK_SUPPORT_EMAILS];
+  if (!raw) return [];
+  const source = raw.split(",").map((part) => part.trim()).filter(Boolean);
   const unique = new Set(source.map(normalizeEmail).filter(Boolean));
   return [...unique];
 }

@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 
-import { useEmployeePermissions } from "@/components/auth/EmployeePermissionsProvider";
+import { useEmployeePermissionsOptional } from "@/components/auth/EmployeePermissionsProvider";
 
 type ClientErrorPayload = {
   message: string;
@@ -20,7 +20,8 @@ type ClientErrorPayload = {
  */
 export function ClientErrorLogger() {
   const pathname = usePathname();
-  const { employee } = useEmployeePermissions();
+  const permissions = useEmployeePermissionsOptional();
+  const employee = permissions?.employee ?? null;
 
   useEffect(() => {
     function report(payload: ClientErrorPayload) {

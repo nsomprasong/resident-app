@@ -2,7 +2,7 @@
 
 ## Task
 
-Fix Application error after login for non-ADMIN users on mobile
+Fix account-specific mobile login (only nsomprasong@gmail.com worked on phone)
 
 ## Status
 
@@ -10,20 +10,35 @@ COMPLETED
 
 ## Objective
 
-กัน client exception บนมือถือหลัง login สำหรับ non-admin — ไม่ขอ GPS/กล้องตอนโหลดหน้า, มี fallback browser APIs, เมนูว่าง → /access-denied, และมี client error logging ชั่วคราว
+หาความต่างบัญชีจริง แก้ต้นเหตุ account-specific กัน client exception และห้าม hard-code อีเมลเป็น ADMIN
 
-## Evidence
+## Evidence — ความต่างก่อนแก้
 
-- Login redirect ทุก role → `/` (ไม่แยก ADMIN/non-admin)
-- ไม่มี localStorage/sessionStorage ในแอป
-- GPS เคยเสี่ยงบน `/my-work` (เมนูแรกของ MANAGER) — ย้าย leave-types fetch ไปตอนกดปุ่มลา; GPS ใช้ safe wrapper เฉพาะตอนลงเวลา
-- ClientErrorLogger → POST `/api/system/client-error` (message, stack, route, role, userAgent)
-- Unit + rbac-policy + mobile menu policy pass; `tsc` + `npm run build` pass
+| | nsomprasong (ใช้ได้) | บัญชีอื่น (พังบนมือถือ) |
+|--|--|--|
+| Employee.email | gmail จริง | null หรือ hotmail แยกจาก Auth |
+| Auth email | nsomprasong@gmail.com | `*@employee-auth.local` |
+| bb. Auth email | — | **invalid** `bb.@employee-auth.local` |
+| providers | email | email+phone |
+| Role ใน DB ตอนนี้ | ADMIN คนเดียว | OWNER / MANAGER |
+| authUserId match | exact | exact (ไม่ใช่ปัญหา UUID) |
+| Employee ซ้ำ | ไม่มี | ไม่มี |
 
-## Next Action
+Hard-code ที่พบ: `FALLBACK_SUPPORT_EMAILS = ["nsomprasong@gmail.com"]` ใน `lib/auth/support-account.ts`
 
-Deploy แล้ว login OWNER/MANAGER บนมือถือ — ดู server log `[client-error-report]` หากยังพัง
+## Fixes
+
+- ลบ hard-code อีเมล — ใช้เฉพาะ `SUPPORT_ACCOUNT_EMAILS`
+- Auth email: `bb.@…` → `bb@…` (repair แล้วบน production Auth)
+- ห้าม username ขึ้นต้น/ลงท้ายด้วยจุดสำหรับบัญชีใหม่
+- ClientErrorBoundary + null-safe logger / auth/me / getClaims try/catch
+- ไม่มี fallback เป็น ADMIN จากอีเมล
+
+## Verification
+
+- Unit (login-identifier, support-account, auth/menus) pass
+- `tsc` pass; production build รันต่อ
 
 ## Deploy
 
-ไม่ต้อง migrate
+Deploy โค้ด + ยืนยัน `.env` มี `SUPPORT_ACCOUNT_EMAILS` (ไม่มี fallback ในโค้ดแล้ว)

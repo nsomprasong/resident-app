@@ -23,6 +23,18 @@ test("protects configured support emails case-insensitively", () => {
   assert.equal(isProtectedSupportEmail("nobody@example.com"), false);
 });
 
+test("does not hard-code a personal support email when env is unset", () => {
+  const previous = process.env.SUPPORT_ACCOUNT_EMAILS;
+  delete process.env.SUPPORT_ACCOUNT_EMAILS;
+  assert.deepEqual(getProtectedSupportEmails(), []);
+  assert.equal(isProtectedSupportEmail("nsomprasong@gmail.com"), false);
+  if (previous === undefined) {
+    delete process.env.SUPPORT_ACCOUNT_EMAILS;
+  } else {
+    process.env.SUPPORT_ACCOUNT_EMAILS = previous;
+  }
+});
+
 test("only the support actor can access a support employee", () => {
   process.env.SUPPORT_ACCOUNT_EMAILS = "nsomprasong@gmail.com";
   assert.equal(

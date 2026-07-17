@@ -28,8 +28,26 @@ export function normalizeUsername(value: string): string {
     .toLowerCase();
 }
 
+/** Local-part for Auth login email — strips edge dots so "bb." → "bb@…". */
+export function authLoginEmailLocalPart(username: string): string {
+  const normalized = normalizeUsername(username)
+    .replace(/^\.+|\.+$/g, "")
+    .replace(/\.{2,}/g, ".");
+  return normalized || "user";
+}
+
 export function isValidUsername(value: string): boolean {
-  return USERNAME_PATTERN.test(normalizeUsername(value));
+  const normalized = normalizeUsername(value);
+  if (!USERNAME_PATTERN.test(normalized)) return false;
+  // Reject edge/adjacent dots so Auth emails stay RFC-safe for new accounts.
+  if (
+    normalized.startsWith(".") ||
+    normalized.endsWith(".") ||
+    normalized.includes("..")
+  ) {
+    return false;
+  }
+  return true;
 }
 
 /** Human-readable reason when username fails validation (null = OK). */
@@ -47,6 +65,13 @@ export function describeUsernameIssue(value: string): string | null {
   }
   if (normalized.length > 40) {
     return "Username ยาวเกิน 40 ตัว";
+  }
+  if (
+    normalized.startsWith(".") ||
+    normalized.endsWith(".") ||
+    normalized.includes("..")
+  ) {
+    return "Username ห้ามขึ้นต้น/ลงท้ายด้วยจุด และห้ามมีจุดติดกัน";
   }
   if (!USERNAME_PATTERN.test(normalized)) {
     const bad = [...normalized].filter((ch) => !/[a-z0-9._-]/.test(ch));
@@ -130,5 +155,6 @@ export const GENERIC_LOGIN_ERROR =
  * Admin API can create phone users.
  */
 export function authLoginEmailForUsername(username: string): string {
-  return `${normalizeUsername(username)}@employee-auth.local`;
+  // Guard: never emit invalid local-parts like "bb.@" (dot before @).
+  return `${authLoginEmailLocalPart(username)}@employee-auth.local`;
 }

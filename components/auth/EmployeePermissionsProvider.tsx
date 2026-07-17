@@ -221,3 +221,8 @@ export function useEmployeePermissions(): EmployeePermissionsContextValue {
   }
   return context;
 }
+
+/** Safe for optional probes (error logger) — never throws. */
+export function useEmployeePermissionsOptional(): EmployeePermissionsContextValue | null {
+  return useContext(EmployeePermissionsContext);
+}
