@@ -179,8 +179,7 @@ function mapAuthProvisionErrorMessage(message: string): string {
 /**
  * Create Auth user for a new username/phone employee.
  * Password login uses username-bound Auth email (Employee.email stays null).
- * Creates email-only first (phone provider is often disabled and doubles latency),
- * then best-effort attaches phone for lookup/display.
+ * Email-only Auth — do not attach phone identity (breaks mobile Server Actions).
  */
 export async function createEmployeeAuthUser(input: {
   username: string;
@@ -206,11 +205,10 @@ export async function createEmployeeAuthUser(input: {
     const metadata = {
       provisioned_by: "employee_manage_username",
       username,
-      phone,
+      // Keep phone in metadata for ops only — not as Auth phone identity.
+      employee_phone: phone,
     };
 
-    // Email-only create is the fast path — login uses Auth email, not phone.
-    // Avoid listUsers pre-scans and phone-first create (often fails then retries).
     const { data, error } = await admin.auth.admin.createUser({
       email: authEmail,
       password: input.password,
@@ -224,18 +222,6 @@ export async function createEmployeeAuthUser(input: {
 
     if (!data.user?.id) {
       return { ok: false, message: "สร้าง Auth user ไม่สำเร็จ" };
-    }
-
-    // Best-effort phone attach; do not fail employee create if phone sync fails.
-    const phoneSync = await updateAuthUserPhone({
-      authUserId: data.user.id,
-      phone,
-    });
-    if (!phoneSync.ok) {
-      console.warn(
-        "createEmployeeAuthUser: phone sync skipped",
-        phoneSync.message,
-      );
     }
 
     return { ok: true, authUserId: data.user.id, created: true };
@@ -303,8 +289,95 @@ export async function ensureAuthLoginEmail(input: {
 }
 
 /**
+ * Remove phone from Auth user so sessions stay email-only.
+ * Username login does not need a phone identity (Phone provider is often disabled),
+ * and dual email+phone identities have caused mobile Server Action cookie failures.
+ */
+export async function clearAuthUserPhone(input: {
+  authUserId: string;
+}): Promise<{ ok: true } | { ok: false; message: string }> {
+  try {
+    const admin = createAdminClient();
+    const { data: existing, error: getError } = await admin.auth.admin.getUserById(
+      input.authUserId,
+    );
+    if (getError || !existing.user) {
+      return { ok: false, message: "ไม่พบ Auth user" };
+    }
+
+    const authPhone = (existing.user.phone ?? "").trim();
+    const phoneIdentities = (existing.user.identities ?? []).filter(
+      (identity) => identity.provider === "phone",
+    );
+    if (!authPhone && phoneIdentities.length === 0) {
+      return { ok: true };
+    }
+
+    // updateUserById({ phone: "" }) is a no-op in GoTrue — must DELETE phone identities.
+    const { url } = getSupabasePublicEnvironment();
+    const serviceRoleKey = getSupabaseServiceRoleKey();
+    for (const identity of phoneIdentities) {
+      const identityId = identity.identity_id || identity.id;
+      if (!identityId) continue;
+      const response = await fetch(
+        `${url}/auth/v1/admin/users/${input.authUserId}/identities/${identityId}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${serviceRoleKey}`,
+            apikey: serviceRoleKey,
+          },
+        },
+      );
+      if (!response.ok) {
+        const body = await response.text().catch(() => "");
+        return {
+          ok: false,
+          message: `ลบ phone identity ไม่สำเร็จ (${response.status})${
+            body ? `: ${body.slice(0, 200)}` : ""
+          }`,
+        };
+      }
+    }
+
+    const { error } = await admin.auth.admin.updateUserById(input.authUserId, {
+      phone: "",
+      user_metadata: {
+        ...(existing.user.user_metadata ?? {}),
+        phone: null,
+      },
+    });
+    if (error) {
+      // Identity may already be gone; phone field clear is best-effort.
+      console.warn("clearAuthUserPhone phone field", error.message);
+    }
+
+    const verify = await admin.auth.admin.getUserById(input.authUserId);
+    const stillHasPhone = Boolean((verify.data.user?.phone ?? "").trim());
+    const stillHasPhoneIdentity = (verify.data.user?.identities ?? []).some(
+      (identity) => identity.provider === "phone",
+    );
+    if (stillHasPhone || stillHasPhoneIdentity) {
+      return {
+        ok: false,
+        message: "ล้างเบอร์บน Auth ไม่สำเร็จ — ยังมี phone identity ค้างอยู่",
+      };
+    }
+
+    return { ok: true };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "ล้างเบอร์บน Auth ไม่สำเร็จ";
+    return { ok: false, message };
+  }
+}
+
+/**
  * Sync Employee phone onto the Auth user record (display / lookup).
  * Does not switch login identity — password login still uses Auth email when present.
+ *
+ * Prefer not calling this for username-mailbox accounts; dual phone+email
+ * identities inflate auth cookies and break mobile Server Actions.
  */
 export async function updateAuthUserPhone(input: {
   authUserId: string;
@@ -392,8 +465,17 @@ export async function ensureEmployeeAuthProvisioned(input: {
               emailOk.message,
             );
           }
-        }
-        if (phone) {
+          // Username-mailbox accounts must stay email-only on Auth.
+          const cleared = await clearAuthUserPhone({
+            authUserId: input.authUserId,
+          });
+          if (!cleared.ok) {
+            console.warn(
+              "ensureEmployeeAuthProvisioned clear phone",
+              cleared.message,
+            );
+          }
+        } else if (phone) {
           const phoneOk = await updateAuthUserPhone({
             authUserId: input.authUserId,
             phone,
@@ -416,12 +498,14 @@ export async function ensureEmployeeAuthProvisioned(input: {
       const authEmail = authLoginEmailForUsername(username);
       const existingByEmail = await findAuthUserIdByEmail(authEmail);
       if (existingByEmail) {
-        const phoneOk = await updateAuthUserPhone({
+        const cleared = await clearAuthUserPhone({
           authUserId: existingByEmail,
-          phone,
         });
-        if (!phoneOk.ok) {
-          console.warn("ensureEmployeeAuthProvisioned phone sync", phoneOk.message);
+        if (!cleared.ok) {
+          console.warn(
+            "ensureEmployeeAuthProvisioned clear phone",
+            cleared.message,
+          );
         }
         return {
           ok: true,

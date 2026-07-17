@@ -2,23 +2,26 @@
 
 ## Task
 
-Fix production APP_ERROR after login (beebee)
+Fix beebee-only login APP_ERROR (unexpected server response)
 
 ## Status
 
-IN_PROGRESS
+IN_PROGRESS — Auth repaired; deploy code still required
 
 ## Evidence
 
-- User: `APP_ERROR` detail = **An unexpected response was received from the server**
-- Classic Next.js failure when Server Action / soft navigation gets middleware redirect/JSON
-  while Set-Cookie + `sessionEpoch` are still settling (beebee epoch higher → more races)
+- beebee Auth login succeeded server-side (`lastSignInAt`, `sessionEpoch`→10) but client got unexpected response
+- Diff vs working `test`: beebee had **email+phone** Auth identities; test is **email-only**
+- `updateUserById({ phone: "" })` does not remove phone identity
 
 ## Fix
 
-- LoginForm: `window.location.assign(nextPath)` instead of `router.replace` + `router.refresh`
-- Middleware: do not JSON/redirect **Server Action** POSTs; allow `/login` during mustResetPassword
+- Recreated beebee Auth as email-only (`providers: [email]`, phone empty)
+- `mustResetPassword=true` — login with username only to set password
+- Login: clear Auth phone before sign-in; no `signOut(others)`; single refresh
+- Stop attaching phone on new username Auth creates
 
 ## Next Action
 
-Deploy แล้วลอง login `beebee` อีกครั้ง (แนะนำเคลียร์ cookie ของไซต์ก่อนลอง)
+1. Deploy code
+2. บนมือถือ: เคลียร์ cookie ไซต์ → login `beebee` **ไม่ใส่รหัสผ่าน** → ตั้งรหัสใหม่ → เข้าใช้งาน

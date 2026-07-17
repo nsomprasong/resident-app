@@ -8,7 +8,10 @@ import {
 import { rotateEmployeeSessionEpoch } from "@/lib/auth/rotate-session-epoch";
 import { readSessionEpochFromAccessToken } from "@/lib/auth/session-epoch";
 import { prisma } from "@/lib/prisma";
-import { ensureAuthLoginEmail } from "@/lib/supabase/admin";
+import {
+  clearAuthUserPhone,
+  ensureAuthLoginEmail,
+} from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 export type LoginState = {
@@ -195,6 +198,8 @@ export async function login(
 
   const supabase = await createClient();
   let authEmail: string | null = null;
+  let preAuthUserId: string | null = null;
+  let preUsername: string | null = null;
   const employeeSelect = {
     username: true,
     email: true,
@@ -213,6 +218,8 @@ export async function login(
     if (byContact) {
       const gate = gateLoginEmployee(byContact);
       if (gate) return gate;
+      preAuthUserId = byContact.authUserId;
+      preUsername = byContact.username;
       authEmail = await resolvePasswordLoginEmail({
         username: byContact.username,
         authUserId: byContact.authUserId!,
@@ -231,6 +238,8 @@ export async function login(
     const gate = gateLoginEmployee(employee);
     if (gate) return gate;
 
+    preAuthUserId = employee!.authUserId;
+    preUsername = employee!.username;
     authEmail = await resolvePasswordLoginEmail({
       username: employee!.username,
       authUserId: employee!.authUserId!,
@@ -245,6 +254,8 @@ export async function login(
     const gate = gateLoginEmployee(employee);
     if (gate) return gate;
 
+    preAuthUserId = employee!.authUserId;
+    preUsername = employee!.username ?? resolved.username;
     authEmail = await resolvePasswordLoginEmail({
       username: employee!.username ?? resolved.username,
       authUserId: employee!.authUserId!,
@@ -254,6 +265,16 @@ export async function login(
 
   if (!authEmail) {
     return { error: GENERIC_LOGIN_ERROR };
+  }
+
+  // Clear Auth phone BEFORE sign-in so the session cookies stay email-only.
+  // Dual email+phone identities inflate Set-Cookie and break mobile Server Actions
+  // (beebee vs test: test has email-only and works).
+  if (preAuthUserId && preUsername) {
+    const cleared = await clearAuthUserPhone({ authUserId: preAuthUserId });
+    if (!cleared.ok) {
+      console.warn("clearAuthUserPhone before login", cleared.message);
+    }
   }
 
   const {
@@ -376,7 +397,7 @@ export async function login(
     };
   }
 
-  // Single-device login: bump session epoch, stamp JWT, then revoke other devices.
+  // Single-device login: bump session epoch and stamp JWT.
   const rotated = await rotateEmployeeSessionEpoch({
     employeeId: employee.id,
     authUserId: user.id,
@@ -387,43 +408,26 @@ export async function login(
     return { error: "เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่" };
   }
 
-  // Refresh until the new access token carries the epoch. Prefer the token
-  // returned by refreshSession (cookie reads in the same Server Action can lag).
-  let epochInJwt = false;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const { data: refreshData, error: refreshError } =
-      await supabase.auth.refreshSession();
-    if (refreshError) {
-      console.error("refreshSession after epoch rotate failed", refreshError);
-      await supabase.auth.signOut();
-      return { error: "เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่" };
-    }
-
-    const tokenEpoch = readSessionEpochFromAccessToken(
-      refreshData.session?.access_token,
-    );
-    if (tokenEpoch === rotated.sessionEpoch) {
-      epochInJwt = true;
-      break;
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 150 * (attempt + 1)));
-  }
-
-  if (!epochInJwt) {
-    console.error("session epoch missing from JWT after refresh", {
-      expected: rotated.sessionEpoch,
-    });
+  // Username-mailbox accounts: keep Auth email-only (already cleared before sign-in).
+  // Epoch check still enforces single-device without signOut(others) cookie churn.
+  const { data: refreshData, error: refreshError } =
+    await supabase.auth.refreshSession();
+  if (refreshError) {
+    console.error("refreshSession after epoch rotate failed", refreshError);
     await supabase.auth.signOut();
     return { error: "เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่" };
   }
 
-  const { error: othersError } = await supabase.auth.signOut({
-    scope: "others",
-  });
-  if (othersError) {
-    // Best-effort: epoch check still blocks stale access tokens.
-    console.warn("signOut(scope=others) failed", othersError.message);
+  const tokenEpoch = readSessionEpochFromAccessToken(
+    refreshData.session?.access_token,
+  );
+  if (tokenEpoch !== rotated.sessionEpoch) {
+    console.error("session epoch missing from JWT after refresh", {
+      expected: rotated.sessionEpoch,
+      actual: tokenEpoch,
+    });
+    await supabase.auth.signOut();
+    return { error: "เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่" };
   }
 
   return {
