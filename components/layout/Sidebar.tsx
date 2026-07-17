@@ -236,7 +236,6 @@ export default function Sidebar({
         </div>
 
         <UserNav
-          image="/images/person.svg"
           name={
             employee?.name ?? (loaded ? "ไม่พบข้อมูลพนักงาน" : "กำลังโหลด...")
           }

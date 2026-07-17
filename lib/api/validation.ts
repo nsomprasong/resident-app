@@ -6,19 +6,42 @@ export type ValidationIssue = {
 };
 
 export function apiErrorResponse(
-  message: string,
+  message: unknown,
   status: number,
   code?: string,
   issues?: ValidationIssue[],
 ) {
   return NextResponse.json(
     {
-      message,
+      message: stringifyApiMessage(message),
       ...(code ? { code } : {}),
       ...(issues?.length ? { issues } : {}),
     },
     { status },
   );
+}
+
+/** Keep API error payloads JSON-safe (Error objects serialize as `{}`). */
+export function stringifyApiMessage(
+  value: unknown,
+  fallback = "เกิดข้อผิดพลาด",
+): string {
+  if (typeof value === "string" && value.trim()) {
+    // Auth / JSON mistakes sometimes surface the literal "{}"
+    if (value.trim() === "{}") return fallback;
+    return value;
+  }
+  if (value instanceof Error && value.message.trim()) {
+    if (value.message.trim() === "{}") return fallback;
+    return value.message;
+  }
+  if (value && typeof value === "object" && "message" in value) {
+    const nested = (value as { message?: unknown }).message;
+    if (typeof nested === "string" && nested.trim() && nested.trim() !== "{}") {
+      return nested;
+    }
+  }
+  return fallback;
 }
 
 export function validationErrorResponse(

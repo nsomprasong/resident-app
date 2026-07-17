@@ -46,8 +46,17 @@ export default function MainLayoutClient({ children }: { children: React.ReactNo
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
 
-  if (pathname === "/login" || pathname === "/access-denied" || pathname === "/forbidden" || pathname === "/set-password") {
-    return <Provider store={store}>{children}</Provider>;
+  if (
+    pathname === "/login" ||
+    pathname === "/access-denied" ||
+    pathname === "/forbidden" ||
+    pathname === "/set-password"
+  ) {
+    return (
+      <Provider store={store}>
+        <ClientErrorBoundary>{children}</ClientErrorBoundary>
+      </Provider>
+    );
   }
 
   return (

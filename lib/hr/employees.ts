@@ -309,23 +309,37 @@ export const HR_EMPLOYEE_FIELD_LABELS: Record<string, string> = {
 
 /** Map API validation issues to Thai field labels for employee forms. */
 export function hrEmployeeValidationFeedback(body: {
-  message?: string;
+  message?: unknown;
   issues?: ValidationIssue[];
 }): { summary: string; byPath: Record<string, string> } {
   const byPath: Record<string, string> = {};
+  const summaryFromMessage = (() => {
+    if (typeof body.message === "string" && body.message.trim()) {
+      return body.message;
+    }
+    if (body.message && typeof body.message === "object" && "message" in body.message) {
+      const nested = (body.message as { message?: unknown }).message;
+      if (typeof nested === "string" && nested.trim()) return nested;
+    }
+    return null;
+  })();
+
   if (!body.issues?.length) {
-    return { summary: body.message ?? "บันทึกไม่สำเร็จ", byPath };
+    return { summary: summaryFromMessage ?? "บันทึกไม่สำเร็จ", byPath };
   }
   for (const issue of body.issues) {
-    byPath[issue.path] = issue.message;
+    byPath[issue.path] =
+      typeof issue.message === "string" ? issue.message : "ข้อมูลไม่ถูกต้อง";
   }
   const summary = body.issues
     .map((issue) => {
       const label = HR_EMPLOYEE_FIELD_LABELS[issue.path] ?? issue.path;
-      return `${label}: ${issue.message}`;
+      const text =
+        typeof issue.message === "string" ? issue.message : "ข้อมูลไม่ถูกต้อง";
+      return `${label}: ${text}`;
     })
     .join("\n");
-  return { summary, byPath };
+  return { summary: summary || summaryFromMessage || "บันทึกไม่สำเร็จ", byPath };
 }
 
 export function parseHrEmployeeInput(

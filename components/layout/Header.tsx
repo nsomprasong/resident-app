@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { Menu } from "lucide-react";
+import { Menu, UserRound } from "lucide-react";
 
 export default function Header({ onMenuClick }: { onMenuClick: () => void }) {
   return (
@@ -26,7 +26,12 @@ export default function Header({ onMenuClick }: { onMenuClick: () => void }) {
         />
         <span className="font-semibold">Resident</span>
       </div>
-      <Image className="rounded-full" src="/images/person.svg" alt="ผู้ใช้งาน" width={34} height={34} />
+      <span
+        aria-hidden
+        className="grid size-[34px] place-items-center rounded-full bg-muted text-muted-foreground"
+      >
+        <UserRound size={18} />
+      </span>
     </header>
   );
 }

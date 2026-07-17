@@ -131,9 +131,15 @@ export async function updateSession(request: NextRequest) {
         );
       }
 
-      return new NextResponse("Access verification is temporarily unavailable", {
-        status: 503,
-      });
+      // Never return plain-text HTML for document navigations — the App Router
+      // client treats that as a fatal Application error on mobile.
+      const accessDeniedUrl = request.nextUrl.clone();
+      accessDeniedUrl.pathname = "/access-denied";
+      accessDeniedUrl.search = "reason=EMPLOYEE_NOT_FOUND";
+      return copyResponseCookies(
+        response,
+        NextResponse.redirect(accessDeniedUrl),
+      );
     }
   }
 

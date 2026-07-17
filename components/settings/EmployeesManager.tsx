@@ -150,7 +150,10 @@ export function EmployeesManager() {
         | null;
       if (!response.ok) {
         throw new Error(
-          body && "message" in body && body.message
+          body &&
+            "message" in body &&
+            typeof body.message === "string" &&
+            body.message.trim()
             ? body.message
             : "บันทึกพนักงานไม่สำเร็จ",
         );

@@ -32,6 +32,9 @@ export default function ListMenu({
           // plain functions — do not filter with typeof === "function".
           .filter((item) => Boolean(item.path) && item.icon != null)
           .map(({ text, icon: Icon, path }) => {
+            if (typeof Icon !== "function" && typeof Icon !== "object") {
+              return null;
+            }
             const active =
               pathname === path ||
               (path !== "/hr" && pathname.startsWith(`${path}/`));

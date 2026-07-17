@@ -2,27 +2,33 @@
 
 ## Task
 
-Fix self-registered users cannot login after role + activate
+Fix production Application error after login (beebee)
 
 ## Status
 
-COMPLETED
+IN_PROGRESS
 
-## Why (difference)
+## Evidence
 
-| | ลงทะเบียนหน้า login | เพิ่มในโปรแกรม |
-|--|--|--|
-| Auth login | `username@employee-auth.local` + รหัสที่ตั้งตอนสมัคร | temp password + `mustResetPassword` |
-| รหัสผ่านแรก | ใช้รหัสตอนสมัคร | ตั้งใหม่ผ่านหน้า set-password |
-| Employee.email | อีเมลติดต่อ (ถ้ามี) ≠ Auth | มักว่าง |
-
-## Bugs ที่ทำให้เข้าไม่ได้
-
-1. Login ด้วยอีเมลติดต่อ → ใช้เป็น Auth email ตรงๆ (ผิด)
-2. Settings แก้/เซฟอีเมลของบัญชีที่มี username → `resolveAuthUserIdForEmail` สลับ `authUserId` ทิ้ง mailbox เดิม
+- `test` vs `beebee`: role/permissions/auth gates identical (OWNER, 53 perms, canLoginGate true)
+- Diff: beebee has Auth phone identity; `sessionEpoch` 4 vs 2; Thai display name
+- User sees Next.js default "Application error: a client-side exception…" (not Thai boundary)
+- Production serves `/images/person.svg` ~900KB via `next/image` on Header/UserNav after login
+- Middleware employee-lookup failure returned plain-text 503 → App Router client can fatal
 
 ## Fix
 
-- Login: resolve อีเมลติดต่อ → username Auth mailbox
-- Settings: บัญชีมี username ไม่วิ่ง rebind Auth จากอีเมลติดต่อ
-- `ensureAuthLoginEmail` + repair `authUserId` หลัง sign-in ถ้าชี้ผิดตัว
+- Replace `person.svg` with Lucide avatar in Header/UserNav
+- Add `app/error.tsx` + `app/global-error.tsx`
+- Wrap public routes in ClientErrorBoundary
+- Middleware: redirect to `/access-denied` instead of plain-text 503
+- ListMenu: skip invalid icon components
+
+## Verify
+
+- `npx tsc --noEmit` pass
+- eslint on changed files pass
+
+## Next Action
+
+Deploy แล้วลอง login `beebee` บนมือถือ — ถ้ายังพัง ส่งข้อความจาก browser console หรือรหัส APP_ERROR / CLIENT_RENDER_ERROR / GLOBAL_ERROR

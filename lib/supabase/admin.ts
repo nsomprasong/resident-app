@@ -286,7 +286,11 @@ export async function ensureAuthLoginEmail(input: {
       }
       return {
         ok: false,
-        message: `ผูก Auth login email ไม่สำเร็จ: ${updateError.message}`,
+        message: `ผูก Auth login email ไม่สำเร็จ: ${
+          typeof updateError.message === "string" && updateError.message.trim()
+            ? updateError.message
+            : "ไม่สามารถอัปเดตอีเมล Auth ได้"
+        }`,
       };
     }
 
@@ -329,7 +333,15 @@ export async function updateAuthUserPhone(input: {
       phone_confirm: true,
     });
     if (error) {
-      return { ok: false, message: error.message };
+      const rawMessage =
+        typeof error.message === "string" ? error.message.trim() : "";
+      return {
+        ok: false,
+        message:
+          rawMessage && rawMessage !== "{}"
+            ? rawMessage
+            : "ไม่สามารถซิงก์เบอร์โทรไปยัง Auth ได้ (ระบบเข้าสู่ระบบด้วย Username ยังใช้ได้ปกติ)",
+      };
     }
     return { ok: true };
   } catch (error) {
@@ -373,7 +385,13 @@ export async function ensureEmployeeAuthProvisioned(input: {
             authUserId: input.authUserId,
             username,
           });
-          if (!emailOk.ok) return emailOk;
+          // Soft-fail: profile/role updates must not be blocked by Auth email sync.
+          if (!emailOk.ok) {
+            console.warn(
+              "ensureEmployeeAuthProvisioned email sync",
+              emailOk.message,
+            );
+          }
         }
         if (phone) {
           const phoneOk = await updateAuthUserPhone({

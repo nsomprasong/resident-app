@@ -1,12 +1,9 @@
-import Image from "next/image";
-import { LogOut } from "lucide-react";
+import { LogOut, UserRound } from "lucide-react";
 
 export default function UserNav({
-  image,
   name,
   role,
 }: {
-  image: string;
   name: string;
   role: string;
 }) {
@@ -14,13 +11,9 @@ export default function UserNav({
     <div className="border-t border-border/80 bg-background/50 p-3 backdrop-blur-sm">
       <div className="rounded-2xl border border-border/70 bg-surface p-3 shadow-sm">
         <div className="flex items-center gap-3">
-          <Image
-            className="rounded-full ring-2 ring-primary/10"
-            src={image}
-            alt={name}
-            width={40}
-            height={40}
-          />
+          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary/10 text-primary ring-2 ring-primary/10">
+            <UserRound size={20} strokeWidth={2} />
+          </span>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold text-foreground">
               {name}

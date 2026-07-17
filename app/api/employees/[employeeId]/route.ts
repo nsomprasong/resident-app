@@ -259,18 +259,16 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         ]);
       }
 
-      // Sync Auth phone only for phone-only Auth users. Username/email Auth keeps
-      // phone on the Employee row (updateAuthUserPhone no-ops when Auth has email).
-      if (existing.authUserId && existing.username && !existing.email) {
+      // Best-effort only — phone Auth is often disabled; never block role/profile saves.
+      if (existing.authUserId && existing.username) {
         const phoneUpdate = await updateAuthUserPhone({
           authUserId: existing.authUserId,
           phone: validated.data.phone,
         });
         if (!phoneUpdate.ok) {
-          return apiErrorResponse(
+          console.warn(
+            "PATCH /api/employees phone sync skipped",
             phoneUpdate.message,
-            502,
-            "AUTH_PHONE_UPDATE_FAILED",
           );
         }
       }
@@ -323,7 +321,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       }
     }
 
-    // Activating (or keeping active) must always have a live Auth user in Supabase.
+    // Prefer keeping an existing Auth link. Do not fail role/profile saves when
+    // Auth re-provision is unavailable — admin can reset password later.
     if (nextActive) {
       const ensured = await ensureEmployeeAuthProvisioned({
         authUserId: updateData.authUserId ?? existing.authUserId,
@@ -337,33 +336,39 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
           updateData.email !== undefined ? updateData.email : existing.email,
       });
       if (!ensured.ok) {
-        return apiErrorResponse(
-          ensured.message,
-          502,
-          "AUTH_PROVISION_FAILED",
-        );
-      }
-
-      if (ensured.authUserId !== existing.authUserId) {
-        const authOwner = await prisma.employee.findFirst({
-          where: {
-            authUserId: ensured.authUserId,
-            id: { not: employeeId },
-          },
-          select: { id: true },
-        });
-        if (authOwner) {
-          return validationErrorResponse(
-            "Auth user นี้ถูกผูกกับพนักงานอื่นแล้ว",
-            [{ path: "authUserId", message: "authUserId ซ้ำ" }],
+        if (!(updateData.authUserId ?? existing.authUserId)) {
+          return apiErrorResponse(
+            ensured.message,
+            502,
+            "AUTH_PROVISION_FAILED",
           );
         }
-        updateData.authUserId = ensured.authUserId;
-      }
+        console.warn(
+          "PATCH /api/employees auth provision soft-fail",
+          ensured.message,
+        );
+      } else {
+        if (ensured.authUserId !== existing.authUserId) {
+          const authOwner = await prisma.employee.findFirst({
+            where: {
+              authUserId: ensured.authUserId,
+              id: { not: employeeId },
+            },
+            select: { id: true },
+          });
+          if (authOwner) {
+            return validationErrorResponse(
+              "Auth user นี้ถูกผูกกับพนักงานอื่นแล้ว",
+              [{ path: "authUserId", message: "authUserId ซ้ำ" }],
+            );
+          }
+          updateData.authUserId = ensured.authUserId;
+        }
 
-      if (ensured.created) {
-        authUserCreated = true;
-        updateData.mustResetPassword = true;
+        if (ensured.created) {
+          authUserCreated = true;
+          updateData.mustResetPassword = true;
+        }
       }
     }
 
