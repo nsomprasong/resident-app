@@ -10,16 +10,15 @@ IN_PROGRESS
 
 ## Evidence
 
-- User confirms `APP_ERROR` / โหลดหน้าไม่สำเร็จ (error.tsx catching)
-- test vs beebee auth gates identical; crash is post-login render
-- Suspected: Server Component home + next/image on huge logo.png
+- User: `APP_ERROR` detail = **An unexpected response was received from the server**
+- Classic Next.js failure when Server Action / soft navigation gets middleware redirect/JSON
+  while Set-Cookie + `sessionEpoch` are still settling (beebee epoch higher → more races)
 
-## Fix (this round)
+## Fix
 
-- Home → client `HomeBoard` using `/api/auth/me` permissions (same as Sidebar)
-- Show error.message on APP_ERROR page + beacon to client-error
-- Avoid next/image optimizer on critical logos (`img` / `unoptimized`)
+- LoginForm: `window.location.assign(nextPath)` instead of `router.replace` + `router.refresh`
+- Middleware: do not JSON/redirect **Server Action** POSTs; allow `/login` during mustResetPassword
 
 ## Next Action
 
-Deploy แล้วลอง `beebee` อีกครั้ง — ถ้ายัง APP_ERROR ให้แคปข้อความรายละเอียดใต้หัวข้อ (กล่องสีเทา)
+Deploy แล้วลอง login `beebee` อีกครั้ง (แนะนำเคลียร์ cookie ของไซต์ก่อนลอง)

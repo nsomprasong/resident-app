@@ -23,6 +23,7 @@ const PUBLIC_ROUTES = new Set([
 ]);
 
 const PASSWORD_RESET_ALLOWED_ROUTES = new Set([
+  "/login",
   "/set-password",
   "/api/auth/set-password",
   "/api/auth/logout",
@@ -44,9 +45,18 @@ function redirectToSetPassword(request: NextRequest, response: NextResponse) {
   return copyResponseCookies(response, NextResponse.redirect(setPasswordUrl));
 }
 
+/** Server Actions break if middleware returns JSON/redirect for the POST. */
+function isServerActionRequest(request: NextRequest): boolean {
+  return (
+    request.method === "POST" &&
+    (request.headers.has("next-action") || request.headers.has("Next-Action"))
+  );
+}
+
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
   const { url, publishableKey } = getSupabasePublicEnvironment();
+  const serverAction = isServerActionRequest(request);
 
   const supabase = createServerClient(url, publishableKey, {
     cookies: {
@@ -77,6 +87,10 @@ export async function updateSession(request: NextRequest) {
       (data?.claims as { sub?: unknown; app_metadata?: unknown } | null) ?? null;
   } catch (error) {
     console.error("supabase.auth.getClaims failed", error);
+    // Never JSON/redirect a Server Action — let the action return its own error.
+    if (serverAction) {
+      return response;
+    }
     if (pathname.startsWith("/api/") && !isPublicRoute) {
       return NextResponse.json(
         { message: "Authentication required" },
@@ -89,6 +103,10 @@ export async function updateSession(request: NextRequest) {
       loginUrl.search = "";
       return copyResponseCookies(response, NextResponse.redirect(loginUrl));
     }
+    return response;
+  }
+
+  if (!claims && serverAction) {
     return response;
   }
 
@@ -120,7 +138,7 @@ export async function updateSession(request: NextRequest) {
     } catch (error) {
       console.error("Employee mapping verification failed", error);
 
-      if (isPublicRoute) {
+      if (serverAction || isPublicRoute) {
         return response;
       }
 
@@ -131,8 +149,7 @@ export async function updateSession(request: NextRequest) {
         );
       }
 
-      // Never return plain-text HTML for document navigations — the App Router
-      // client treats that as a fatal Application error on mobile.
+      // Never return plain-text for document/RSC navigations.
       const accessDeniedUrl = request.nextUrl.clone();
       accessDeniedUrl.pathname = "/access-denied";
       accessDeniedUrl.search = "reason=EMPLOYEE_NOT_FOUND";
@@ -168,8 +185,7 @@ export async function updateSession(request: NextRequest) {
     } else {
       await supabase.auth.signOut({ scope: "local" });
 
-      // Public auth pages/APIs must stay usable with leftover stale cookies.
-      if (isPublicRoute) {
+      if (serverAction || isPublicRoute) {
         return response;
       }
 
@@ -190,9 +206,13 @@ export async function updateSession(request: NextRequest) {
     }
   }
 
-  // Force set-password even on public routes (e.g. /login) after admin reset.
+  // Force set-password even on public routes (e.g. leftover session) after admin reset.
+  // /login stays allowed so the login Server Action can run.
   if (employee?.isActive && employee.mustResetPassword) {
     if (!PASSWORD_RESET_ALLOWED_ROUTES.has(pathname)) {
+      if (serverAction) {
+        return response;
+      }
       if (pathname.startsWith("/api/")) {
         return NextResponse.json(
           { message: "Password reset required", code: "PASSWORD_RESET_REQUIRED" },
@@ -206,7 +226,7 @@ export async function updateSession(request: NextRequest) {
     return response;
   }
 
-  if (isPublicRoute) {
+  if (serverAction || isPublicRoute) {
     return response;
   }
 

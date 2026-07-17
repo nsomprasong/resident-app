@@ -2,7 +2,6 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { LoaderCircle, LogIn, UserPlus } from "lucide-react";
-import { useRouter } from "next/navigation";
 
 import { login, type LoginState } from "@/app/login/actions";
 
@@ -17,7 +16,6 @@ const inputClassName =
   "w-full rounded-xl border border-border bg-surface px-4 py-3 text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-ring/30";
 
 export default function LoginForm() {
-  const router = useRouter();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [state, formAction, pending] = useActionState(login, initialState);
   const [registerState, setRegisterState] = useState<RegisterState>({
@@ -28,9 +26,11 @@ export default function LoginForm() {
 
   useEffect(() => {
     if (!state.nextPath) return;
-    router.replace(state.nextPath);
-    router.refresh();
-  }, [state.nextPath, router]);
+    // Full document navigation after login — soft router.replace/refresh races
+    // with Set-Cookie + session epoch and surfaces:
+    // "An unexpected response was received from the server"
+    window.location.assign(state.nextPath);
+  }, [state.nextPath]);
 
   const submitRegister = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
