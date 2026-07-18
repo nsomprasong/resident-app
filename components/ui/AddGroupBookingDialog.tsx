@@ -62,20 +62,32 @@ function nightsBetween(checkIn: string, checkOut: string) {
   return Math.max(1, Math.round((end - start) / 86_400_000));
 }
 
+function resolveStayStart(initialCheckIn?: string) {
+  if (initialCheckIn && /^\d{4}-\d{2}-\d{2}$/.test(initialCheckIn)) {
+    return initialCheckIn;
+  }
+  return dateText();
+}
+
 export default function AddGroupBookingDialog({
   open,
   setOpen,
   onCreated,
+  initialCheckIn,
 }: {
   open: boolean;
   setOpen: (open: boolean) => void;
   onCreated?: () => void;
+  /** Work date from booking list — dialog opens on this night, not always "today". */
+  initialCheckIn?: string;
 }) {
   const [name, setName] = useState("");
   const [contactName, setContactName] = useState("");
   const [phone, setPhone] = useState("");
-  const [checkIn, setCheckIn] = useState(dateText());
-  const [checkOut, setCheckOut] = useState(dateText(1));
+  const [checkIn, setCheckIn] = useState(() => resolveStayStart(initialCheckIn));
+  const [checkOut, setCheckOut] = useState(() =>
+    nextDate(resolveStayStart(initialCheckIn)),
+  );
   const [guestCount, setGuestCount] = useState(1);
   const [pricePerPerson, setPricePerPerson] = useState(0);
   const [roomIds, setRoomIds] = useState<string[]>([]);
@@ -96,8 +108,13 @@ export default function AddGroupBookingDialog({
 
   useEffect(() => {
     if (!open) return;
+    const start = resolveStayStart(initialCheckIn);
+    setCheckIn(start);
+    setCheckOut(nextDate(start));
+    setRoomIds([]);
+    setSelectedRafts([]);
     setExtraCharges([]);
-  }, [open]);
+  }, [open, initialCheckIn]);
 
   useEffect(() => {
     if (!open) return;
@@ -193,11 +210,12 @@ export default function AddGroupBookingDialog({
   const grandTotal = packageTotal + raftTotal + foodTotal + extraChargesTotal;
 
   const resetForm = () => {
+    const start = resolveStayStart(initialCheckIn);
     setName("");
     setContactName("");
     setPhone("");
-    setCheckIn(dateText());
-    setCheckOut(dateText(1));
+    setCheckIn(start);
+    setCheckOut(nextDate(start));
     setGuestCount(1);
     setPricePerPerson(0);
     setRoomIds([]);

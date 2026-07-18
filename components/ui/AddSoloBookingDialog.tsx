@@ -34,20 +34,31 @@ const nextDate = (date: string) => {
 const fieldClass =
   "mt-1 w-full rounded-xl border border-border px-3 py-2.5 text-sm";
 
+function resolveStayStart(initialCheckIn?: string) {
+  if (initialCheckIn && /^\d{4}-\d{2}-\d{2}$/.test(initialCheckIn)) {
+    return initialCheckIn;
+  }
+  return dateText();
+}
+
 export default function AddSoloBookingDialog({
   open,
   setOpen,
   onCreated,
+  initialCheckIn,
 }: {
   open: boolean;
   setOpen: (open: boolean) => void;
   onCreated?: () => void;
+  initialCheckIn?: string;
 }) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [guestId, setGuestId] = useState<string | null>(null);
-  const [checkIn, setCheckIn] = useState(dateText());
-  const [checkOut, setCheckOut] = useState(dateText(1));
+  const [checkIn, setCheckIn] = useState(() => resolveStayStart(initialCheckIn));
+  const [checkOut, setCheckOut] = useState(() =>
+    nextDate(resolveStayStart(initialCheckIn)),
+  );
   const [roomIds, setRoomIds] = useState<string[]>([]);
   const [raftIds, setRaftIds] = useState<string[]>([]);
   const [foodItems, setFoodItems] = useState<BookingFoodItem[]>([]);
@@ -59,8 +70,13 @@ export default function AddSoloBookingDialog({
 
   useEffect(() => {
     if (!open) return;
+    const start = resolveStayStart(initialCheckIn);
+    setCheckIn(start);
+    setCheckOut(nextDate(start));
+    setRoomIds([]);
+    setRaftIds([]);
     setExtraCharges([]);
-  }, [open]);
+  }, [open, initialCheckIn]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();

@@ -32,42 +32,36 @@ export async function GET(request: NextRequest) {
     ) {
       return NextResponse.json({ message: "ช่วงวันที่ไม่ถูกต้อง" }, { status: 400 });
     }
-    const rafts = await prisma.raft.findMany({
-      where: { status: RaftStatus.AVAILABLE },
-      include: {
-        bookingRafts:
-          checkIn && checkOut
-            ? {
-                where: {
-                  booking: {
-                    status: { in: activeBookingConflictStatuses },
-                    ...bookingNightOverlapWhere(checkIn, checkOut),
-                  },
-                },
-                select: { id: true, bookingId: true },
-              }
-            : false,
-      },
-      orderBy: { number: "asc" },
-    });
-    return NextResponse.json(
-      rafts.map((raft) => {
-        const bookingRafts =
-          "bookingRafts" in raft && Array.isArray(raft.bookingRafts)
-            ? raft.bookingRafts
-            : [];
-        const foreignConflicts = bookingRafts.filter(
-          (item) => item.bookingId !== excludeBookingId,
-        );
-        return {
-          id: raft.id,
-          number: raft.number,
-          name: raft.name,
-          capacity: raft.capacity,
-          basePrice: Number(raft.basePrice),
-          booked: foreignConflicts.length > 0,
-        };
+    const [rafts, conflictRows] = await Promise.all([
+      prisma.raft.findMany({
+        where: { status: RaftStatus.AVAILABLE },
+        orderBy: { number: "asc" },
       }),
+      checkIn && checkOut
+        ? prisma.bookingRaft.findMany({
+            where: {
+              ...(excludeBookingId
+                ? { bookingId: { not: excludeBookingId } }
+                : {}),
+              booking: {
+                status: { in: activeBookingConflictStatuses },
+                ...bookingNightOverlapWhere(checkIn, checkOut),
+              },
+            },
+            select: { raftId: true },
+          })
+        : Promise.resolve([] as Array<{ raftId: string }>),
+    ]);
+    const conflictingRaftIds = new Set(conflictRows.map((row) => row.raftId));
+    return NextResponse.json(
+      rafts.map((raft) => ({
+        id: raft.id,
+        number: raft.number,
+        name: raft.name,
+        capacity: raft.capacity,
+        basePrice: Number(raft.basePrice),
+        booked: conflictingRaftIds.has(raft.id),
+      })),
     );
   } catch (error) {
     console.error("GET /api/rafts failed", error);

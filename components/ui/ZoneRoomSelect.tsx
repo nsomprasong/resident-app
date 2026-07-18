@@ -13,6 +13,7 @@ interface Room {
   number?: string;
   roomNo?: string | number;
   booked?: boolean;
+  status?: string;
   zone?: { id: string; name: string };
   roomType?: {
     id?: string;
@@ -23,11 +24,11 @@ interface Room {
   };
 }
 
-const fallbackRooms: Room[] = Array.from({ length: 10 }, (_, index) => ({
-  id: index + 1,
-  roomNo: 101 + index,
-  booked: index === 2,
-}));
+/** Night lock from API `booked` only — never lock because status is OCCUPIED/CLEANING. */
+function isRoomUnavailable(room: Room, selected: boolean): boolean {
+  if (selected) return false;
+  return room.booked === true;
+}
 
 export default function ZoneRoomSelect({
   selectedRoomIds = [],
@@ -42,17 +43,20 @@ export default function ZoneRoomSelect({
   checkOut?: string;
   excludeBookingId?: string;
 }) {
-  const [rooms, setRooms] = useState<Room[]>(fallbackRooms);
+  const [rooms, setRooms] = useState<Room[]>([]);
   const [zone, setZone] = useState("all");
   const [roomType, setRoomType] = useState("all");
   const [bedLayout, setBedLayout] = useState("all");
   const [query, setQuery] = useState("");
+  const [availableOnly, setAvailableOnly] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
     const load = async () => {
       try {
         setLoading(true);
+        setLoadError("");
         const params = new URLSearchParams();
         if (checkIn && checkOut) {
           params.set("checkIn", checkIn);
@@ -66,9 +70,10 @@ export default function ZoneRoomSelect({
         );
         if (!response.ok) throw new Error();
         const data = (await response.json()) as Room[];
-        if (data.length) setRooms(data);
+        if (Array.isArray(data)) setRooms(data);
       } catch {
-        /* ใช้ข้อมูลสำรอง */
+        setRooms([]);
+        setLoadError("โหลดห้องไม่สำเร็จ");
       } finally {
         setLoading(false);
       }
@@ -102,10 +107,23 @@ export default function ZoneRoomSelect({
     [rooms],
   );
 
+  const freeCount = useMemo(
+    () =>
+      rooms.filter(
+        (room) =>
+          room.booked !== true || selectedRoomIds.includes(String(room.id)),
+      ).length,
+    [rooms, selectedRoomIds],
+  );
+
   const visibleRooms = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return rooms
       .filter((room) => {
+        const id = String(room.id);
+        const selected = selectedRoomIds.includes(id);
+        const unavailable = isRoomUnavailable(room, selected);
+        const matchAvailable = !availableOnly || !unavailable || selected;
         const matchZone = zone === "all" || room.zone?.id === zone;
         const matchType = roomType === "all" || room.roomType?.name === roomType;
         const layout = resolveBedLayout(
@@ -117,10 +135,27 @@ export default function ZoneRoomSelect({
           room.number ?? room.roomNo ?? room.id,
         ).toLowerCase();
         const matchQuery = !normalized || roomLabel.includes(normalized);
-        return matchZone && matchType && matchBed && matchQuery;
+        return (
+          matchAvailable &&
+          matchZone &&
+          matchType &&
+          matchBed &&
+          matchQuery
+        );
       })
-      .sort((left, right) =>
-        compareRoomsByZoneAndNumber(
+      .sort((left, right) => {
+        const leftId = String(left.id);
+        const rightId = String(right.id);
+        const leftLocked = isRoomUnavailable(
+          left,
+          selectedRoomIds.includes(leftId),
+        );
+        const rightLocked = isRoomUnavailable(
+          right,
+          selectedRoomIds.includes(rightId),
+        );
+        if (leftLocked !== rightLocked) return leftLocked ? 1 : -1;
+        return compareRoomsByZoneAndNumber(
           {
             number: String(left.number ?? left.roomNo ?? left.id),
             zoneName: left.zone?.name ?? "",
@@ -129,9 +164,17 @@ export default function ZoneRoomSelect({
             number: String(right.number ?? right.roomNo ?? right.id),
             zoneName: right.zone?.name ?? "",
           },
-        ),
-      );
-  }, [bedLayout, query, roomType, rooms, zone]);
+        );
+      });
+  }, [
+    availableOnly,
+    bedLayout,
+    query,
+    roomType,
+    rooms,
+    selectedRoomIds,
+    zone,
+  ]);
 
   const roomsByZone = useMemo(() => {
     if (zone !== "all") {
@@ -197,10 +240,12 @@ export default function ZoneRoomSelect({
         <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary/10 text-primary">
           <BedDouble size={18} />
         </span>
-        <div>
+        <div className="min-w-0 flex-1">
           <h3 className="text-sm font-semibold text-foreground">ห้องพัก</h3>
           <p className="text-xs text-muted-foreground">
-            เลือกห้องว่างตามโซน ประเภท และจำนวนเตียง
+            {loading
+              ? "กำลังตรวจสอบห้องว่าง..."
+              : `ว่าง ${freeCount.toLocaleString("th-TH")}/${rooms.length.toLocaleString("th-TH")} ห้องในช่วงวันที่เลือก`}
           </p>
         </div>
       </div>
@@ -267,13 +312,29 @@ export default function ZoneRoomSelect({
           </label>
         </div>
 
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={availableOnly}
+            onChange={(event) => setAvailableOnly(event.target.checked)}
+            className="rounded border-border"
+          />
+          แสดงเฉพาะห้องว่าง
+        </label>
+
+        {loadError ? (
+          <p className="text-sm text-destructive">{loadError}</p>
+        ) : null}
+
         {loading ? (
           <p className="text-sm text-muted-foreground">กำลังตรวจสอบห้องว่าง...</p>
         ) : (
           <div className="max-h-48 overflow-y-auto rounded-xl border border-border bg-background p-2">
             {visibleRooms.length === 0 ? (
               <p className="px-2 py-6 text-center text-sm text-muted-foreground">
-                ไม่พบห้องตามตัวกรอง
+                {availableOnly && freeCount === 0
+                  ? "ไม่มีห้องว่างในช่วงวันที่เลือก — ลองเปลี่ยนวันหรือปิดตัวกรองห้องว่าง"
+                  : "ไม่พบห้องตามตัวกรอง"}
               </p>
             ) : (
               <div className="space-y-3">
@@ -293,10 +354,10 @@ export default function ZoneRoomSelect({
                             roomNo={String(
                               room.number ?? room.roomNo ?? room.id,
                             )}
-                            booked={
-                              Boolean(room.booked) &&
-                              !selectedRoomIds.includes(id)
-                            }
+                            booked={isRoomUnavailable(
+                              room,
+                              selectedRoomIds.includes(id),
+                            )}
                             selected={selectedRoomIds.includes(id)}
                             onToggle={() => toggle(id)}
                             roomType={room.roomType?.name}

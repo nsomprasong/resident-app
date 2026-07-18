@@ -61,3 +61,8 @@ export function isRoomBookedForDateRange(options: {
     options.hasForeignBookingConflict || options.status === "MAINTENANCE"
   );
 }
+
+/** Room statuses that only reflect housekeeping/ops — not night inventory. */
+export function isTransientRoomStatus(status: RoomStatus): boolean {
+  return status === "OCCUPIED" || status === "CLEANING";
+}

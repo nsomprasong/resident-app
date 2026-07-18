@@ -9,6 +9,7 @@ import {
   bookableRoomStatuses,
   bookingNightsOverlap,
   isRoomBookedForDateRange,
+  isTransientRoomStatus,
 } from "../../lib/bookings/availability";
 
 const day = (value: string) => new Date(`${value}T00:00:00.000Z`);
@@ -78,4 +79,6 @@ test("room booked flag ignores OCCUPIED when no booking conflict", () => {
     }),
     true,
   );
+  assert.equal(isTransientRoomStatus("OCCUPIED"), true);
+  assert.equal(isTransientRoomStatus("AVAILABLE"), false);
 });

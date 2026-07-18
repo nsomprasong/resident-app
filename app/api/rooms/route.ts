@@ -32,71 +32,82 @@ export async function GET(request: NextRequest) {
     const checkOutValue = request.nextUrl.searchParams.get("checkOut");
     const excludeBookingId =
       request.nextUrl.searchParams.get("excludeBookingId")?.trim() || null;
-    const checkIn = checkInValue ? new Date(`${checkInValue}T00:00:00.000Z`) : null;
-    const checkOut = checkOutValue ? new Date(`${checkOutValue}T00:00:00.000Z`) : null;
-    if ((checkInValue || checkOutValue) && (!checkIn || !checkOut || Number.isNaN(checkIn.getTime()) || Number.isNaN(checkOut.getTime()) || checkOut <= checkIn)) {
-      return NextResponse.json({ message: "ช่วงวันที่เข้าพักไม่ถูกต้อง" }, { status: 400 });
+    const checkIn = checkInValue
+      ? new Date(`${checkInValue}T00:00:00.000Z`)
+      : null;
+    const checkOut = checkOutValue
+      ? new Date(`${checkOutValue}T00:00:00.000Z`)
+      : null;
+    if (
+      (checkInValue || checkOutValue) &&
+      (!checkIn ||
+        !checkOut ||
+        Number.isNaN(checkIn.getTime()) ||
+        Number.isNaN(checkOut.getTime()) ||
+        checkOut <= checkIn)
+    ) {
+      return NextResponse.json(
+        { message: "ช่วงวันที่เข้าพักไม่ถูกต้อง" },
+        { status: 400 },
+      );
     }
-    const rooms = await prisma.room.findMany({
-      where: {
-        zone: { isActive: true },
-        roomType: { isActive: true },
-      },
-      include: {
-        zone: true,
-        roomType: true,
-        bookingRooms: checkIn && checkOut ? {
-          where: {
-            booking: {
-              status: { in: activeBookingConflictStatuses },
-              ...bookingNightOverlapWhere(checkIn, checkOut),
-            },
-          },
-          select: { id: true, bookingId: true },
-        } : false,
-      },
-      orderBy: [{ zone: { name: "asc" } }, { number: "asc" }],
-    });
-    return NextResponse.json(
-      sortRoomsByZoneAndNumber(rooms).map((room) => {
-        const bookingRooms =
-          "bookingRooms" in room && Array.isArray(room.bookingRooms)
-            ? room.bookingRooms
-            : [];
-        const foreignConflicts = bookingRooms.filter(
-          (item) => item.bookingId !== excludeBookingId,
-        );
-        const ownedByExcluded = Boolean(
-          excludeBookingId &&
-            bookingRooms.some((item) => item.bookingId === excludeBookingId),
-        );
-        return {
-          id: room.id,
-          number: room.number,
-          floor: room.floor,
-          status: room.status,
-          booked: isRoomBookedForDateRange({
-            hasForeignBookingConflict: foreignConflicts.length > 0,
-            // Own booking's OCCUPIED/CLEANING must not block date picks for other stays.
-            status:
-              ownedByExcluded && room.status !== "MAINTENANCE"
-                ? "AVAILABLE"
-                : room.status,
-          }),
-          zone: { id: room.zone.id, name: room.zone.name },
-          roomType: {
-            id: room.roomType.id,
-            name: room.roomType.name,
-            basePrice: Number(room.roomType.basePrice),
-            capacity: room.roomType.capacity,
-            bedType: room.roomType.bedType,
-          },
-        };
+
+    const [rooms, conflictRows] = await Promise.all([
+      prisma.room.findMany({
+        where: {
+          zone: { isActive: true },
+          roomType: { isActive: true },
+        },
+        include: {
+          zone: true,
+          roomType: true,
+        },
+        orderBy: [{ zone: { name: "asc" } }, { number: "asc" }],
       }),
+      checkIn && checkOut
+        ? prisma.bookingRoom.findMany({
+            where: {
+              ...(excludeBookingId
+                ? { bookingId: { not: excludeBookingId } }
+                : {}),
+              booking: {
+                status: { in: activeBookingConflictStatuses },
+                ...bookingNightOverlapWhere(checkIn, checkOut),
+              },
+            },
+            select: { roomId: true },
+          })
+        : Promise.resolve([] as Array<{ roomId: string }>),
+    ]);
+
+    const conflictingRoomIds = new Set(conflictRows.map((row) => row.roomId));
+
+    return NextResponse.json(
+      sortRoomsByZoneAndNumber(rooms).map((room) => ({
+        id: room.id,
+        number: room.number,
+        floor: room.floor,
+        status: room.status,
+        booked: isRoomBookedForDateRange({
+          hasForeignBookingConflict: conflictingRoomIds.has(room.id),
+          status: room.status,
+        }),
+        zone: { id: room.zone.id, name: room.zone.name },
+        roomType: {
+          id: room.roomType.id,
+          name: room.roomType.name,
+          basePrice: Number(room.roomType.basePrice),
+          capacity: room.roomType.capacity,
+          bedType: room.roomType.bedType,
+        },
+      })),
     );
   } catch (error) {
     console.error("GET /api/rooms failed", error);
-    return NextResponse.json({ message: "ไม่สามารถโหลดข้อมูลห้องพักได้" }, { status: 500 });
+    return NextResponse.json(
+      { message: "ไม่สามารถโหลดข้อมูลห้องพักได้" },
+      { status: 500 },
+    );
   }
 }
 
@@ -112,15 +123,26 @@ export async function POST(request: NextRequest) {
     }
 
     const { number, zoneId, roomTypeId, floor, status } = validated.data;
-    if (number === undefined || zoneId === undefined || roomTypeId === undefined) {
+    if (
+      number === undefined ||
+      zoneId === undefined ||
+      roomTypeId === undefined
+    ) {
       return validationErrorResponse("กรุณาตรวจสอบข้อมูลห้อง", [
         { path: "body", message: "ข้อมูลไม่ครบ" },
       ]);
     }
 
-    const relationIssues = await validateRoomRelationIds(zoneId, roomTypeId, prisma);
+    const relationIssues = await validateRoomRelationIds(
+      zoneId,
+      roomTypeId,
+      prisma,
+    );
     if (relationIssues.length) {
-      return validationErrorResponse("ความสัมพันธ์ข้อมูลไม่ถูกต้อง", relationIssues);
+      return validationErrorResponse(
+        "ความสัมพันธ์ข้อมูลไม่ถูกต้อง",
+        relationIssues,
+      );
     }
 
     const room = await prisma.room.create({

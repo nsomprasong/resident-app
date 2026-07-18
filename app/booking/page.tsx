@@ -426,11 +426,13 @@ export default function BookingPage() {
           open={openSolo}
           setOpen={setOpenSolo}
           onCreated={created}
+          initialCheckIn={date}
         />
         <AddGroupBookingDialog
           open={openGroup}
           setOpen={setOpenGroup}
           onCreated={created}
+          initialCheckIn={date}
         />
       </div>
 
