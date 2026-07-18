@@ -78,6 +78,12 @@ test("every current business API method resolves to an explicit permission", () 
     ["GET", `/api/bookings/${id}`, "booking.read"],
     ["PATCH", `/api/bookings/${id}`, "booking.lifecycle"],
     ["POST", `/api/bookings/${id}/charges`, "booking.write"],
+    ["PATCH", `/api/bookings/${id}/package`, "booking.write"],
+    [
+      "PATCH",
+      `/api/bookings/${id}/pricing`,
+      { anyOf: ["resource.manage", "order.write"] },
+    ],
     ["GET", "/api/booking-charge-templates", "booking.read"],
     ["POST", "/api/booking-charge-templates", "booking.write"],
     [

@@ -18,6 +18,7 @@ import {
 } from "@/lib/bookings/availability";
 import { acquireBookingResourceLocks } from "@/lib/bookings/resource-locks";
 import { parseBookingExtraCharges } from "@/lib/bookings/extra-charges";
+import { formatGroupPackageDescription } from "@/lib/bookings/group-package";
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -545,7 +546,10 @@ export async function POST(request: NextRequest) {
                 ? [
                     {
                       type: ChargeType.OTHER,
-                      description: `ราคาเหมากลุ่ม ${guestCount} คน × ฿${pricePerPerson}`,
+                      description: formatGroupPackageDescription(
+                        guestCount ?? 0,
+                        pricePerPerson ?? 0,
+                      ),
                       amount: groupPackage,
                     },
                     ...(extraRaftCount

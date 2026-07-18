@@ -3,6 +3,7 @@
 import { BedDouble, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import { compareRoomsByZoneAndNumber } from "@/lib/bookings/room-sort";
 import { BED_LAYOUTS, resolveBedLayout } from "@/lib/settings/bed-types";
 
 import RoomIconSelect from "./RoomIconSlect";
@@ -83,6 +84,8 @@ export default function ZoneRoomSelect({
             .filter((room) => room.zone)
             .map((room) => [room.zone!.id, room.zone!]),
         ).values(),
+      ).sort((left, right) =>
+        left.name.localeCompare(right.name, "th", { sensitivity: "base" }),
       ),
     [rooms],
   );
@@ -101,25 +104,73 @@ export default function ZoneRoomSelect({
 
   const visibleRooms = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    return rooms.filter((room) => {
-      const matchZone = zone === "all" || room.zone?.id === zone;
-      const matchType = roomType === "all" || room.roomType?.name === roomType;
-      const layout = resolveBedLayout(
-        room.roomType?.bedType,
-        room.roomType?.capacity,
+    return rooms
+      .filter((room) => {
+        const matchZone = zone === "all" || room.zone?.id === zone;
+        const matchType = roomType === "all" || room.roomType?.name === roomType;
+        const layout = resolveBedLayout(
+          room.roomType?.bedType,
+          room.roomType?.capacity,
+        );
+        const matchBed = bedLayout === "all" || layout?.code === bedLayout;
+        const roomLabel = String(
+          room.number ?? room.roomNo ?? room.id,
+        ).toLowerCase();
+        const matchQuery = !normalized || roomLabel.includes(normalized);
+        return matchZone && matchType && matchBed && matchQuery;
+      })
+      .sort((left, right) =>
+        compareRoomsByZoneAndNumber(
+          {
+            number: String(left.number ?? left.roomNo ?? left.id),
+            zoneName: left.zone?.name ?? "",
+          },
+          {
+            number: String(right.number ?? right.roomNo ?? right.id),
+            zoneName: right.zone?.name ?? "",
+          },
+        ),
       );
-      const matchBed = bedLayout === "all" || layout?.code === bedLayout;
-      const roomLabel = String(
-        room.number ?? room.roomNo ?? room.id,
-      ).toLowerCase();
-      const matchQuery = !normalized || roomLabel.includes(normalized);
-      return matchZone && matchType && matchBed && matchQuery;
-    });
   }, [bedLayout, query, roomType, rooms, zone]);
 
-  const selectedRooms = rooms.filter((room) =>
-    selectedRoomIds.includes(String(room.id)),
-  );
+  const roomsByZone = useMemo(() => {
+    if (zone !== "all") {
+      return [
+        {
+          zoneId: zone,
+          zoneName: zones.find((item) => item.id === zone)?.name ?? "",
+          rooms: visibleRooms,
+        },
+      ];
+    }
+    const groups = new Map<string, { zoneId: string; zoneName: string; rooms: Room[] }>();
+    for (const room of visibleRooms) {
+      const zoneId = room.zone?.id ?? "unknown";
+      const zoneName = room.zone?.name ?? "ไม่มีโซน";
+      const current = groups.get(zoneId);
+      if (current) {
+        current.rooms.push(room);
+      } else {
+        groups.set(zoneId, { zoneId, zoneName, rooms: [room] });
+      }
+    }
+    return Array.from(groups.values());
+  }, [visibleRooms, zone, zones]);
+
+  const selectedRooms = rooms
+    .filter((room) => selectedRoomIds.includes(String(room.id)))
+    .sort((left, right) =>
+      compareRoomsByZoneAndNumber(
+        {
+          number: String(left.number ?? left.roomNo ?? left.id),
+          zoneName: left.zone?.name ?? "",
+        },
+        {
+          number: String(right.number ?? right.roomNo ?? right.id),
+          zoneName: right.zone?.name ?? "",
+        },
+      ),
+    );
   const roomTotal = selectedRooms.reduce(
     (sum, room) => sum + Number(room.roomType?.basePrice ?? 0),
     0,
@@ -225,29 +276,43 @@ export default function ZoneRoomSelect({
                 ไม่พบห้องตามตัวกรอง
               </p>
             ) : (
-              <div className="flex flex-wrap gap-2">
-                {visibleRooms.map((room) => {
-                  const id = String(room.id);
-                  return (
-                    <RoomIconSelect
-                      key={id}
-                      roomNo={String(room.number ?? room.roomNo ?? room.id)}
-                      booked={
-                        Boolean(room.booked) && !selectedRoomIds.includes(id)
-                      }
-                      selected={selectedRoomIds.includes(id)}
-                      onToggle={() => toggle(id)}
-                      roomType={room.roomType?.name}
-                      bedType={room.roomType?.bedType}
-                      capacity={room.roomType?.capacity}
-                      price={
-                        typeof room.roomType?.basePrice === "number"
-                          ? room.roomType.basePrice
-                          : undefined
-                      }
-                    />
-                  );
-                })}
+              <div className="space-y-3">
+                {roomsByZone.map((group) => (
+                  <div key={group.zoneId} className="space-y-2">
+                    {zone === "all" && group.zoneName ? (
+                      <p className="px-1 text-xs font-medium text-muted-foreground">
+                        {group.zoneName}
+                      </p>
+                    ) : null}
+                    <div className="flex flex-wrap gap-2">
+                      {group.rooms.map((room) => {
+                        const id = String(room.id);
+                        return (
+                          <RoomIconSelect
+                            key={id}
+                            roomNo={String(
+                              room.number ?? room.roomNo ?? room.id,
+                            )}
+                            booked={
+                              Boolean(room.booked) &&
+                              !selectedRoomIds.includes(id)
+                            }
+                            selected={selectedRoomIds.includes(id)}
+                            onToggle={() => toggle(id)}
+                            roomType={room.roomType?.name}
+                            bedType={room.roomType?.bedType}
+                            capacity={room.roomType?.capacity}
+                            price={
+                              typeof room.roomType?.basePrice === "number"
+                                ? room.roomType.basePrice
+                                : undefined
+                            }
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>

@@ -11,6 +11,7 @@ import {
 } from "@/lib/api/validation";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { recordAuditLog } from "@/lib/audit/audit-log";
+import { compareRoomsByZoneAndNumber } from "@/lib/bookings/room-sort";
 import { cancelUnfinishedOrdersForBooking } from "@/lib/orders/kitchen-workflow";
 import { acquireBookingFinancialLock } from "@/lib/payments/financial-locks";
 import { calculateBookingFinancialSummary } from "@/lib/payments/financial-summary";
@@ -107,18 +108,25 @@ export async function GET(
         : null,
       checkIn: booking.checkIn.toISOString().slice(0, 10),
       checkOut: booking.checkOut.toISOString().slice(0, 10),
-      rooms: booking.rooms.map(({ room, rate, extraBeds, isExtra, inspection }) => ({
-        id: room.id,
-        number: room.number,
-        zone: room.zone.name,
-        roomType: room.roomType.name,
-        rate: Number(rate),
-        extraBeds,
-        isExtra,
-        inspectionStatus: inspection?.status ?? null,
-        inspectionCompletedAt: inspection?.completedAt?.toISOString() ?? null,
-        inspectionCompletedByName: inspection?.completedBy?.name ?? null,
-      })),
+      rooms: [...booking.rooms]
+        .sort((left, right) =>
+          compareRoomsByZoneAndNumber(
+            { number: left.room.number, zoneName: left.room.zone.name },
+            { number: right.room.number, zoneName: right.room.zone.name },
+          ),
+        )
+        .map(({ room, rate, extraBeds, isExtra, inspection }) => ({
+          id: room.id,
+          number: room.number,
+          zone: room.zone.name,
+          roomType: room.roomType.name,
+          rate: Number(rate),
+          extraBeds,
+          isExtra,
+          inspectionStatus: inspection?.status ?? null,
+          inspectionCompletedAt: inspection?.completedAt?.toISOString() ?? null,
+          inspectionCompletedByName: inspection?.completedBy?.name ?? null,
+        })),
       rafts: booking.rafts.map(({ raft, rate, isExtra }) => ({
         id: raft.id,
         number: raft.number,

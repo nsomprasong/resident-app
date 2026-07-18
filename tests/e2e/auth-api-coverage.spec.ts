@@ -11,6 +11,8 @@ const protectedHandlers = [
   { method: "GET", path: "/api/bookings/" + id },
   { method: "PATCH", path: "/api/bookings/" + id },
   { method: "POST", path: "/api/bookings/" + id + "/charges" },
+  { method: "PATCH", path: "/api/bookings/" + id + "/package" },
+  { method: "PATCH", path: "/api/bookings/" + id + "/pricing" },
   { method: "GET", path: "/api/booking-charge-templates" },
   { method: "POST", path: "/api/booking-charge-templates" },
   { method: "PATCH", path: "/api/booking-charge-templates/00000000-0000-0000-0000-000000000001" },

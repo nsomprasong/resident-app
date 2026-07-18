@@ -2,7 +2,7 @@
 
 ## Task
 
-Settings employee create: assign EMP-xxxx code
+Booking detail: lifecycle buttons above status
 
 ## Status
 
@@ -10,9 +10,9 @@ COMPLETED
 
 ## Evidence
 
-- Gap was `POST /api/employees` (ตั้งค่าข้อมูลหลัก) — no `employeeCode`
-- Login register + HR create already used `nextEmployeeCode()`
-- Settings create now assigns `EMP-####` on both username and legacy email paths
+- Check-in / check-out / close-job moved above status badge in PageHeader
+- Colors: check-in sky, check-out amber, close-job emerald
+- Bottom bar keeps manage actions + cancel only
 
 ## Next Action
 

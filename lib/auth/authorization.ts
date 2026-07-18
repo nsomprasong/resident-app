@@ -448,6 +448,12 @@ const apiPermissionRules: readonly ApiPermissionRule[] = [
   { method: "GET", pattern: /^\/api\/bookings\/[^/]+$/, permission: "booking.read" },
   { method: "PATCH", pattern: /^\/api\/bookings\/[^/]+$/, permission: "booking.lifecycle" },
   { method: "POST", pattern: /^\/api\/bookings\/[^/]+\/charges$/, permission: "booking.write" },
+  { method: "PATCH", pattern: /^\/api\/bookings\/[^/]+\/package$/, permission: "booking.write" },
+  {
+    method: "PATCH",
+    pattern: /^\/api\/bookings\/[^/]+\/pricing$/,
+    permission: { anyOf: ["resource.manage", "order.write"] },
+  },
   { method: "GET", pattern: /^\/api\/booking-charge-templates$/, permission: "booking.read" },
   { method: "POST", pattern: /^\/api\/booking-charge-templates$/, permission: "booking.write" },
   { method: "PATCH", pattern: /^\/api\/booking-charge-templates\/[^/]+$/, permission: "booking.write" },

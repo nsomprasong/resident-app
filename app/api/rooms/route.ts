@@ -10,6 +10,7 @@ import {
 import { recordAuditLog } from "@/lib/audit/audit-log";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/prisma";
+import { sortRoomsByZoneAndNumber } from "@/lib/bookings/room-sort";
 import {
   parseRoomInput,
   serializeRoomMaster,
@@ -51,38 +52,40 @@ export async function GET(request: NextRequest) {
           select: { id: true, bookingId: true },
         } : false,
       },
-      orderBy: { number: "asc" },
+      orderBy: [{ zone: { name: "asc" } }, { number: "asc" }],
     });
-    return NextResponse.json(rooms.map((room) => {
-      const bookingRooms =
-        "bookingRooms" in room && Array.isArray(room.bookingRooms)
-          ? room.bookingRooms
-          : [];
-      const foreignConflicts = bookingRooms.filter(
-        (item) => item.bookingId !== excludeBookingId,
-      );
-      const ownedByExcluded = Boolean(
-        excludeBookingId &&
-          bookingRooms.some((item) => item.bookingId === excludeBookingId),
-      );
-      return {
-        id: room.id,
-        number: room.number,
-        floor: room.floor,
-        status: room.status,
-        booked:
-          foreignConflicts.length > 0 ||
-          (room.status !== "AVAILABLE" && !ownedByExcluded),
-        zone: { id: room.zone.id, name: room.zone.name },
-        roomType: {
-          id: room.roomType.id,
-          name: room.roomType.name,
-          basePrice: Number(room.roomType.basePrice),
-          capacity: room.roomType.capacity,
-          bedType: room.roomType.bedType,
-        },
-      };
-    }));
+    return NextResponse.json(
+      sortRoomsByZoneAndNumber(rooms).map((room) => {
+        const bookingRooms =
+          "bookingRooms" in room && Array.isArray(room.bookingRooms)
+            ? room.bookingRooms
+            : [];
+        const foreignConflicts = bookingRooms.filter(
+          (item) => item.bookingId !== excludeBookingId,
+        );
+        const ownedByExcluded = Boolean(
+          excludeBookingId &&
+            bookingRooms.some((item) => item.bookingId === excludeBookingId),
+        );
+        return {
+          id: room.id,
+          number: room.number,
+          floor: room.floor,
+          status: room.status,
+          booked:
+            foreignConflicts.length > 0 ||
+            (room.status !== "AVAILABLE" && !ownedByExcluded),
+          zone: { id: room.zone.id, name: room.zone.name },
+          roomType: {
+            id: room.roomType.id,
+            name: room.roomType.name,
+            basePrice: Number(room.roomType.basePrice),
+            capacity: room.roomType.capacity,
+            bedType: room.roomType.bedType,
+          },
+        };
+      }),
+    );
   } catch (error) {
     console.error("GET /api/rooms failed", error);
     return NextResponse.json({ message: "ไม่สามารถโหลดข้อมูลห้องพักได้" }, { status: 500 });
