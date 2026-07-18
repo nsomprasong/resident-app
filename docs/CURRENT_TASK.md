@@ -2,7 +2,7 @@
 
 ## Task
 
-Booking detail: lifecycle buttons above status
+Booking list cards: selected date + night vacancy count
 
 ## Status
 
@@ -10,9 +10,9 @@ COMPLETED
 
 ## Evidence
 
-- Check-in / check-out / close-job moved above status badge in PageHeader
-- Colors: check-in sky, check-out amber, close-job emerald
-- Bottom bar keeps manage actions + cancel only
+- Check-in card uses selected work date list (not calendar today)
+- Available rooms count uses `!booked` (night lock), not `status === AVAILABLE`
+- Helper shows `available/total` for the selected date
 
 ## Next Action
 

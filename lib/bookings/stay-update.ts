@@ -8,8 +8,9 @@ import {
 import type { ValidationIssue } from "@/lib/api/validation";
 import {
   activeBookingConflictStatuses,
-  availableRaftStatuses,
-  availableRoomStatuses,
+  bookableRaftStatuses,
+  bookableRoomStatuses,
+  bookingNightOverlapWhere,
 } from "@/lib/bookings/availability";
 import {
   formatGroupPackageDescription,
@@ -193,8 +194,7 @@ async function findConflictingRoomIds(
       bookingId: { not: bookingId },
       booking: {
         status: { in: activeBookingConflictStatuses },
-        checkIn: { lt: checkOut },
-        checkOut: { gt: checkIn },
+        ...bookingNightOverlapWhere(checkIn, checkOut),
       },
     },
     select: {
@@ -223,8 +223,7 @@ async function findConflictingRaftIds(
       bookingId: { not: bookingId },
       booking: {
         status: { in: activeBookingConflictStatuses },
-        checkIn: { lt: checkOut },
-        checkOut: { gt: checkIn },
+        ...bookingNightOverlapWhere(checkIn, checkOut),
       },
     },
     select: {
@@ -566,7 +565,7 @@ export async function applyBookingStayUpdate(
         include: { roomType: true },
       });
       if (rooms.length !== addRoomIds.length) throw new Error("NOT_FOUND_RESOURCE");
-      if (rooms.some((room) => !availableRoomStatuses.includes(room.status))) {
+      if (rooms.some((room) => !bookableRoomStatuses.includes(room.status))) {
         throw new Error("ROOM_NOT_AVAILABLE");
       }
       const roomPayload = rooms.map((room) => {
@@ -614,7 +613,7 @@ export async function applyBookingStayUpdate(
         where: { id: { in: addRaftIds } },
       });
       if (rafts.length !== addRaftIds.length) throw new Error("NOT_FOUND_RESOURCE");
-      if (rafts.some((raft) => !availableRaftStatuses.includes(raft.status))) {
+      if (rafts.some((raft) => !bookableRaftStatuses.includes(raft.status))) {
         throw new Error("RAFT_NOT_AVAILABLE");
       }
       const raftPayload = rafts.map((raft) => {

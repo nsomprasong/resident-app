@@ -9,8 +9,9 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { recordAuditLog } from "@/lib/audit/audit-log";
 import {
   activeBookingConflictStatuses,
-  availableRaftStatuses,
-  availableRoomStatuses,
+  bookableRaftStatuses,
+  bookableRoomStatuses,
+  bookingNightOverlapWhere,
 } from "@/lib/bookings/availability";
 import { acquireBookingResourceLocks } from "@/lib/bookings/resource-locks";
 import { prisma } from "@/lib/prisma";
@@ -67,11 +68,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (selectedRoomIds.some((id) => booking.rooms.some((item) => item.roomId === id)) || selectedRaftIds.some((id) => booking.rafts.some((item) => item.raftId === id))) throw new Error("ALREADY_ADDED");
       const rooms = await tx.room.findMany({ where: { id: { in: selectedRoomIds } }, include: { roomType: true } }); const rafts = await tx.raft.findMany({ where: { id: { in: selectedRaftIds } } });
       if (rooms.length !== selectedRoomIds.length || rafts.length !== selectedRaftIds.length) throw new Error("NOT_FOUND_RESOURCE");
-      if (rooms.some((room) => !availableRoomStatuses.includes(room.status))) throw new Error("ROOM_NOT_AVAILABLE");
-      if (rafts.some((raft) => !availableRaftStatuses.includes(raft.status))) throw new Error("RAFT_NOT_AVAILABLE");
-      const roomConflict = await tx.bookingRoom.findFirst({ where: { roomId: { in: selectedRoomIds }, bookingId: { not: bookingId }, booking: { status: { in: activeBookingConflictStatuses }, checkIn: { lt: booking.checkOut }, checkOut: { gt: booking.checkIn } } }, include: { room: true } });
+      if (rooms.some((room) => !bookableRoomStatuses.includes(room.status))) throw new Error("ROOM_NOT_AVAILABLE");
+      if (rafts.some((raft) => !bookableRaftStatuses.includes(raft.status))) throw new Error("RAFT_NOT_AVAILABLE");
+      const roomConflict = await tx.bookingRoom.findFirst({ where: { roomId: { in: selectedRoomIds }, bookingId: { not: bookingId }, booking: { status: { in: activeBookingConflictStatuses }, ...bookingNightOverlapWhere(booking.checkIn, booking.checkOut) } }, include: { room: true } });
       if (roomConflict) throw new Error(`ROOM_CONFLICT:${roomConflict.room.number}`);
-      const raftConflict = await tx.bookingRaft.findFirst({ where: { raftId: { in: selectedRaftIds }, bookingId: { not: bookingId }, booking: { status: { in: activeBookingConflictStatuses }, checkIn: { lt: booking.checkOut }, checkOut: { gt: booking.checkIn } } }, include: { raft: true } });
+      const raftConflict = await tx.bookingRaft.findFirst({ where: { raftId: { in: selectedRaftIds }, bookingId: { not: bookingId }, booking: { status: { in: activeBookingConflictStatuses }, ...bookingNightOverlapWhere(booking.checkIn, booking.checkOut) } }, include: { raft: true } });
       if (raftConflict) throw new Error(`RAFT_CONFLICT:${raftConflict.raft.number}`);
       const nights = Math.max(1, Math.ceil((booking.checkOut.getTime() - booking.checkIn.getTime()) / 86_400_000));
       if (rooms.length) { await tx.bookingRoom.createMany({ data: rooms.map((room) => ({ bookingId, roomId: room.id, rate: room.roomType.basePrice, isExtra: true })) }); await tx.charge.create({ data: { bookingId, type: ChargeType.ROOM, description: `เพิ่มห้องพัก ${rooms.length} ห้อง · ${nights} คืน`, amount: rooms.reduce((sum, room) => sum + Number(room.roomType.basePrice) * nights, 0) } }); if (booking.status === BookingStatus.CHECKED_IN) { await tx.room.updateMany({ where: { id: { in: selectedRoomIds } }, data: { status: RoomStatus.OCCUPIED } }); const added = await tx.bookingRoom.findMany({ where: { bookingId, roomId: { in: selectedRoomIds } }, select: { id: true } }); await tx.roomInspection.createMany({ data: added.map((item) => ({ bookingRoomId: item.id })) }); } }
@@ -418,7 +419,7 @@ export async function PATCH(
           include: { roomType: true },
         });
         if (rooms.length !== addRoomIds.length) throw new Error("NOT_FOUND_RESOURCE");
-        if (rooms.some((room) => !availableRoomStatuses.includes(room.status))) {
+        if (rooms.some((room) => !bookableRoomStatuses.includes(room.status))) {
           throw new Error("ROOM_NOT_AVAILABLE");
         }
         const roomConflict = await tx.bookingRoom.findFirst({
@@ -427,8 +428,7 @@ export async function PATCH(
             bookingId: { not: bookingId },
             booking: {
               status: { in: activeBookingConflictStatuses },
-              checkIn: { lt: booking.checkOut },
-              checkOut: { gt: booking.checkIn },
+              ...bookingNightOverlapWhere(booking.checkIn, booking.checkOut),
             },
           },
           include: { room: true },
@@ -487,7 +487,7 @@ export async function PATCH(
           where: { id: { in: addRaftIds } },
         });
         if (rafts.length !== addRaftIds.length) throw new Error("NOT_FOUND_RESOURCE");
-        if (rafts.some((raft) => !availableRaftStatuses.includes(raft.status))) {
+        if (rafts.some((raft) => !bookableRaftStatuses.includes(raft.status))) {
           throw new Error("RAFT_NOT_AVAILABLE");
         }
         const raftConflict = await tx.bookingRaft.findFirst({
@@ -496,8 +496,7 @@ export async function PATCH(
             bookingId: { not: bookingId },
             booking: {
               status: { in: activeBookingConflictStatuses },
-              checkIn: { lt: booking.checkOut },
-              checkOut: { gt: booking.checkIn },
+              ...bookingNightOverlapWhere(booking.checkIn, booking.checkOut),
             },
           },
           include: { raft: true },

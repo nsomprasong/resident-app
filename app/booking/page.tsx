@@ -105,8 +105,8 @@ export default function BookingPage() {
   const [openSolo, setOpenSolo] = useState(false);
   const [openGroup, setOpenGroup] = useState(false);
   const [bookings, setBookings] = useState<BookingResult[]>([]);
-  const [todayBookings, setTodayBookings] = useState<BookingResult[]>([]);
   const [availableRooms, setAvailableRooms] = useState(0);
+  const [totalRooms, setTotalRooms] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [refresh, setRefresh] = useState(0);
@@ -124,11 +124,8 @@ export default function BookingPage() {
     try {
       const queryString = isHistory ? "history=true" : `date=${date}`;
       const roomsCheckOut = nextDayKey(date);
-      const [listResponse, todayResponse, roomsResponse] = await Promise.all([
+      const [listResponse, roomsResponse] = await Promise.all([
         fetch(`/api/bookings?${queryString}`, { cache: "no-store" }),
-        date === todayKey
-          ? Promise.resolve(null)
-          : fetch(`/api/bookings?date=${todayKey}`, { cache: "no-store" }),
         fetch(
           `/api/rooms?checkIn=${encodeURIComponent(date)}&checkOut=${encodeURIComponent(roomsCheckOut)}`,
           { cache: "no-store" },
@@ -145,26 +142,18 @@ export default function BookingPage() {
       }
       setBookings(data);
 
-      if (date === todayKey) {
-        setTodayBookings(data);
-      } else if (todayResponse) {
-        const todayData = (await todayResponse.json()) as
-          | BookingResult[]
-          | { message: string };
-        setTodayBookings(Array.isArray(todayData) ? todayData : []);
-      } else {
-        setTodayBookings([]);
-      }
-
       if (roomsResponse.ok) {
         const rooms = (await roomsResponse.json()) as RoomAvailability[];
-        setAvailableRooms(
-          Array.isArray(rooms)
-            ? rooms.filter((room) => room.status === "AVAILABLE" && !room.booked)
-                .length
-            : 0,
-        );
+        if (Array.isArray(rooms)) {
+          setTotalRooms(rooms.length);
+          // Night availability: ignore OCCUPIED/CLEANING leftover status; only `booked` + MAINTENANCE matter.
+          setAvailableRooms(rooms.filter((room) => !room.booked).length);
+        } else {
+          setTotalRooms(0);
+          setAvailableRooms(0);
+        }
       } else {
+        setTotalRooms(0);
         setAvailableRooms(0);
       }
     } catch (reason) {
@@ -174,7 +163,7 @@ export default function BookingPage() {
     } finally {
       setLoading(false);
     }
-  }, [date, isHistory, todayKey]);
+  }, [date, isHistory]);
 
   useEffect(() => {
     void loadBookings();
@@ -202,9 +191,9 @@ export default function BookingPage() {
     });
   }, [bookings, isHistory, query, tab]);
 
-  const checkedInToday = useMemo(
-    () => todayBookings.filter((booking) => booking.status === "เช็กอิน").length,
-    [todayBookings],
+  const checkedInForDate = useMemo(
+    () => bookings.filter((booking) => booking.status === "เช็กอิน").length,
+    [bookings],
   );
 
   const totalForDate = bookings.length;
@@ -330,27 +319,31 @@ export default function BookingPage() {
             tone="primary"
           />
           <SummaryCard
-            title="เช็กอินวันนี้"
-            value={checkedInToday.toLocaleString("th-TH")}
+            title="เช็กอิน"
+            value={checkedInForDate.toLocaleString("th-TH")}
             helper={
-              checkedInToday === 0
-                ? "ยังไม่มีผู้เข้าพักที่เช็กอินวันนี้"
-                : "สถานะเช็กอินของวันนี้"
+              checkedInForDate === 0
+                ? `ยังไม่มีผู้เข้าพักที่เช็กอินในวันที่ ${formatThaiDate(date)}`
+                : `สถานะเช็กอินในวันที่ ${formatThaiDate(date)}`
             }
             icon={<LogIn size={20} />}
             tone="info"
           />
           <SummaryCard
-            title="เช็กเอาต์วันนี้"
+            title="เช็กเอาต์"
             value="0"
-            helper="ยังไม่มีวันที่เช็กเอาต์ในรายการปัจจุบัน"
+            helper={`สำหรับวันที่ ${formatThaiDate(date)}`}
             icon={<LogOut size={20} />}
             tone="warning"
           />
           <SummaryCard
             title="ห้องที่ยังว่าง"
             value={availableRooms.toLocaleString("th-TH")}
-            helper={`พร้อมใช้สำหรับวันที่ ${formatThaiDate(date)}`}
+            helper={
+              totalRooms > 0
+                ? `${availableRooms}/${totalRooms} ห้องว่างในวันที่ ${formatThaiDate(date)}`
+                : `พร้อมใช้สำหรับวันที่ ${formatThaiDate(date)}`
+            }
             icon={<BedDouble size={20} />}
             tone="success"
           />

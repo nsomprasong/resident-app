@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { Prisma } from "@/generated/prisma/client";
-import { activeBookingConflictStatuses } from "@/lib/bookings/availability";
+import {
+  activeBookingConflictStatuses,
+  bookingNightOverlapWhere,
+  isRoomBookedForDateRange,
+} from "@/lib/bookings/availability";
 import {
   apiErrorResponse,
   readJsonObject,
@@ -45,8 +49,7 @@ export async function GET(request: NextRequest) {
           where: {
             booking: {
               status: { in: activeBookingConflictStatuses },
-              checkIn: { lt: checkOut },
-              checkOut: { gt: checkIn },
+              ...bookingNightOverlapWhere(checkIn, checkOut),
             },
           },
           select: { id: true, bookingId: true },
@@ -72,9 +75,14 @@ export async function GET(request: NextRequest) {
           number: room.number,
           floor: room.floor,
           status: room.status,
-          booked:
-            foreignConflicts.length > 0 ||
-            (room.status !== "AVAILABLE" && !ownedByExcluded),
+          booked: isRoomBookedForDateRange({
+            hasForeignBookingConflict: foreignConflicts.length > 0,
+            // Own booking's OCCUPIED/CLEANING must not block date picks for other stays.
+            status:
+              ownedByExcluded && room.status !== "MAINTENANCE"
+                ? "AVAILABLE"
+                : room.status,
+          }),
           zone: { id: room.zone.id, name: room.zone.name },
           roomType: {
             id: room.roomType.id,

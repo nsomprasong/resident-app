@@ -13,8 +13,9 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { recordAuditLog } from "@/lib/audit/audit-log";
 import {
   activeBookingConflictStatuses,
-  availableRaftStatuses,
-  availableRoomStatuses,
+  bookableRaftStatuses,
+  bookableRoomStatuses,
+  bookingNightOverlapWhere,
 } from "@/lib/bookings/availability";
 import { acquireBookingResourceLocks } from "@/lib/bookings/resource-locks";
 import { parseBookingExtraCharges } from "@/lib/bookings/extra-charges";
@@ -412,10 +413,10 @@ export async function POST(request: NextRequest) {
       });
       if (rooms.length !== selectedRoomIds.length) throw new Error("ROOM_NOT_FOUND");
       if (rafts.length !== selectedRaftIds.length) throw new Error("RAFT_NOT_FOUND");
-      if (rooms.some((room) => !availableRoomStatuses.includes(room.status))) {
+      if (rooms.some((room) => !bookableRoomStatuses.includes(room.status))) {
         throw new Error("ROOM_NOT_AVAILABLE");
       }
-      if (rafts.some((raft) => !availableRaftStatuses.includes(raft.status))) {
+      if (rafts.some((raft) => !bookableRaftStatuses.includes(raft.status))) {
         throw new Error("RAFT_NOT_AVAILABLE");
       }
       if (
@@ -430,8 +431,7 @@ export async function POST(request: NextRequest) {
             status: {
               in: activeBookingConflictStatuses,
             },
-            checkIn: { lt: checkOut },
-            checkOut: { gt: checkIn },
+            ...bookingNightOverlapWhere(checkIn, checkOut),
           },
         },
         include: { room: true },
@@ -443,8 +443,7 @@ export async function POST(request: NextRequest) {
           raftId: { in: selectedRaftIds },
           booking: {
             status: { in: activeBookingConflictStatuses },
-            checkIn: { lt: checkOut },
-            checkOut: { gt: checkIn },
+            ...bookingNightOverlapWhere(checkIn, checkOut),
           },
         },
         include: { raft: true },

@@ -1,5 +1,8 @@
 import { Prisma, RaftStatus } from "@/generated/prisma/client";
-import { activeBookingConflictStatuses } from "@/lib/bookings/availability";
+import {
+  activeBookingConflictStatuses,
+  bookingNightOverlapWhere,
+} from "@/lib/bookings/availability";
 import {
   apiErrorResponse,
   readJsonObject,
@@ -38,8 +41,7 @@ export async function GET(request: NextRequest) {
                 where: {
                   booking: {
                     status: { in: activeBookingConflictStatuses },
-                    checkIn: { lt: checkOut },
-                    checkOut: { gt: checkIn },
+                    ...bookingNightOverlapWhere(checkIn, checkOut),
                   },
                 },
                 select: { id: true, bookingId: true },
