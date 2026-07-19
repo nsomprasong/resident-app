@@ -86,10 +86,15 @@ export function FoodSetsManager() {
       name: item.name,
       description: item.description ?? "",
       isActive: item.isActive,
-      items: item.items.map((row) => ({
-        productId: row.productId,
-        quantity: row.quantity,
-      })),
+      items: item.items
+        .filter((row): row is typeof row & { productId: string } =>
+          Boolean(row.productId),
+        )
+        .map((row) => ({
+          productId: row.productId,
+          lineKey: row.productId,
+          quantity: row.quantity,
+        })),
     });
     setFormError("");
     setModalOpen(true);
@@ -118,10 +123,14 @@ export function FoodSetsManager() {
             name: form.name.trim(),
             description: form.description.trim() || null,
             isActive: form.isActive,
-            items: form.items.map((item) => ({
-              productId: item.productId,
-              quantity: item.quantity,
-            })),
+            items: form.items
+              .filter((item): item is typeof item & { productId: string } =>
+                Boolean(item.productId),
+              )
+              .map((item) => ({
+                productId: item.productId,
+                quantity: item.quantity,
+              })),
           }),
         },
       );

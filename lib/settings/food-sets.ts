@@ -32,13 +32,15 @@ export type ProductOptionGroupRecord = {
 };
 
 export type FoodSetItemRecord = {
-  productId: string;
+  /** Null for tour-group-only custom dishes */
+  productId: string | null;
   productName: string;
   productPrice: number;
   quantity: number;
   sortOrder: number;
   requireOptions: boolean;
   optionGroups: ProductOptionGroupRecord[];
+  isCustom?: boolean;
 };
 
 export type FoodSetRecord = {
@@ -79,7 +81,7 @@ type FoodSetWithItems = FoodSet & {
 type TourGroupFoodSetWithItems = TourGroupFoodSet & {
   items: Array<
     TourGroupFoodSetItem & {
-      product: ProductWithOptions;
+      product: ProductWithOptions | null;
     }
   >;
 };
@@ -143,17 +145,31 @@ export function serializeTourGroupFoodSet(
     tourGroupId: row.tourGroupId,
     sourceFoodSetId: row.sourceFoodSetId,
     name: row.name,
-    items: row.items.map((item) => ({
-      productId: item.productId,
-      productName: item.product.name,
-      productPrice: Number(item.product.price),
-      quantity: item.quantity,
-      sortOrder: 0,
-      requireOptions: item.product.optionGroups.some((group) => group.isRequired),
-      optionGroups: serializeOptionGroups(item.product.optionGroups),
-      isExtra: item.isExtra,
-      optionNote: item.optionNote,
-    })),
+    items: row.items.map((item) => {
+      const isCustom = !item.productId;
+      return {
+        productId: item.productId,
+        productName: isCustom
+          ? (item.customName ?? "เมนูพิเศษ")
+          : (item.product?.name ?? "เมนู"),
+        productPrice: isCustom
+          ? Number(item.customUnitPrice ?? 0)
+          : Number(item.product?.price ?? 0),
+        quantity: item.quantity,
+        sortOrder: 0,
+        requireOptions: isCustom
+          ? false
+          : Boolean(
+              item.product?.optionGroups.some((group) => group.isRequired),
+            ),
+        optionGroups: isCustom
+          ? []
+          : serializeOptionGroups(item.product?.optionGroups ?? []),
+        isCustom,
+        isExtra: item.isExtra,
+        optionNote: item.optionNote,
+      };
+    }),
   };
 }
 
@@ -181,6 +197,15 @@ export type FoodSetItemInput = {
   requireOptions?: boolean;
 };
 
+export type TourGroupFoodSetItemInput = {
+  productId: string | null;
+  customName: string | null;
+  customUnitPrice: number | null;
+  quantity: number;
+  isExtra: boolean;
+  optionNote: string | null;
+};
+
 export type ParsedFoodSetInput = {
   name?: string;
   description?: string | null;
@@ -191,20 +216,27 @@ export type ParsedFoodSetInput = {
 export type ParsedTourGroupFoodSetInput = {
   name: string;
   sourceFoodSetId: string | null;
-  items: Array<
-    FoodSetItemInput & { isExtra: boolean; optionNote: string | null }
-  >;
+  items: TourGroupFoodSetItemInput[];
 };
 
 function parseItems(
   value: unknown,
   path: string,
-  options?: { requireIsExtra?: boolean; allowOptionNote?: boolean },
+  options?: {
+    requireIsExtra?: boolean;
+    allowOptionNote?: boolean;
+    allowCustom?: boolean;
+  },
 ):
   | {
       ok: true;
       items: Array<
-        FoodSetItemInput & { isExtra?: boolean; optionNote?: string | null }
+        FoodSetItemInput & {
+          isExtra?: boolean;
+          optionNote?: string | null;
+          customName?: string | null;
+          customUnitPrice?: number | null;
+        }
       >;
     }
   | { ok: false; issues: ValidationIssue[] } {
@@ -223,7 +255,12 @@ function parseItems(
   }
 
   const items: Array<
-    FoodSetItemInput & { isExtra?: boolean; optionNote?: string | null }
+    FoodSetItemInput & {
+      isExtra?: boolean;
+      optionNote?: string | null;
+      customName?: string | null;
+      customUnitPrice?: number | null;
+    }
   > = [];
   const seen = new Set<string>();
 
@@ -236,23 +273,48 @@ function parseItems(
       return;
     }
     const record = entry as FieldSource;
-    const productId =
+    const productIdRaw =
       typeof record.productId === "string" ? record.productId.trim() : "";
-    if (!isUuid(productId)) {
+    const customNameRaw =
+      typeof record.customName === "string" ? record.customName.trim() : "";
+    const isCustom = options?.allowCustom && !productIdRaw && Boolean(customNameRaw);
+
+    if (isCustom) {
+      const priceValue = record.customUnitPrice;
+      const customUnitPrice =
+        typeof priceValue === "number" &&
+        Number.isFinite(priceValue) &&
+        priceValue >= 0
+          ? priceValue
+          : null;
+      if (customUnitPrice === null) {
+        issues.push({
+          path: `${path}.${index}.customUnitPrice`,
+          message: "ราคาเมนูพิเศษไม่ถูกต้อง",
+        });
+        return;
+      }
+    } else if (!isUuid(productIdRaw)) {
       issues.push({
         path: `${path}.${index}.productId`,
-        message: "รหัสสินค้าไม่ถูกต้อง",
+        message: options?.allowCustom
+          ? "ระบุสินค้าจากเมนู หรือใส่ชื่อเมนูพิเศษพร้อมราคา"
+          : "รหัสสินค้าไม่ถูกต้อง",
       });
       return;
     }
-    if (seen.has(productId)) {
+
+    const dedupeKey = isCustom
+      ? `custom:${customNameRaw.toLowerCase()}:${index}`
+      : productIdRaw;
+    if (!isCustom && seen.has(dedupeKey)) {
       issues.push({
         path: `${path}.${index}.productId`,
         message: "สินค้าซ้ำในชุด",
       });
       return;
     }
-    seen.add(productId);
+    if (!isCustom) seen.add(dedupeKey);
 
     const quantityValue = record.quantity;
     const quantity =
@@ -291,11 +353,26 @@ function parseItems(
     const item: FoodSetItemInput & {
       isExtra?: boolean;
       optionNote?: string | null;
-    } = {
-      productId,
-      quantity,
-      sortOrder,
-    };
+      customName?: string | null;
+      customUnitPrice?: number | null;
+    } = isCustom
+      ? {
+          productId: "",
+          quantity,
+          sortOrder,
+          customName: customNameRaw,
+          customUnitPrice:
+            typeof record.customUnitPrice === "number"
+              ? record.customUnitPrice
+              : 0,
+        }
+      : {
+          productId: productIdRaw,
+          quantity,
+          sortOrder,
+          customName: null,
+          customUnitPrice: null,
+        };
 
     const requireOptions = readBoolean(record, "requireOptions");
     if (requireOptions !== undefined) {
@@ -411,6 +488,7 @@ export function parseTourGroupFoodSetInput(
   const parsedItems = parseItems(body.items, "items", {
     requireIsExtra: true,
     allowOptionNote: true,
+    allowCustom: true,
   });
   if (!parsedItems.ok) {
     issues.push(...parsedItems.issues);
@@ -425,12 +503,17 @@ export function parseTourGroupFoodSetInput(
     data: {
       name,
       sourceFoodSetId,
-      items: parsedItems.items.map((item) => ({
-        productId: item.productId,
-        quantity: item.quantity,
-        isExtra: item.isExtra === true,
-        optionNote: item.optionNote ?? null,
-      })),
+      items: parsedItems.items.map((item) => {
+        const isCustom = Boolean(item.customName?.trim()) && !item.productId;
+        return {
+          productId: isCustom ? null : item.productId,
+          customName: isCustom ? (item.customName ?? null) : null,
+          customUnitPrice: isCustom ? (item.customUnitPrice ?? null) : null,
+          quantity: item.quantity,
+          isExtra: item.isExtra === true,
+          optionNote: item.optionNote ?? null,
+        };
+      }),
     },
   };
 }

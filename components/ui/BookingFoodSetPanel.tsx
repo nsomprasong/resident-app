@@ -17,13 +17,18 @@ function itemsFromFoodSet(
   foodSet: FoodSetRecord,
   defaultIsExtra: boolean,
 ): BookingFoodItem[] {
-  return foodSet.items.map((item) => ({
-    productId: item.productId,
-    quantity: item.quantity,
-    isExtra: defaultIsExtra,
-    requireOptions: item.requireOptions,
-    note: undefined,
-  }));
+  return foodSet.items
+    .filter((item): item is typeof item & { productId: string } =>
+      Boolean(item.productId),
+    )
+    .map((item) => ({
+      productId: item.productId,
+      lineKey: item.productId,
+      quantity: item.quantity,
+      isExtra: defaultIsExtra,
+      requireOptions: item.requireOptions,
+      note: undefined,
+    }));
 }
 
 /**
@@ -191,7 +196,8 @@ export default function BookingFoodSetPanel({
           </p>
           {groupScoped ? (
             <p className="text-xs text-muted-foreground">
-              ใช้เฉพาะกรุ๊ปนี้ · กด「เปลี่ยน」ที่แต่ละเมนูเพื่อสลับเป็นเมนูอื่น
+              ใช้เฉพาะกรุ๊ปนี้ · เปลี่ยนเมนู หรือเพิ่มเมนูพิเศษ (ใส่ราคา) ได้ —
+              ไม่บันทึกลงเมนูหลัก
             </p>
           ) : (
             <p className="text-xs text-muted-foreground">
@@ -215,6 +221,7 @@ export default function BookingFoodSetPanel({
         allowPackagePricing={allowPackagePricing}
         defaultIsExtra={defaultIsExtra}
         allowReplace
+        allowCustomDish={groupScoped}
       />
       {sourceFoodSetId ? (
         <p className="text-xs text-muted-foreground">

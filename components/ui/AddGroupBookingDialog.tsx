@@ -199,6 +199,10 @@ export default function AddGroupBookingDialog({
     const map = new Map(foodCatalog.map((food) => [food.id, food.price]));
     return foodItems.reduce((sum, item) => {
       if (!(item.isExtra ?? false)) return sum;
+      if (item.customUnitPrice != null) {
+        return sum + item.customUnitPrice * item.quantity;
+      }
+      if (!item.productId) return sum;
       return sum + (map.get(item.productId) ?? 0) * item.quantity;
     }, 0);
   }, [foodCatalog, foodItems]);
@@ -257,12 +261,22 @@ export default function AddGroupBookingDialog({
             id: item.id,
             isExtra: item.isExtra,
           })),
-          foodItems: foodItems.map((item) => ({
-            productId: item.productId,
-            quantity: item.quantity,
-            isExtra: item.isExtra ?? false,
-            ...(item.note?.trim() ? { note: item.note.trim() } : {}),
-          })),
+          foodItems: foodItems.map((item) =>
+            item.productId
+              ? {
+                  productId: item.productId,
+                  quantity: item.quantity,
+                  isExtra: item.isExtra ?? false,
+                  ...(item.note?.trim() ? { note: item.note.trim() } : {}),
+                }
+              : {
+                  customName: item.customName,
+                  customUnitPrice: item.customUnitPrice,
+                  quantity: item.quantity,
+                  isExtra: item.isExtra ?? false,
+                  ...(item.note?.trim() ? { note: item.note.trim() } : {}),
+                },
+          ),
           extraCharges: extraCharges
             .filter((item) => extraChargeLineTotal(item) > 0)
             .map((item) => ({

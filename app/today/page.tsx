@@ -99,6 +99,7 @@ export default async function TodayOpsPage({ searchParams }: TodayOpsPageProps) 
             id: true,
             quantity: true,
             productId: true,
+            customName: true,
             note: true,
             product: { select: { name: true, isMinibar: true } },
             order: {
@@ -131,11 +132,12 @@ export default async function TodayOpsPage({ searchParams }: TodayOpsPageProps) 
     })),
     foodItems: orderItems.map((item) => ({
       quantity: item.quantity,
-      isMinibar: item.product.isMinibar,
+      isMinibar: item.product?.isMinibar ?? false,
     })),
     foodProductIds: orderItems
-      .filter((item) => !item.product.isMinibar)
-      .map((item) => item.productId),
+      .filter((item) => !(item.product?.isMinibar ?? false))
+      .map((item) => item.productId)
+      .filter((id): id is string => Boolean(id)),
   });
 
   const checkInBookings = bookings.filter(
@@ -213,7 +215,8 @@ export default async function TodayOpsPage({ searchParams }: TodayOpsPageProps) 
   >();
 
   for (const item of orderItems) {
-    const target = item.product.isMinibar ? minibarAgg : foodAgg;
+    const isMinibar = item.product?.isMinibar ?? false;
+    const target = isMinibar ? minibarAgg : foodAgg;
     const guestLabel = [
       item.order.booking?.guest?.firstName,
       item.order.booking?.guest?.lastName,
@@ -226,14 +229,15 @@ export default async function TodayOpsPage({ searchParams }: TodayOpsPageProps) 
       item.order.booking?.tourGroup?.name ?? (guestLabel || null),
       item.note?.trim() || null,
     ].filter(Boolean) as string[];
-    const current = target.get(item.productId) ?? {
-      name: item.product.name,
+    const aggKey = item.productId ?? `custom:${item.customName ?? item.id}`;
+    const current = target.get(aggKey) ?? {
+      name: item.customName ?? item.product?.name ?? "เมนูพิเศษ",
       quantity: 0,
       notes: [],
     };
     current.quantity += item.quantity;
     if (noteParts.length) current.notes.push(noteParts.join(" · "));
-    target.set(item.productId, current);
+    target.set(aggKey, current);
   }
 
   const foodRows = [...foodAgg.entries()].map(([id, item]) => ({

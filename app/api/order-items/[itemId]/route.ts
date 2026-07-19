@@ -116,7 +116,7 @@ export async function PATCH(
           quantity: 0,
           isExtra: item.isExtra,
           orderId: item.orderId,
-          productName: item.product.name,
+          productName: item.customName ?? item.product?.name ?? "เมนูพิเศษ",
         };
       }
 
@@ -132,7 +132,7 @@ export async function PATCH(
       return {
         ...updated,
         deleted: false,
-        productName: item.product.name,
+        productName: item.customName ?? item.product?.name ?? "เมนูพิเศษ",
       };
     });
 

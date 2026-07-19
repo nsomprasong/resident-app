@@ -142,24 +142,30 @@ export async function GET(
         price: Number(item.amount),
       })),
       orders: booking.orders.flatMap((order) =>
-        order.items.map((item) => ({
-          id: item.id,
-          orderId: order.id,
-          orderStatus: order.status,
-          type: item.product.type.name,
-          typeName: item.product.type.name,
-          isMinibar: item.product.isMinibar,
-          title: `${item.product.name}${item.isExtra ? "" : " (รวมในราคาเหมา)"}`,
-          productName: item.product.name,
-          quantity: item.quantity,
-          unitPrice: Number(item.unitPrice),
-          price: item.isExtra ? Number(item.unitPrice) * item.quantity : 0,
-          isExtra: item.isExtra,
-          editable: order.status === "PENDING",
-          chargeTo: order.roomId ? "room" : "group",
-          roomId: order.room?.id ?? null,
-          roomNumber: order.room?.number ?? null,
-        })),
+        order.items.map((item) => {
+          const productName =
+            item.customName ?? item.product?.name ?? "เมนูพิเศษ";
+          const typeName = item.product?.type.name ?? "เมนูพิเศษ";
+          return {
+            id: item.id,
+            orderId: order.id,
+            orderStatus: order.status,
+            type: typeName,
+            typeName,
+            isMinibar: item.product?.isMinibar ?? false,
+            title: `${productName}${item.isExtra ? "" : " (รวมในราคาเหมา)"}`,
+            productName,
+            quantity: item.quantity,
+            unitPrice: Number(item.unitPrice),
+            price: item.isExtra ? Number(item.unitPrice) * item.quantity : 0,
+            isExtra: item.isExtra,
+            isCustom: !item.productId,
+            editable: order.status === "PENDING",
+            chargeTo: order.roomId ? "room" : "group",
+            roomId: order.room?.id ?? null,
+            roomNumber: order.room?.number ?? null,
+          };
+        }),
       ),
       payments: booking.payments
         .filter((payment) =>

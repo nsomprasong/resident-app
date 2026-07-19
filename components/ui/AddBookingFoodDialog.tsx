@@ -99,13 +99,18 @@ export default function AddBookingFoodDialog({
 
   const applyMasterSet = (foodSet: FoodSetRecord) => {
     setItems(
-      foodSet.items.map((item) => ({
-        productId: item.productId,
-        quantity: item.quantity,
-        isExtra: false,
-        requireOptions: item.requireOptions,
-        note: undefined,
-      })),
+      foodSet.items
+        .filter((item): item is typeof item & { productId: string } =>
+          Boolean(item.productId),
+        )
+        .map((item) => ({
+          productId: item.productId,
+          lineKey: item.productId,
+          quantity: item.quantity,
+          isExtra: false,
+          requireOptions: item.requireOptions,
+          note: undefined,
+        })),
     );
     setSelectedSetName(foodSet.name);
     setSourceFoodSetId(foodSet.id);
@@ -116,13 +121,25 @@ export default function AddBookingFoodDialog({
   const applyGroupCustomization = () => {
     if (!groupFoodSet) return;
     setItems(
-      groupFoodSet.items.map((item) => ({
-        productId: item.productId,
-        quantity: item.quantity,
-        isExtra: item.isExtra,
-        requireOptions: item.requireOptions,
-        note: item.optionNote ?? undefined,
-      })),
+      groupFoodSet.items.map((item, index) =>
+        item.productId
+          ? {
+              productId: item.productId,
+              lineKey: item.productId,
+              quantity: item.quantity,
+              isExtra: item.isExtra,
+              requireOptions: item.requireOptions,
+              note: item.optionNote ?? undefined,
+            }
+          : {
+              lineKey: `custom_${groupFoodSet.id}_${index}`,
+              customName: item.productName,
+              customUnitPrice: item.productPrice,
+              quantity: item.quantity,
+              isExtra: item.isExtra,
+              note: item.optionNote ?? undefined,
+            },
+      ),
     );
     setSelectedSetName(groupFoodSet.name);
     setSourceFoodSetId(groupFoodSet.sourceFoodSetId);
@@ -148,12 +165,22 @@ export default function AddBookingFoodDialog({
       body: JSON.stringify({
         name: selectedSetName || "ชุดของกรุ๊ป",
         sourceFoodSetId,
-        items: items.map((item) => ({
-          productId: item.productId,
-          quantity: item.quantity,
-          isExtra: item.isExtra ?? false,
-          optionNote: item.note ?? null,
-        })),
+        items: items.map((item) =>
+          item.productId
+            ? {
+                productId: item.productId,
+                quantity: item.quantity,
+                isExtra: item.isExtra ?? false,
+                optionNote: item.note ?? null,
+              }
+            : {
+                customName: item.customName,
+                customUnitPrice: item.customUnitPrice,
+                quantity: item.quantity,
+                isExtra: item.isExtra ?? false,
+                optionNote: item.note ?? null,
+              },
+        ),
       }),
     });
     const data = (await response.json()) as TourGroupFoodSetRecord & {
@@ -227,12 +254,22 @@ export default function AddBookingFoodDialog({
           roomId: isGroup ? chargeRoomId : chargeRoomId,
           note:
             isGroup && selectedSetName ? `ชุด: ${selectedSetName}` : undefined,
-          items: items.map((item) => ({
-            productId: item.productId,
-            quantity: item.quantity,
-            isExtra: isGroup ? (item.isExtra ?? true) : true,
-            ...(item.note?.trim() ? { note: item.note.trim() } : {}),
-          })),
+          items: items.map((item) =>
+            item.productId
+              ? {
+                  productId: item.productId,
+                  quantity: item.quantity,
+                  isExtra: isGroup ? (item.isExtra ?? true) : true,
+                  ...(item.note?.trim() ? { note: item.note.trim() } : {}),
+                }
+              : {
+                  customName: item.customName,
+                  customUnitPrice: item.customUnitPrice,
+                  quantity: item.quantity,
+                  isExtra: isGroup ? (item.isExtra ?? true) : true,
+                  ...(item.note?.trim() ? { note: item.note.trim() } : {}),
+                },
+          ),
         }),
       });
       const data = (await response.json()) as { message?: string };
@@ -467,6 +504,8 @@ export default function AddBookingFoodDialog({
               included={false}
               allowPackagePricing
               defaultIsExtra
+              allowReplace
+              allowCustomDish
             />
           </>
         ) : null}

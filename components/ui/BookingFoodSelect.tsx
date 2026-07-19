@@ -13,18 +13,41 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import { newFoodLineKey } from "@/lib/bookings/food-line";
+
 import Modal from "./Modal";
 import NumberInput from "./NumberInput";
 import PricingToggle from "./PricingToggle";
 
 export interface BookingFoodItem {
-  productId: string;
+  /** Catalog product id — omit for tour-group-only custom dish */
+  productId?: string;
+  /** Stable row key in the picker */
+  lineKey: string;
+  /** Tour-group-only custom dish name (not saved to product master) */
+  customName?: string;
+  /** Unit price for custom dish */
+  customUnitPrice?: number;
   quantity: number;
   isExtra?: boolean;
   /** Selected option labels for kitchen, e.g. "ไก่" or "เส้นแก้ว" */
   note?: string;
   /** Override from food set: force / skip option selection */
   requireOptions?: boolean;
+}
+
+export function foodItemKey(item: BookingFoodItem): string {
+  return item.lineKey || item.productId || "";
+}
+
+export function isCustomBookingFoodItem(item: BookingFoodItem): boolean {
+  return !item.productId && Boolean(item.customName?.trim());
+}
+
+export function ensureFoodItemLineKey(item: BookingFoodItem): BookingFoodItem {
+  if (item.lineKey) return item;
+  if (item.productId) return { ...item, lineKey: item.productId };
+  return { ...item, lineKey: newFoodLineKey("custom") };
 }
 
 interface ProductOptionGroup {
@@ -130,9 +153,13 @@ export function foodItemsMissingRequiredOptions(
   products: Array<{ id: string; optionGroups?: ProductOptionGroup[] }>,
 ): boolean {
   const productMap = new Map(products.map((product) => [product.id, product]));
-  return items.some((item) =>
-    foodItemMissingRequiredOptions(item, productMap.get(item.productId)),
-  );
+  return items.some((item) => {
+    if (isCustomBookingFoodItem(item) || !item.productId) return false;
+    return foodItemMissingRequiredOptions(
+      item,
+      productMap.get(item.productId),
+    );
+  });
 }
 
 const PAGE_SIZE = 40;
@@ -144,6 +171,7 @@ export default function BookingFoodSelect({
   allowPackagePricing = false,
   defaultIsExtra = true,
   allowReplace = true,
+  allowCustomDish = false,
 }: {
   items: BookingFoodItem[];
   onChange: (items: BookingFoodItem[]) => void;
@@ -152,11 +180,18 @@ export default function BookingFoodSelect({
   defaultIsExtra?: boolean;
   /** Show per-line "เปลี่ยนเมนู" to swap a dish without changing the master set */
   allowReplace?: boolean;
+  /** Allow tour-group-only custom dishes with name + price (not saved to master) */
+  allowCustomDish?: boolean;
 }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [replaceTargetId, setReplaceTargetId] = useState<string | null>(null);
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customName, setCustomName] = useState("");
+  const [customPrice, setCustomPrice] = useState(0);
+  const [customQty, setCustomQty] = useState(1);
+  const [customIsExtra, setCustomIsExtra] = useState(defaultIsExtra);
+  const [replaceTargetKey, setReplaceTargetKey] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("ALL");
   const [page, setPage] = useState(0);
@@ -190,66 +225,112 @@ export default function BookingFoodSelect({
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
+    const replaceProductId = replaceTargetKey
+      ? items.find((item) => foodItemKey(item) === replaceTargetKey)?.productId
+      : null;
     return products.filter((product) => {
-      if (replaceTargetId && product.id === replaceTargetId) return false;
+      if (replaceProductId && product.id === replaceProductId) return false;
       const matchCategory =
         category === "ALL" || product.typeName === category;
       const matchQuery =
         !normalized || product.title.toLowerCase().includes(normalized);
       return matchCategory && matchQuery;
     });
-  }, [category, products, query, replaceTargetId]);
+  }, [category, items, products, query, replaceTargetKey]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageItems = filtered.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
 
   useEffect(() => {
     setPage(0);
-  }, [query, category, replaceTargetId]);
+  }, [query, category, replaceTargetKey]);
 
   const closePicker = () => {
     setPickerOpen(false);
-    setReplaceTargetId(null);
+    setReplaceTargetKey(null);
   };
 
   const openAddPicker = () => {
-    setReplaceTargetId(null);
+    setReplaceTargetKey(null);
     setPickerOpen(true);
   };
 
-  const openReplacePicker = (productId: string) => {
-    setReplaceTargetId(productId);
+  const openReplacePicker = (lineKey: string) => {
+    setReplaceTargetKey(lineKey);
     setQuery("");
     setCategory("ALL");
     setPickerOpen(true);
   };
 
-  const setQuantity = (id: string, value: number) => {
-    const product = productMap.get(id);
-    const needsOption =
-      product?.optionGroups?.some((group) => group.isRequired) ?? false;
+  const openCustomDish = () => {
+    setCustomName("");
+    setCustomPrice(0);
+    setCustomQty(1);
+    setCustomIsExtra(allowPackagePricing ? defaultIsExtra : true);
+    setCustomOpen(true);
+  };
+
+  const addCustomDish = () => {
+    const name = customName.trim();
+    if (!name || !Number.isFinite(customPrice) || customPrice < 0) return;
+    const qty = Math.max(1, Math.floor(customQty) || 1);
+    onChange([
+      ...items,
+      {
+        lineKey: newFoodLineKey("custom"),
+        customName: name,
+        customUnitPrice: customPrice,
+        quantity: qty,
+        isExtra: allowPackagePricing ? customIsExtra : true,
+      },
+    ]);
+    setCustomOpen(false);
+  };
+
+  const setQuantityByKey = (lineKey: string, value: number) => {
     onChange(
       value <= 0
-        ? items.filter((item) => item.productId !== id)
-        : items.some((item) => item.productId === id)
-          ? items.map((item) =>
-              item.productId === id ? { ...item, quantity: value } : item,
-            )
-          : [
-              ...items,
-              {
-                productId: id,
-                quantity: value,
-                isExtra: allowPackagePricing ? defaultIsExtra : true,
-                ...(needsOption ? { requireOptions: true } : {}),
-              },
-            ],
+        ? items.filter((item) => foodItemKey(item) !== lineKey)
+        : items.map((item) =>
+            foodItemKey(item) === lineKey ? { ...item, quantity: value } : item,
+          ),
     );
   };
 
+  const addCatalogProduct = (productId: string, addQty: number) => {
+    const product = productMap.get(productId);
+    const needsOption =
+      product?.optionGroups?.some((group) => group.isRequired) ?? false;
+    const existing = items.find(
+      (item) => item.productId === productId && !isCustomBookingFoodItem(item),
+    );
+    if (existing) {
+      onChange(
+        items.map((item) =>
+          foodItemKey(item) === foodItemKey(existing)
+            ? { ...item, quantity: item.quantity + addQty }
+            : item,
+        ),
+      );
+      return;
+    }
+    onChange([
+      ...items,
+      {
+        productId,
+        lineKey: productId,
+        quantity: addQty,
+        isExtra: allowPackagePricing ? defaultIsExtra : true,
+        ...(needsOption ? { requireOptions: true } : {}),
+      },
+    ]);
+  };
+
   const replaceProduct = (newProductId: string) => {
-    if (!replaceTargetId) return;
-    const oldItem = items.find((item) => item.productId === replaceTargetId);
+    if (!replaceTargetKey) return;
+    const oldItem = items.find(
+      (item) => foodItemKey(item) === replaceTargetKey,
+    );
     if (!oldItem) {
       closePicker();
       return;
@@ -258,13 +339,15 @@ export default function BookingFoodSelect({
     const needsOption =
       product?.optionGroups?.some((group) => group.isRequired) ?? false;
     const withoutOld = items.filter(
-      (item) => item.productId !== replaceTargetId,
+      (item) => foodItemKey(item) !== replaceTargetKey,
     );
-    const existing = withoutOld.find((item) => item.productId === newProductId);
+    const existing = withoutOld.find(
+      (item) => item.productId === newProductId && !isCustomBookingFoodItem(item),
+    );
     if (existing) {
       onChange(
         withoutOld.map((item) =>
-          item.productId === newProductId
+          foodItemKey(item) === foodItemKey(existing)
             ? {
                 ...item,
                 quantity: item.quantity + oldItem.quantity,
@@ -277,9 +360,12 @@ export default function BookingFoodSelect({
         ...withoutOld,
         {
           productId: newProductId,
+          lineKey: newProductId,
           quantity: oldItem.quantity,
           isExtra: oldItem.isExtra,
           note: undefined,
+          customName: undefined,
+          customUnitPrice: undefined,
           ...(needsOption
             ? { requireOptions: true }
             : { requireOptions: false }),
@@ -289,16 +375,16 @@ export default function BookingFoodSelect({
     closePicker();
   };
 
-  const setItemExtra = (id: string, isExtra: boolean) => {
+  const setItemExtra = (lineKey: string, isExtra: boolean) => {
     onChange(
       items.map((item) =>
-        item.productId === id ? { ...item, isExtra } : item,
+        foodItemKey(item) === lineKey ? { ...item, isExtra } : item,
       ),
     );
   };
 
   const setGroupOption = (
-    productId: string,
+    lineKey: string,
     product: Product,
     group: ProductOptionGroup,
     label: string | null,
@@ -306,7 +392,7 @@ export default function BookingFoodSelect({
     const groups = product.optionGroups ?? [];
     onChange(
       items.map((item) => {
-        if (item.productId !== productId) return item;
+        if (foodItemKey(item) !== lineKey) return item;
         const nextNote = buildOptionNote(item.note, groups, group, label);
         return { ...item, note: nextNote || undefined };
       }),
@@ -315,18 +401,46 @@ export default function BookingFoodSelect({
 
   const addFromPicker = (id: string) => {
     const addQty = Math.max(1, draftQty[id] ?? 1);
-    const current = items.find((item) => item.productId === id)?.quantity ?? 0;
-    setQuantity(id, current + addQty);
+    addCatalogProduct(id, addQty);
     setDraftQty((prev) => ({ ...prev, [id]: 1 }));
   };
 
-  const selectedRows = items
-    .map((item) => {
-      const product = productMap.get(item.productId);
-      if (!product) return null;
-      return { ...item, product };
-    })
-    .filter(Boolean) as Array<BookingFoodItem & { product: Product }>;
+  const selectedRows = items.map((item) => {
+    const key = foodItemKey(item);
+    if (isCustomBookingFoodItem(item)) {
+      return {
+        ...item,
+        lineKey: key,
+        product: {
+          id: key,
+          title: item.customName ?? "เมนูพิเศษ",
+          price: Number(item.customUnitPrice ?? 0),
+          optionGroups: [] as ProductOptionGroup[],
+        },
+        isCustom: true as const,
+      };
+    }
+    const product = item.productId ? productMap.get(item.productId) : undefined;
+    if (!product) {
+      return {
+        ...item,
+        lineKey: key,
+        product: {
+          id: key,
+          title: "เมนู (โหลดไม่สำเร็จ)",
+          price: 0,
+          optionGroups: [] as ProductOptionGroup[],
+        },
+        isCustom: false as const,
+      };
+    }
+    return {
+      ...item,
+      lineKey: key,
+      product,
+      isCustom: false as const,
+    };
+  });
 
   const foodTotal = selectedRows.reduce((sum, row) => {
     const isExtra = row.isExtra ?? defaultIsExtra;
@@ -335,8 +449,9 @@ export default function BookingFoodSelect({
   }, 0);
   const foodCount = selectedRows.reduce((sum, row) => sum + row.quantity, 0);
   const replaceTargetTitle =
-    replaceTargetId != null
-      ? (productMap.get(replaceTargetId)?.title ?? "เมนูเดิม")
+    replaceTargetKey != null
+      ? (selectedRows.find((row) => row.lineKey === replaceTargetKey)?.product
+          .title ?? "เมนูเดิม")
       : null;
 
   return (
@@ -360,14 +475,26 @@ export default function BookingFoodSelect({
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={openAddPicker}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-          >
-            <Plus size={16} />
-            เพิ่มรายการอาหาร
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {allowCustomDish ? (
+              <button
+                type="button"
+                onClick={openCustomDish}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-sm font-medium text-foreground hover:border-primary/40 hover:bg-primary/5"
+              >
+                <Plus size={16} />
+                เมนูพิเศษ
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={openAddPicker}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            >
+              <Plus size={16} />
+              เพิ่มจากเมนู
+            </button>
+          </div>
         </div>
 
         <div className="p-4">
@@ -393,13 +520,18 @@ export default function BookingFoodSelect({
                     : row.product.price * row.quantity;
                 return (
                   <div
-                    key={row.productId}
+                    key={row.lineKey}
                     className="space-y-2 rounded-xl border border-border bg-background px-3 py-2"
                   >
                     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:grid-cols-[minmax(0,1.4fr)_auto_auto_auto_auto_auto]">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-foreground">
                           {row.product.title}
+                          {row.isCustom ? (
+                            <span className="ml-1 text-xs font-normal text-muted-foreground">
+                              · พิเศษ
+                            </span>
+                          ) : null}
                         </p>
                         <p className="text-xs text-muted-foreground sm:hidden">
                           ฿{row.product.price.toLocaleString()} · รวม ฿
@@ -417,7 +549,7 @@ export default function BookingFoodSelect({
                           type="button"
                           aria-label="ลดจำนวน"
                           onClick={() =>
-                            setQuantity(row.productId, row.quantity - 1)
+                            setQuantityByKey(row.lineKey, row.quantity - 1)
                           }
                           className="rounded-md p-1.5 hover:bg-muted"
                         >
@@ -430,7 +562,7 @@ export default function BookingFoodSelect({
                           type="button"
                           aria-label="เพิ่มจำนวน"
                           onClick={() =>
-                            setQuantity(row.productId, row.quantity + 1)
+                            setQuantityByKey(row.lineKey, row.quantity + 1)
                           }
                           className="rounded-md p-1.5 hover:bg-muted"
                         >
@@ -440,21 +572,23 @@ export default function BookingFoodSelect({
                       <p className="hidden text-sm font-medium text-foreground sm:block">
                         ฿{lineTotal.toLocaleString()}
                       </p>
-                      {allowReplace ? (
+                      {allowReplace && !row.isCustom ? (
                         <button
                           type="button"
                           aria-label={`เปลี่ยน ${row.product.title}`}
-                          onClick={() => openReplacePicker(row.productId)}
+                          onClick={() => openReplacePicker(row.lineKey)}
                           className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1.5 text-xs font-medium text-foreground hover:border-primary/40 hover:bg-primary/5"
                         >
                           <RefreshCw size={13} />
                           เปลี่ยน
                         </button>
-                      ) : null}
+                      ) : (
+                        <span className="hidden sm:block" />
+                      )}
                       <button
                         type="button"
                         aria-label={`ลบ ${row.product.title}`}
-                        onClick={() => setQuantity(row.productId, 0)}
+                        onClick={() => setQuantityByKey(row.lineKey, 0)}
                         className="justify-self-end rounded-lg p-1.5 text-destructive hover:bg-destructive/10"
                       >
                         <Trash2 size={16} />
@@ -467,11 +601,12 @@ export default function BookingFoodSelect({
                         </p>
                         <PricingToggle
                           value={isExtra}
-                          onChange={(next) => setItemExtra(row.productId, next)}
+                          onChange={(next) => setItemExtra(row.lineKey, next)}
                         />
                       </div>
                     ) : null}
-                    {(row.product.optionGroups?.length ?? 0) > 0 ? (
+                    {!row.isCustom &&
+                    (row.product.optionGroups?.length ?? 0) > 0 ? (
                       <div className="space-y-2 border-t border-border/60 pt-2">
                         {row.product.optionGroups!.map((group) => {
                           const groups = row.product.optionGroups!;
@@ -513,7 +648,7 @@ export default function BookingFoodSelect({
                                       type="button"
                                       onClick={() =>
                                         setGroupOption(
-                                          row.productId,
+                                          row.lineKey,
                                           row.product,
                                           group,
                                           selected ? null : option.label,
@@ -553,10 +688,86 @@ export default function BookingFoodSelect({
       </section>
 
       <Modal
+        open={customOpen}
+        onClose={() => setCustomOpen(false)}
+        title="เพิ่มเมนูพิเศษ"
+        size="md"
+        nested
+        footer={
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setCustomOpen(false)}
+              className="rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-foreground hover:bg-surface-muted"
+            >
+              ยกเลิก
+            </button>
+            <button
+              type="button"
+              onClick={addCustomDish}
+              disabled={
+                !customName.trim() ||
+                !Number.isFinite(customPrice) ||
+                customPrice < 0
+              }
+              className="rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
+            >
+              เพิ่มเมนูพิเศษ
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            เมนูนี้ใช้เฉพาะกรุ๊ป/การจองนี้เท่านั้น ไม่ถูกบันทึกลงเมนูหลักใน Settings
+          </p>
+          <label className="block text-xs text-muted-foreground">
+            ชื่อเมนู
+            <input
+              value={customName}
+              onChange={(event) => setCustomName(event.target.value)}
+              placeholder="เช่น ต้มยำกุ้งพิเศษ"
+              className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
+            />
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block text-xs text-muted-foreground">
+              ราคาต่อหน่วย (บาท)
+              <div className="mt-1">
+                <NumberInput
+                  value={customPrice}
+                  onChange={setCustomPrice}
+                  min={0}
+                  step={1}
+                />
+              </div>
+            </label>
+            <label className="block text-xs text-muted-foreground">
+              จำนวน
+              <div className="mt-1">
+                <NumberInput
+                  value={customQty}
+                  onChange={setCustomQty}
+                  min={1}
+                  step={1}
+                />
+              </div>
+            </label>
+          </div>
+          {allowPackagePricing ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-background px-3 py-2">
+              <p className="text-xs text-muted-foreground">การคิดเงิน</p>
+              <PricingToggle value={customIsExtra} onChange={setCustomIsExtra} />
+            </div>
+          ) : null}
+        </div>
+      </Modal>
+
+      <Modal
         open={pickerOpen}
         onClose={closePicker}
         title={
-          replaceTargetId
+          replaceTargetKey
             ? `เปลี่ยนเมนู: ${replaceTargetTitle ?? ""}`
             : "เลือกเมนูอาหาร"
         }
@@ -566,7 +777,7 @@ export default function BookingFoodSelect({
         footer={
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm text-muted-foreground">
-              {replaceTargetId
+              {replaceTargetKey
                 ? "เลือกเมนูใหม่แทนรายการนี้ — ใช้เฉพาะการจอง/กรุ๊ปนี้"
                 : `เลือกแล้ว ${foodCount} รายการ`}
             </p>
@@ -582,7 +793,7 @@ export default function BookingFoodSelect({
         }
       >
         <div className="space-y-3">
-          {replaceTargetId ? (
+          {replaceTargetKey ? (
             <p className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-foreground">
               กำลังเปลี่ยน{" "}
               <span className="font-medium">{replaceTargetTitle}</span> เป็นเมนูอื่น
@@ -645,12 +856,12 @@ export default function BookingFoodSelect({
                         {product.typeName ?? "สินค้า"}
                         {product.isMinibar ? " · มินิบาร์" : ""} · ฿
                         {product.price.toLocaleString()}
-                        {!replaceTargetId && selectedQty > 0
+                        {!replaceTargetKey && selectedQty > 0
                           ? ` · ในรายการ x${selectedQty}`
                           : ""}
                       </p>
                     </div>
-                    {replaceTargetId ? (
+                    {replaceTargetKey ? (
                       <button
                         type="button"
                         onClick={() => replaceProduct(product.id)}

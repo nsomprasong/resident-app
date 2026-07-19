@@ -435,16 +435,19 @@ model TourGroupFoodSet {
 model TourGroupFoodSetItem {
   id                 String           @id @default(uuid()) @db.Uuid
   tourGroupFoodSetId String           @map("tour_group_food_set_id") @db.Uuid
-  productId          String           @map("product_id") @db.Uuid
+  /// Catalog product — null when this is a tour-group-only custom dish
+  productId          String?          @map("product_id") @db.Uuid
+  customName         String?          @map("custom_name")
+  customUnitPrice    Decimal?         @map("custom_unit_price") @db.Decimal(10, 2)
   quantity           Int              @default(1)
   isExtra            Boolean          @default(false) @map("is_extra")
   optionNote         String?          @map("option_note")
   tourGroupFoodSet   TourGroupFoodSet @relation(fields: [tourGroupFoodSetId], references: [id], onDelete: Cascade)
-  product            Product          @relation(fields: [productId], references: [id])
+  product            Product?         @relation(fields: [productId], references: [id])
   createdAt          DateTime         @default(now()) @map("created_at")
   updatedAt          DateTime         @updatedAt @map("updated_at")
 
-  @@unique([tourGroupFoodSetId, productId])
+  @@index([tourGroupFoodSetId])
   @@index([productId])
   @@map("tour_group_food_set_items")
 }
@@ -467,16 +470,20 @@ model Order {
 }
 
 model OrderItem {
-  id        String  @id @default(uuid()) @db.Uuid
-  orderId   String  @map("order_id") @db.Uuid
-  productId String  @map("product_id") @db.Uuid
-  quantity  Int     @default(1)
-  unitPrice Decimal @map("unit_price") @db.Decimal(10, 2)
-  note      String?
-  isExtra   Boolean @default(true) @map("is_extra")
-  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product   Product @relation(fields: [productId], references: [id])
+  id         String   @id @default(uuid()) @db.Uuid
+  orderId    String   @map("order_id") @db.Uuid
+  /// Catalog product — null for tour-group-only custom dishes
+  productId  String?  @map("product_id") @db.Uuid
+  customName String?  @map("custom_name")
+  quantity   Int      @default(1)
+  unitPrice  Decimal  @map("unit_price") @db.Decimal(10, 2)
+  note       String?
+  isExtra    Boolean  @default(true) @map("is_extra")
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product    Product? @relation(fields: [productId], references: [id])
 
+  @@index([orderId])
+  @@index([productId])
   @@map("order_items")
 }
 

@@ -80,4 +80,26 @@ describe("parseTourGroupFoodSetInput", () => {
     assert.equal(result.data.sourceFoodSetId, productA);
     assert.equal(result.data.items[1]?.isExtra, true);
   });
+
+  it("accepts tour-group-only custom dishes with price", () => {
+    const result = parseTourGroupFoodSetInput({
+      name: "ชุดกรุ๊ป พิเศษ",
+      items: [
+        { productId: productA, quantity: 2, isExtra: false },
+        {
+          customName: "ต้มยำกุ้งพิเศษ",
+          customUnitPrice: 180,
+          quantity: 10,
+          isExtra: true,
+        },
+      ],
+    });
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.data.items.length, 2);
+    assert.equal(result.data.items[1]?.productId, null);
+    assert.equal(result.data.items[1]?.customName, "ต้มยำกุ้งพิเศษ");
+    assert.equal(result.data.items[1]?.customUnitPrice, 180);
+    assert.equal(result.data.items[1]?.isExtra, true);
+  });
 });

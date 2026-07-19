@@ -21,7 +21,7 @@ type RouteContext = {
 const tourGroupFoodSetInclude = {
   items: {
     include: foodSetItemInclude,
-    orderBy: { product: { name: "asc" as const } },
+    orderBy: [{ createdAt: "asc" as const }],
   },
 };
 
@@ -97,16 +97,44 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       }
     }
 
-    const productIds = items.map((item) => item.productId);
-    const products = await prisma.product.findMany({
-      where: { id: { in: productIds }, isActive: true },
-      select: { id: true },
-    });
-    if (products.length !== productIds.length) {
-      return validationErrorResponse("พบสินค้าที่ไม่พร้อมใช้", [
-        { path: "items", message: "สินค้าบางรายการไม่พบหรือปิดขาย" },
-      ]);
+    const catalogIds = [
+      ...new Set(
+        items
+          .map((item) => item.productId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    if (catalogIds.length) {
+      const products = await prisma.product.findMany({
+        where: { id: { in: catalogIds }, isActive: true },
+        select: { id: true },
+      });
+      if (products.length !== catalogIds.length) {
+        return validationErrorResponse("พบสินค้าที่ไม่พร้อมใช้", [
+          { path: "items", message: "สินค้าบางรายการไม่พบหรือปิดขาย" },
+        ]);
+      }
     }
+
+    const itemCreates = items.map((item) =>
+      item.productId
+        ? {
+            productId: item.productId,
+            customName: null,
+            customUnitPrice: null,
+            quantity: item.quantity,
+            isExtra: item.isExtra,
+            optionNote: item.optionNote,
+          }
+        : {
+            productId: null,
+            customName: item.customName,
+            customUnitPrice: item.customUnitPrice,
+            quantity: item.quantity,
+            isExtra: item.isExtra,
+            optionNote: item.optionNote,
+          },
+    );
 
     const foodSet = await prisma.$transaction(async (tx) => {
       const existing = await tx.tourGroupFoodSet.findUnique({
@@ -123,14 +151,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
           data: {
             name,
             sourceFoodSetId,
-            items: {
-              create: items.map((item) => ({
-                productId: item.productId,
-                quantity: item.quantity,
-                isExtra: item.isExtra,
-                optionNote: item.optionNote,
-              })),
-            },
+            items: { create: itemCreates },
           },
           include: tourGroupFoodSetInclude,
         });
@@ -141,14 +162,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
           tourGroupId,
           name,
           sourceFoodSetId,
-          items: {
-            create: items.map((item) => ({
-              productId: item.productId,
-              quantity: item.quantity,
-              isExtra: item.isExtra,
-              optionNote: item.optionNote,
-            })),
-          },
+          items: { create: itemCreates },
         },
         include: tourGroupFoodSetInclude,
       });

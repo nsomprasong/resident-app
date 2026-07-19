@@ -224,7 +224,9 @@ export async function POST(request: NextRequest) {
       }
     }
     const foodItems: Array<{
-      productId: string;
+      productId: string | null;
+      customName: string | null;
+      customUnitPrice: number | null;
       quantity: number;
       isExtra: boolean;
       note: string | null;
@@ -270,6 +272,18 @@ export async function POST(request: NextRequest) {
         const itemRecord = item as Record<string, unknown>;
         const productId =
           typeof itemRecord.productId === "string" ? itemRecord.productId.trim() : "";
+        const customName =
+          typeof itemRecord.customName === "string"
+            ? itemRecord.customName.trim()
+            : "";
+        const customPriceValue = itemRecord.customUnitPrice;
+        const customUnitPrice =
+          typeof customPriceValue === "number" &&
+          Number.isFinite(customPriceValue) &&
+          customPriceValue >= 0
+            ? customPriceValue
+            : null;
+        const isCustom = !productId && Boolean(customName);
         const quantity = Number(itemRecord.quantity);
         const isExtraValue = itemRecord.isExtra;
         const isExtra =
@@ -285,8 +299,23 @@ export async function POST(request: NextRequest) {
             : typeof noteValue === "string"
               ? noteValue.trim() || null
               : undefined;
-        if (!productId) {
-          issues.push({ path: `foodItems.${index}.productId`, message: "Product id is required" });
+        if (!productId && !isCustom) {
+          issues.push({
+            path: `foodItems.${index}`,
+            message: "ระบุสินค้าจากเมนู หรือเมนูพิเศษพร้อมราคา",
+          });
+        }
+        if (isCustom && customUnitPrice === null) {
+          issues.push({
+            path: `foodItems.${index}.customUnitPrice`,
+            message: "ราคาเมนูพิเศษไม่ถูกต้อง",
+          });
+        }
+        if (isCustom && modeValue !== "group") {
+          issues.push({
+            path: `foodItems.${index}.customName`,
+            message: "เมนูพิเศษใช้ได้เฉพาะการจองแบบกลุ่ม",
+          });
         }
         if (!Number.isFinite(quantity) || quantity <= 0) {
           issues.push({ path: `foodItems.${index}.quantity`, message: "Food quantity must be greater than 0" });
@@ -303,15 +332,19 @@ export async function POST(request: NextRequest) {
             message: "note must be a string",
           });
         }
+        const catalogOk = Boolean(productId) && !isCustom;
+        const customOk = isCustom && customUnitPrice !== null && modeValue === "group";
         if (
-          productId &&
+          (catalogOk || customOk) &&
           Number.isFinite(quantity) &&
           quantity > 0 &&
           isExtra !== null &&
           note !== undefined
         ) {
           foodItems.push({
-            productId,
+            productId: catalogOk ? productId : null,
+            customName: customOk ? customName : null,
+            customUnitPrice: customOk ? customUnitPrice : null,
             quantity,
             isExtra:
               modeValue === "group"
@@ -405,12 +438,21 @@ export async function POST(request: NextRequest) {
         include: { roomType: true },
       });
       const rafts = await tx.raft.findMany({ where: { id: { in: selectedRaftIds } } });
-      const products = await tx.product.findMany({
-        where: {
-          id: { in: foodItems.map((item) => item.productId) },
-          isActive: true,
-        },
-      });
+      const catalogFoodIds = [
+        ...new Set(
+          foodItems
+            .map((item) => item.productId)
+            .filter((id): id is string => Boolean(id)),
+        ),
+      ];
+      const products = catalogFoodIds.length
+        ? await tx.product.findMany({
+            where: {
+              id: { in: catalogFoodIds },
+              isActive: true,
+            },
+          })
+        : [];
       if (rooms.length !== selectedRoomIds.length) throw new Error("ROOM_NOT_FOUND");
       if (rafts.length !== selectedRaftIds.length) throw new Error("RAFT_NOT_FOUND");
       if (rooms.some((room) => !bookableRoomStatuses.includes(room.status))) {
@@ -419,10 +461,7 @@ export async function POST(request: NextRequest) {
       if (rafts.some((raft) => !bookableRaftStatuses.includes(raft.status))) {
         throw new Error("RAFT_NOT_AVAILABLE");
       }
-      if (
-        products.length !==
-        new Set(foodItems.map((item) => item.productId)).size
-      )
+      if (products.length !== catalogFoodIds.length)
         throw new Error("PRODUCT_NOT_FOUND");
       const roomConflict = await tx.bookingRoom.findFirst({
         where: {
@@ -610,13 +649,25 @@ export async function POST(request: NextRequest) {
                 ? "อาหารหลักรวมในราคาเหมา"
                 : "อาหารสั่งพร้อมการจอง",
             items: {
-              create: foodItems.map((item) => ({
-                productId: item.productId,
-                quantity: item.quantity,
-                unitPrice: productMap.get(item.productId)!.price,
-                isExtra: item.isExtra,
-                ...(item.note ? { note: item.note } : {}),
-              })),
+              create: foodItems.map((item) =>
+                item.productId
+                  ? {
+                      productId: item.productId,
+                      customName: null,
+                      quantity: item.quantity,
+                      unitPrice: productMap.get(item.productId)!.price,
+                      isExtra: item.isExtra,
+                      ...(item.note ? { note: item.note } : {}),
+                    }
+                  : {
+                      productId: null,
+                      customName: item.customName,
+                      quantity: item.quantity,
+                      unitPrice: item.customUnitPrice ?? 0,
+                      isExtra: item.isExtra,
+                      ...(item.note ? { note: item.note } : {}),
+                    },
+              ),
             },
           },
         });
@@ -638,12 +689,25 @@ export async function POST(request: NextRequest) {
             name: foodSetName || "ชุดของกรุ๊ป",
             sourceFoodSetId,
             items: {
-              create: foodItems.map((item) => ({
-                productId: item.productId,
-                quantity: item.quantity,
-                isExtra: item.isExtra,
-                ...(item.note ? { optionNote: item.note } : {}),
-              })),
+              create: foodItems.map((item) =>
+                item.productId
+                  ? {
+                      productId: item.productId,
+                      customName: null,
+                      customUnitPrice: null,
+                      quantity: item.quantity,
+                      isExtra: item.isExtra,
+                      ...(item.note ? { optionNote: item.note } : {}),
+                    }
+                  : {
+                      productId: null,
+                      customName: item.customName,
+                      customUnitPrice: item.customUnitPrice,
+                      quantity: item.quantity,
+                      isExtra: item.isExtra,
+                      ...(item.note ? { optionNote: item.note } : {}),
+                    },
+              ),
             },
           },
         });

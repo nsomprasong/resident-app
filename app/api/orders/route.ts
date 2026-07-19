@@ -12,7 +12,9 @@ import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 
 type OrderItemInput = {
-  productId: string;
+  productId: string | null;
+  customName: string | null;
+  customUnitPrice: number | null;
   note?: string;
   quantity: number;
   isExtra: boolean;
@@ -76,11 +78,12 @@ export async function GET(request: NextRequest) {
         createdAt: order.createdAt.toISOString(),
         items: order.items.map((item) => ({
           id: item.id,
-          productName: item.product.name,
-          productType: item.product.type.name,
-          isMinibar: item.product.isMinibar,
+          productName: item.customName ?? item.product?.name ?? "เมนูพิเศษ",
+          productType: item.product?.type.name ?? "เมนูพิเศษ",
+          isMinibar: item.product?.isMinibar ?? false,
           quantity: item.quantity,
           note: item.note,
+          isCustom: !item.productId,
         })),
       })),
     );
@@ -132,6 +135,18 @@ export async function POST(request: NextRequest) {
           typeof itemRecord.productId === "string"
             ? itemRecord.productId.trim()
             : "";
+        const customName =
+          typeof itemRecord.customName === "string"
+            ? itemRecord.customName.trim()
+            : "";
+        const customPriceValue = itemRecord.customUnitPrice;
+        const customUnitPrice =
+          typeof customPriceValue === "number" &&
+          Number.isFinite(customPriceValue) &&
+          customPriceValue >= 0
+            ? customPriceValue
+            : null;
+        const isCustom = !productId && Boolean(customName);
         const note = itemRecord.note;
         const quantityValue = itemRecord.quantity;
         const quantity =
@@ -150,10 +165,16 @@ export async function POST(request: NextRequest) {
               ? isExtraValue
               : null;
 
-        if (!productId) {
+        if (!productId && !isCustom) {
           issues.push({
-            path: `items.${index}.productId`,
-            message: "Product id is required",
+            path: `items.${index}`,
+            message: "ระบุสินค้าจากเมนู หรือเมนูพิเศษพร้อมราคา",
+          });
+        }
+        if (isCustom && customUnitPrice === null) {
+          issues.push({
+            path: `items.${index}.customUnitPrice`,
+            message: "ราคาเมนูพิเศษไม่ถูกต้อง",
           });
         }
 
@@ -178,14 +199,18 @@ export async function POST(request: NextRequest) {
           });
         }
 
+        const catalogOk = Boolean(productId) && !isCustom;
+        const customOk = isCustom && customUnitPrice !== null;
         if (
-          productId &&
+          (catalogOk || customOk) &&
           quantity !== null &&
           isExtra !== null &&
           (note === undefined || typeof note === "string")
         ) {
           items.push({
-            productId,
+            productId: catalogOk ? productId : null,
+            customName: customOk ? customName : null,
+            customUnitPrice: customOk ? customUnitPrice : null,
             quantity,
             isExtra,
             ...(note !== undefined ? { note } : {}),
@@ -240,10 +265,24 @@ export async function POST(request: NextRequest) {
     }
     // group + roomId null/undefined => charge to group bill (roomId stays null)
 
-    const productIds = [...new Set(items.map((item) => item.productId))];
-    const products = await prisma.product.findMany({
-      where: { id: { in: productIds }, isActive: true },
-    });
+    if (!isGroup && items.some((item) => !item.productId)) {
+      return validationErrorResponse("เมนูพิเศษใช้ได้เฉพาะการจองแบบกลุ่ม", [
+        { path: "items", message: "Custom dishes require a group booking" },
+      ]);
+    }
+
+    const productIds = [
+      ...new Set(
+        items
+          .map((item) => item.productId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    const products = productIds.length
+      ? await prisma.product.findMany({
+          where: { id: { in: productIds }, isActive: true },
+        })
+      : [];
     if (products.length !== productIds.length) {
       return NextResponse.json(
         { message: "มีสินค้าที่ไม่พบหรือหยุดจำหน่าย" },
@@ -253,11 +292,20 @@ export async function POST(request: NextRequest) {
 
     const grouped = new Map<
       string,
-      { productId: string; note?: string; quantity: number; isExtra: boolean }
+      {
+        productId: string | null;
+        customName: string | null;
+        customUnitPrice: number | null;
+        note?: string;
+        quantity: number;
+        isExtra: boolean;
+      }
     >();
     for (const item of items) {
       const isExtra = isGroup ? item.isExtra : true;
-      const key = `${item.productId}:${item.note ?? ""}:${isExtra ? "1" : "0"}`;
+      const key = item.productId
+        ? `${item.productId}:${item.note ?? ""}:${isExtra ? "1" : "0"}`
+        : `custom:${item.customName}:${item.customUnitPrice}:${item.note ?? ""}:${isExtra ? "1" : "0"}`;
       const current = grouped.get(key);
       grouped.set(
         key,
@@ -265,6 +313,8 @@ export async function POST(request: NextRequest) {
           ? { ...current, quantity: current.quantity + item.quantity }
           : {
               productId: item.productId,
+              customName: item.customName,
+              customUnitPrice: item.customUnitPrice,
               note: item.note,
               quantity: item.quantity,
               isExtra,
@@ -297,13 +347,25 @@ export async function POST(request: NextRequest) {
         bookingId: booking.id,
         note: orderNote,
         items: {
-          create: [...grouped.values()].map((item) => ({
-            productId: item.productId,
-            quantity: item.quantity,
-            unitPrice: productMap.get(item.productId)!.price,
-            note: item.note,
-            isExtra: item.isExtra,
-          })),
+          create: [...grouped.values()].map((item) =>
+            item.productId
+              ? {
+                  productId: item.productId,
+                  customName: null,
+                  quantity: item.quantity,
+                  unitPrice: productMap.get(item.productId)!.price,
+                  note: item.note,
+                  isExtra: item.isExtra,
+                }
+              : {
+                  productId: null,
+                  customName: item.customName,
+                  quantity: item.quantity,
+                  unitPrice: item.customUnitPrice ?? 0,
+                  note: item.note,
+                  isExtra: item.isExtra,
+                },
+          ),
         },
       },
       select: { id: true, number: true, status: true, roomId: true },
