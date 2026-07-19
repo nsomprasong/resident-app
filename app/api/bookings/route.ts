@@ -93,6 +93,7 @@ export async function GET(request: NextRequest) {
           [booking.guest?.firstName, booking.guest?.lastName]
             .filter(Boolean)
             .join(" "),
+        guestCount: booking.guestCount,
         status: booking.closedAt ? "ปิดงานแล้ว" : labels[booking.status],
         rooms: booking.rooms.map(({ room }, index) => ({
           id: booking.id,

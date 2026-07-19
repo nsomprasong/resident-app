@@ -103,6 +103,7 @@ test("every current business API method resolves to an explicit permission", () 
     ["PATCH", `/api/bookings/${id}/resources`, "resource.manage"],
     ["GET", "/api/housekeeping/inspections", "inspection.read"],
     ["PATCH", `/api/housekeeping/inspections/${id}`, "inspection.write"],
+    ["POST", "/api/housekeeping/inspection-images", "inspection.write"],
     ["GET", "/api/inspection-catalog", "catalog.read"],
     ["GET", "/api/inspection-catalog/master", "settings.manage"],
     ["POST", "/api/inspection-catalog", "catalog.manage"],

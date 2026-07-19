@@ -21,6 +21,28 @@ type InspectionItemInput = {
   description: string;
   quantity: number;
   unitPrice: number;
+  imageUrl: string | null;
+};
+
+function parseOptionalImageUrl(
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): { ok: true; value: string | null } | { ok: false } {
+  if (value === undefined || value === null || value === "") {
+    return { ok: true, value: null };
+  }
+  if (typeof value !== "string") {
+    issues.push({ path, message: "imageUrl must be a string" });
+    return { ok: false };
+  }
+  const trimmed = value.trim();
+  if (!trimmed) return { ok: true, value: null };
+  if (!/^https?:\/\//i.test(trimmed) || trimmed.length > 2000) {
+    issues.push({ path, message: "imageUrl must be a valid http(s) URL" });
+    return { ok: false };
+  }
+  return { ok: true, value: trimmed };
 }
 export async function PATCH(
   request: NextRequest,
@@ -72,6 +94,11 @@ export async function PATCH(
         const quantity = Number(itemRecord.quantity);
         const unitPrice = Number(itemRecord.unitPrice);
         const type = itemRecord.type;
+        const imageUrlParsed = parseOptionalImageUrl(
+          itemRecord.imageUrl,
+          `items.${index}.imageUrl`,
+          issues,
+        );
 
         if (!catalogId) {
           issues.push({
@@ -115,7 +142,8 @@ export async function PATCH(
           Number.isFinite(unitPrice) &&
           unitPrice >= 0 &&
           typeof type === "string" &&
-          Object.values(InspectionItemType).includes(type as InspectionItemType)
+          Object.values(InspectionItemType).includes(type as InspectionItemType) &&
+          imageUrlParsed.ok
         ) {
           items.push({
             catalogId,
@@ -123,6 +151,7 @@ export async function PATCH(
             quantity,
             unitPrice,
             type: type as InspectionItemType,
+            imageUrl: imageUrlParsed.value,
           });
         }
       });
@@ -155,6 +184,7 @@ export async function PATCH(
           description: catalog.name,
           quantity: item.quantity,
           unitPrice: Number(catalog.unitPrice),
+          imageUrl: item.imageUrl,
         };
       });
       const current = await tx.roomInspection.findUnique({
@@ -190,6 +220,7 @@ export async function PATCH(
             description: item.description.trim(),
             quantity: item.quantity,
             unitPrice: item.unitPrice,
+            imageUrl: item.imageUrl,
           })),
         });
       const completed =

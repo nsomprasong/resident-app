@@ -27,6 +27,9 @@ import AddBookingFoodDialog from "@/components/ui/AddBookingFoodDialog";
 import BackButton from "@/components/ui/BackButton";
 import BillItem from "@/components/ui/BillItem";
 import type { ManagedFoodItem } from "@/components/ui/BookingFoodManager";
+import EditBookingInspectionDialog, {
+  type EditableInspectionItem,
+} from "@/components/ui/EditBookingInspectionDialog";
 import EditGroupPackageDialog from "@/components/ui/EditGroupPackageDialog";
 import ManageBookingResourcesDialog from "@/components/ui/ManageBookingResourcesDialog";
 import PayButton from "@/components/ui/PayButton";
@@ -36,11 +39,32 @@ import { BookingPromptPaySection } from "@/components/ui/BookingPromptPaySection
 import { useConfirmDialog } from "@/hooks/useConfirmDialog";
 import { formatThaiDateRange } from "@/lib/format/date";
 
+type InspectionItemType =
+  | "MINIBAR"
+  | "DAMAGE"
+  | "STAIN"
+  | "MISSING"
+  | "OTHER";
+
+interface InspectionChargeItem {
+  id: string;
+  catalogId?: string | null;
+  type: InspectionItemType;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  imageUrl?: string | null;
+}
+
 interface Item {
   id: string;
   type: string;
   title: string;
   price: number;
+  inspectionId?: string | null;
+  inspectionNotes?: string | null;
+  inspectionRoom?: string | null;
+  inspectionItems?: InspectionChargeItem[] | null;
 }
 
 interface Detail {
@@ -99,10 +123,18 @@ export default function BookingDetailPage() {
   const [openManageFood, setOpenManageFood] = useState(false);
   const [openManageCharges, setOpenManageCharges] = useState(false);
   const [openEditPackage, setOpenEditPackage] = useState(false);
+  const [editInspection, setEditInspection] = useState<{
+    inspectionId: string;
+    roomLabel: string;
+    notes: string | null;
+    items: EditableInspectionItem[];
+  } | null>(null);
 
   const canManageItems = !["CHECKED_OUT", "CANCELLED"].includes(
     data?.status ?? "",
   );
+  const canEditInspection =
+    can("inspection.write") && Boolean(data) && !data?.jobClosed;
   const canResourcePricing = can("resource.manage");
   const canOrderPricing = can("order.write");
   const canBulkPricing = canResourcePricing || canOrderPricing;
@@ -404,20 +436,58 @@ export default function BookingDetailPage() {
   ).length;
 
   const billItems = [
-    ...data.charges.map((item) => ({
-      id: item.id,
-      title: item.title,
-      price: item.price,
-    })),
+    ...data.charges.flatMap((item) => {
+      if (item.inspectionItems?.length && item.inspectionId) {
+        const roomLabel = item.inspectionRoom
+          ? `ห้อง ${item.inspectionRoom}`
+          : "ตรวจห้อง";
+        const openEditor = canEditInspection
+          ? () =>
+              setEditInspection({
+                inspectionId: item.inspectionId!,
+                roomLabel,
+                notes: item.inspectionNotes ?? null,
+                items: item.inspectionItems!.map((line) => ({
+                  catalogId: line.catalogId,
+                  type: line.type,
+                  description: line.description,
+                  quantity: line.quantity,
+                  unitPrice: line.unitPrice,
+                  imageUrl: line.imageUrl,
+                })),
+              })
+          : undefined;
+        return item.inspectionItems.map((line) => ({
+          id: line.id,
+          title: `${roomLabel}: ${line.description} × ${line.quantity}`,
+          price: line.quantity * line.unitPrice,
+          imageUrl: line.imageUrl ?? null,
+          onEdit: openEditor,
+        }));
+      }
+      return [
+        {
+          id: item.id,
+          title: item.title,
+          price: item.price,
+          imageUrl: null as string | null,
+          onEdit: undefined,
+        },
+      ];
+    }),
     ...food.map((item) => ({
       id: item.id,
       title: `${item.productName} x ${item.quantity}`,
       price: item.price,
+      imageUrl: null as string | null,
+      onEdit: undefined,
     })),
     ...minibar.map((item) => ({
       id: item.id,
       title: `${item.productName} x ${item.quantity}`,
       price: item.price,
+      imageUrl: null as string | null,
+      onEdit: undefined,
     })),
   ].filter((item) => item.price !== 0);
 
@@ -982,6 +1052,17 @@ export default function BookingDetailPage() {
         }))}
         onSaved={() => void load()}
       />
+      {editInspection ? (
+        <EditBookingInspectionDialog
+          open
+          onClose={() => setEditInspection(null)}
+          inspectionId={editInspection.inspectionId}
+          roomLabel={editInspection.roomLabel}
+          initialNotes={editInspection.notes}
+          initialItems={editInspection.items}
+          onSaved={() => void load()}
+        />
+      ) : null}
     </>
   );
 }

@@ -505,6 +505,7 @@ const apiPermissionRules: readonly ApiPermissionRule[] = [
   { method: "PATCH", pattern: /^\/api\/bookings\/[^/]+\/resources$/, permission: "resource.manage" },
   { method: "GET", pattern: /^\/api\/housekeeping\/inspections$/, permission: "inspection.read" },
   { method: "PATCH", pattern: /^\/api\/housekeeping\/inspections\/[^/]+$/, permission: "inspection.write" },
+  { method: "POST", pattern: /^\/api\/housekeeping\/inspection-images$/, permission: "inspection.write" },
   { method: "GET", pattern: /^\/api\/inspection-catalog\/master$/, permission: "settings.manage" },
   { method: "POST", pattern: /^\/api\/inspection-catalog$/, permission: "catalog.manage" },
   { method: "PATCH", pattern: /^\/api\/inspection-catalog\/[^/]+$/, permission: "catalog.manage" },

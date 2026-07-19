@@ -56,7 +56,21 @@ export async function GET(
           },
         },
         rafts: { include: { raft: true } },
-        charges: { orderBy: { createdAt: "asc" } },
+        charges: {
+          orderBy: { createdAt: "asc" },
+          include: {
+            inspection: {
+              include: {
+                items: { orderBy: { createdAt: "asc" } },
+                bookingRoom: {
+                  include: {
+                    room: { select: { number: true } },
+                  },
+                },
+              },
+            },
+          },
+        },
         payments: {
           orderBy: { createdAt: "desc" },
         },
@@ -140,6 +154,19 @@ export async function GET(
         type: item.type,
         title: item.description,
         price: Number(item.amount),
+        inspectionId: item.inspection?.id ?? null,
+        inspectionNotes: item.inspection?.notes ?? null,
+        inspectionRoom: item.inspection?.bookingRoom.room.number ?? null,
+        inspectionItems:
+          item.inspection?.items.map((line) => ({
+            id: line.id,
+            catalogId: line.catalogId,
+            type: line.type,
+            description: line.description,
+            quantity: line.quantity,
+            unitPrice: Number(line.unitPrice),
+            imageUrl: line.imageUrl,
+          })) ?? null,
       })),
       orders: booking.orders.flatMap((order) =>
         order.items.map((item) => {

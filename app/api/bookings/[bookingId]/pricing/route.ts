@@ -216,7 +216,35 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       const summarySource = await tx.booking.findUnique({
         where: { id: bookingId },
         select: {
-          charges: { select: { id: true, type: true, description: true, amount: true } },
+          charges: {
+            select: {
+              id: true,
+              type: true,
+              description: true,
+              amount: true,
+              inspection: {
+                select: {
+                  id: true,
+                  notes: true,
+                  items: {
+                    orderBy: { createdAt: "asc" },
+                    select: {
+                      id: true,
+                      catalogId: true,
+                      type: true,
+                      description: true,
+                      quantity: true,
+                      unitPrice: true,
+                      imageUrl: true,
+                    },
+                  },
+                  bookingRoom: {
+                    select: { room: { select: { number: true } } },
+                  },
+                },
+              },
+            },
+          },
           payments: { select: { amount: true, status: true } },
           paymentRefunds: { select: { amount: true } },
           orders: {
@@ -252,6 +280,19 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
           type: item.type,
           title: item.description,
           price: Number(item.amount),
+          inspectionId: item.inspection?.id ?? null,
+          inspectionNotes: item.inspection?.notes ?? null,
+          inspectionRoom: item.inspection?.bookingRoom.room.number ?? null,
+          inspectionItems:
+            item.inspection?.items.map((line) => ({
+              id: line.id,
+              catalogId: line.catalogId,
+              type: line.type,
+              description: line.description,
+              quantity: line.quantity,
+              unitPrice: Number(line.unitPrice),
+              imageUrl: line.imageUrl,
+            })) ?? null,
         })),
         totals: {
           charges: financialSummary.chargeTotal,

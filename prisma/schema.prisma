@@ -269,6 +269,7 @@ model InspectionItem {
   quantity     Int                @default(1)
   unitPrice    Decimal            @map("unit_price") @db.Decimal(10, 2)
   catalogId    String?            @map("catalog_id") @db.Uuid
+  imageUrl     String?            @map("image_url")
   inspection   RoomInspection     @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
   catalog      InspectionCatalog? @relation(fields: [catalogId], references: [id], onDelete: SetNull)
   createdAt    DateTime           @default(now()) @map("created_at")

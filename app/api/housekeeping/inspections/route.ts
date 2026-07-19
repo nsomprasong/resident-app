@@ -1,4 +1,5 @@
 import { BookingStatus } from "@/generated/prisma/client";
+import { compareRoomsByZoneAndNumber } from "@/lib/bookings/room-sort";
 import { calculateBookingFinancialSummary } from "@/lib/payments/financial-summary";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
@@ -27,7 +28,7 @@ export async function GET() {
         completedBy: { select: { id: true, name: true } },
         bookingRoom: {
           include: {
-            room: true,
+            room: { include: { zone: { select: { id: true, name: true } } } },
             booking: {
               include: {
                 guest: true,
@@ -43,11 +44,23 @@ export async function GET() {
           },
         },
       },
-      orderBy: { createdAt: "asc" },
     });
+    const sorted = [...inspections].sort((left, right) =>
+      compareRoomsByZoneAndNumber(
+        {
+          number: left.bookingRoom.room.number,
+          zoneName: left.bookingRoom.room.zone.name,
+        },
+        {
+          number: right.bookingRoom.room.number,
+          zoneName: right.bookingRoom.room.zone.name,
+        },
+      ),
+    );
     return NextResponse.json(
-      inspections.map((inspection) => {
+      sorted.map((inspection) => {
         const booking = inspection.bookingRoom.booking;
+        const room = inspection.bookingRoom.room;
         const financialSummary = calculateBookingFinancialSummary({
           charges: booking.charges,
           orders: booking.orders,
@@ -57,7 +70,8 @@ export async function GET() {
           id: inspection.id,
           status: inspection.status,
           notes: inspection.notes,
-          room: inspection.bookingRoom.room.number,
+          room: room.number,
+          zone: room.zone.name,
           bookingId: booking.id,
           customerName:
             booking.tourGroup?.name ??
@@ -76,6 +90,7 @@ export async function GET() {
             description: item.description,
             quantity: item.quantity,
             unitPrice: Number(item.unitPrice),
+            imageUrl: item.imageUrl,
           })),
         };
       }),

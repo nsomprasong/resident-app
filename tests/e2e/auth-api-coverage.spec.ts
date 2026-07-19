@@ -24,6 +24,7 @@ const protectedHandlers = [
   { method: "PATCH", path: "/api/bookings/" + id + "/resources" },
   { method: "GET", path: "/api/housekeeping/inspections" },
   { method: "PATCH", path: "/api/housekeeping/inspections/" + id },
+  { method: "POST", path: "/api/housekeeping/inspection-images" },
   { method: "GET", path: "/api/inspection-catalog" },
   { method: "GET", path: "/api/inspection-catalog/master" },
   { method: "POST", path: "/api/inspection-catalog" },

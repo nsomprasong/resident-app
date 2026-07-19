@@ -1,10 +1,19 @@
 "use client";
 
-import { CheckCircle2, ClipboardCheck, House, Plus, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import {
+  Camera,
+  CheckCircle2,
+  ClipboardCheck,
+  House,
+  Plus,
+  Trash2,
+  X,
+} from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import Modal from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { prepareImageForUpload } from "@/lib/media/prepare-image-upload";
 
 type ItemType = "MINIBAR" | "DAMAGE" | "STAIN" | "MISSING" | "OTHER";
 interface Catalog {
@@ -19,12 +28,14 @@ interface Item {
   description: string;
   quantity: number;
   unitPrice: number;
+  imageUrl?: string | null;
 }
 interface Inspection {
   id: string;
   status: string;
   notes?: string;
   room: string;
+  zone?: string;
   customerName: string;
   completedAt?: string | null;
   completedByName?: string | null;
@@ -45,7 +56,9 @@ export default function HousekeepingPage() {
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingIndex, setUploadingIndex] = useState<number | null>(null);
   const [error, setError] = useState("");
+  const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -106,6 +119,7 @@ export default function HousekeepingPage() {
               catalogId: undefined,
               description: "",
               unitPrice: 0,
+              imageUrl: item.imageUrl ?? null,
             }
           : item,
       ),
@@ -123,8 +137,48 @@ export default function HousekeepingPage() {
               description: catalog.name,
               unitPrice: catalog.unitPrice,
               quantity: item.quantity,
+              imageUrl: item.imageUrl ?? null,
             }
           : item,
+      ),
+    );
+  };
+  const uploadItemImage = async (index: number, file: File | null) => {
+    if (!file) return;
+    setUploadingIndex(index);
+    setError("");
+    try {
+      const prepared = await prepareImageForUpload(file);
+      const body = new FormData();
+      body.set("file", prepared);
+      const response = await fetch("/api/housekeeping/inspection-images", {
+        method: "POST",
+        body,
+      });
+      const data = (await response.json()) as {
+        imageUrl?: string;
+        message?: string;
+      };
+      if (!response.ok || !data.imageUrl) {
+        throw new Error(data.message ?? "อัปโหลดรูปไม่สำเร็จ");
+      }
+      setItems((current) =>
+        current.map((item, itemIndex) =>
+          itemIndex === index ? { ...item, imageUrl: data.imageUrl } : item,
+        ),
+      );
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "อัปโหลดรูปไม่สำเร็จ");
+    } finally {
+      setUploadingIndex(null);
+      const input = fileInputRefs.current[index];
+      if (input) input.value = "";
+    }
+  };
+  const clearItemImage = (index: number) => {
+    setItems((current) =>
+      current.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, imageUrl: null } : item,
       ),
     );
   };
@@ -181,6 +235,11 @@ export default function HousekeepingPage() {
                   <p className="text-lg font-semibold text-foreground">
                     ห้อง {inspection.room}
                   </p>
+                  {inspection.zone ? (
+                    <p className="text-xs text-muted-foreground">
+                      {inspection.zone}
+                    </p>
+                  ) : null}
                   <p className="text-sm text-muted-foreground">
                     {inspection.customerName}
                   </p>
@@ -200,11 +259,21 @@ export default function HousekeepingPage() {
                 </span>
               </div>
               {inspection.items.length > 0 && (
-                <ul className="mt-3 space-y-1 text-sm text-muted-foreground">
+                <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
                   {inspection.items.map((item, index) => (
-                    <li key={index}>
-                      {item.description} × {item.quantity} — ฿
-                      {(item.quantity * item.unitPrice).toLocaleString()}
+                    <li key={index} className="flex items-start gap-2">
+                      {item.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={item.imageUrl}
+                          alt=""
+                          className="mt-0.5 h-10 w-10 shrink-0 rounded-lg object-cover ring-1 ring-border"
+                        />
+                      ) : null}
+                      <span>
+                        {item.description} × {item.quantity} — ฿
+                        {(item.quantity * item.unitPrice).toLocaleString()}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -312,6 +381,54 @@ export default function HousekeepingPage() {
                       ฿{(item.quantity * item.unitPrice).toLocaleString()}
                     </p>
                   </div>
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <input
+                    ref={(element) => {
+                      fileInputRefs.current[index] = element;
+                    }}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="sr-only"
+                    onChange={(event) =>
+                      void uploadItemImage(
+                        index,
+                        event.target.files?.[0] ?? null,
+                      )
+                    }
+                  />
+                  {item.imageUrl ? (
+                    <div className="flex items-center gap-2">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={item.imageUrl}
+                        alt={`รูปประกอบ ${item.description || "รายการ"}`}
+                        className="h-16 w-16 rounded-lg object-cover ring-1 ring-border"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => clearItemImage(index)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs text-foreground hover:bg-surface-muted"
+                      >
+                        <X size={14} />
+                        ลบรูป
+                      </button>
+                    </div>
+                  ) : null}
+                  <button
+                    type="button"
+                    disabled={uploadingIndex === index || saving}
+                    onClick={() => fileInputRefs.current[index]?.click()}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-foreground hover:border-primary/40 hover:bg-primary/5 disabled:opacity-50"
+                  >
+                    <Camera size={14} />
+                    {uploadingIndex === index
+                      ? "กำลังอัปโหลด..."
+                      : item.imageUrl
+                        ? "เปลี่ยนรูป"
+                        : "แนบรูปถ่าย"}
+                  </button>
                 </div>
               </div>
             ))}

@@ -29,9 +29,24 @@ interface BookingResult {
   reference?: string;
   mode: "solo" | "group";
   customerName: string;
+  guestCount?: number | null;
   status: string;
   rooms: BookingDetail[];
   rafts: Array<{ id: string; name: string; capacity: number }>;
+}
+
+function formatGroupSummary(booking: BookingResult) {
+  const parts: string[] = [];
+  if (
+    typeof booking.guestCount === "number" &&
+    Number.isFinite(booking.guestCount) &&
+    booking.guestCount > 0
+  ) {
+    parts.push(`${booking.guestCount} คน`);
+  }
+  parts.push(`${booking.rooms.length} ห้อง`);
+  parts.push(`${booking.rafts.length} แพ`);
+  return parts.join(" · ");
 }
 
 type Tab = "group" | "solo" | "history";
@@ -372,9 +387,9 @@ export default function BookingPage() {
                 <RoomGroupItem
                   key={booking.id}
                   id={booking.id}
-                  customerName={`${booking.customerName} · ${resources}`}
+                  customerName={booking.customerName}
+                  summary={formatGroupSummary(booking)}
                   status={booking.status}
-                  roomInGroupList={booking.rooms}
                   showStatus
                 />
               ) : (
