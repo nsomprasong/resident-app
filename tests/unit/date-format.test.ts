@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  formatAttendanceClockTime,
   formatThaiDate,
   formatThaiDateRange,
   formatThaiDateTime,
@@ -31,6 +32,14 @@ describe("thai date display format วว/ดด/ปปปป", () => {
     assert.equal(
       formatThaiTime("2026-07-14T08:30:00.000Z", { timeZone: "UTC" }),
       "08:30",
+    );
+  });
+
+  it("formats real clock-in instants in Asia/Bangkok", () => {
+    // 11:05 น. Bangkok → 04:05Z stored
+    assert.equal(
+      formatAttendanceClockTime("2026-07-19T04:05:00.000Z"),
+      "11:05",
     );
   });
 });

@@ -15,7 +15,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useEmployeePermissions } from "@/components/auth/EmployeePermissionsProvider";
 import DateSelector from "@/components/ui/DateSelector";
 import {
-  formatShiftWallClockTime,
+  formatAttendanceClockTime,
   formatThaiDate,
 } from "@/lib/format/date";
 import { displayEmployeeName } from "@/lib/hr/employees";
@@ -89,7 +89,7 @@ function formatMinutes(value: number) {
 
 function formatTime(value: string | null) {
   if (!value) return "-";
-  return formatShiftWallClockTime(value);
+  return formatAttendanceClockTime(value);
 }
 
 export type HrAttendanceBoardProps = {

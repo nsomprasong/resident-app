@@ -15,6 +15,7 @@ import { useCallback, useEffect, useState } from "react";
 import DateSelector from "@/components/ui/DateSelector";
 import { requestGeolocationPosition } from "@/lib/browser/safe-apis";
 import {
+  formatAttendanceClockTime,
   formatShiftWallClockTime,
   formatThaiDate,
   formatThaiDateRange,
@@ -77,9 +78,14 @@ type LeaveRequestRow = {
 
 type LeaveType = { id: string; code: string; name: string; isActive: boolean };
 
-function formatTime(value: string | null) {
+function formatScheduleTime(value: string | null) {
   if (!value) return "-";
   return formatShiftWallClockTime(value);
+}
+
+function formatClockTime(value: string | null) {
+  if (!value) return "-";
+  return formatAttendanceClockTime(value);
 }
 
 function formatDate(value: string) {
@@ -353,7 +359,8 @@ export function MyWorkBoard() {
             </p>
             {!today.schedule.isDayOff ? (
               <p className="text-sm text-muted-foreground">
-                {formatTime(today.schedule.startsAt)} – {formatTime(today.schedule.endsAt)}
+                {formatScheduleTime(today.schedule.startsAt)} –{" "}
+                {formatScheduleTime(today.schedule.endsAt)}
               </p>
             ) : null}
           </div>
@@ -365,13 +372,13 @@ export function MyWorkBoard() {
           <div className="rounded-2xl bg-muted/60 p-3">
             <p className="text-xs text-muted-foreground">เข้างาน</p>
             <p className="mt-1 text-base font-semibold text-foreground">
-              {formatTime(attendance?.clockIn ?? null)}
+              {formatClockTime(attendance?.clockIn ?? null)}
             </p>
           </div>
           <div className="rounded-2xl bg-muted/60 p-3">
             <p className="text-xs text-muted-foreground">ออกงาน</p>
             <p className="mt-1 text-base font-semibold text-foreground">
-              {formatTime(attendance?.clockOut ?? null)}
+              {formatClockTime(attendance?.clockOut ?? null)}
             </p>
           </div>
         </div>
@@ -548,7 +555,8 @@ export function MyWorkBoard() {
                   <div>
                     <p className="font-medium text-foreground">{formatDate(record.workDate)}</p>
                     <p className="text-xs text-muted-foreground">
-                      {formatTime(record.clockIn)} – {formatTime(record.clockOut)}
+                      {formatClockTime(record.clockIn)} –{" "}
+                      {formatClockTime(record.clockOut)}
                       {record.otMinutes > 0
                         ? ` · OT ${record.otMinutes} น.`
                         : ""}

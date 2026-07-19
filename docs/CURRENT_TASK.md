@@ -2,7 +2,7 @@
 
 ## Task
 
-Group booking cards show summary (guests/rooms/rafts)
+Fix attendance clock display timezone (Bangkok)
 
 ## Status
 
@@ -10,8 +10,9 @@ COMPLETED
 
 ## Evidence
 
-- `GET /api/bookings` returns `guestCount`
-- Group cards: group name + summary `N คน · N ห้อง · N แพ` (no room names on card title)
+- Clock-in/out display uses `formatAttendanceClockTime` (Asia/Bangkok)
+- Schedule times still use wall-clock UTC via `formatShiftWallClockTime`
+- Unit: `tests/unit/date-format.test.ts` covers 04:05Z → 11:05
 
 ## Next Action
 
